@@ -1,0 +1,1 @@
+export { handleSystemCalendarEvents as GET } from "@/Backend/routes/system-calendar";

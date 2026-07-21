@@ -1,0 +1,170 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// 🌟 ENUMS (ตัวกำหนดประเภทสถานะและสิทธิ์)
+// ==========================================
+
+enum Role {
+  USER
+  FACULTY_ADMIN
+  EXECUTIVE
+  SUPER_ADMIN
+  DRIVER
+}
+
+enum DriverType {
+  PRIMARY
+  BACKUP
+}
+
+enum BookingStatus {
+  WAITING_ADMIN
+  WAITING_EXEC
+  APPROVED
+  REJECTED
+}
+
+// ==========================================
+// 🏢 MODELS (ตารางฐานข้อมูลจริง)
+// ==========================================
+
+model Faculty {
+  id        Int       @id @default(autoincrement())
+  nameTh    String    @map("name_th") // เช่น คณะวิศวกรรมศาสตร์
+  nameEn    String?   @map("name_en")
+  
+  // Relations
+  users     User[]
+  drivers   Driver[]
+  van       Van?      // 1 คณะมีรถตู้ประจำตำแหน่งได้สูงสุด 1 คัน (1:1)
+  bookings  Booking[] @relation("TargetFaculty")
+
+  @@map("faculties")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  facultyId Int      @map("faculty_id")
+  faculty   Faculty  @relation(fields: [facultyId], references: [id])
+  
+  name      String
+  email     String   @unique // รองรับระบบ Microsoft 365 SSO ของมหาวิทยาลัย
+  role      Role     @default(USER)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  driverProfile Driver?   // ถ้า Role เป็น DRIVER จะมีข้อมูลเชื่อมไปตารางคนขับ (1:1)
+  bookings      Booking[] @relation("Requester")
+
+  @@map("users")
+}
+
+model Van {
+  id        Int      @id @default(autoincrement())
+  facultyId Int      @unique @map("faculty_id") // ล็อกความสัมพันธ์ 1 คณะต่อ 1 คัน
+  faculty   Faculty  @relation(fields: [facultyId], references: [id])
+  
+  plate     String   @map("plate") // ทะเบียนรถ เช่น นข 1234 พะเยา
+  engine    String?  @map("engine")
+  capacity  Int      @default(12)  @map("capacity") // จำนวนที่นั่ง
+  isActive  Boolean  @default(true) @map("is_active")
+
+  @@map("vans")
+}
+
+model Driver {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique @map("user_id") // เชื่อมกับบัญชีผู้ใช้หลัก (1:1)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  facultyId Int        @map("faculty_id")
+  faculty   Faculty    @relation(fields: [facultyId], references: [id])
+  
+  phone     String
+  age       Int
+  type      DriverType @default(PRIMARY)
+  isActive  Boolean    @default(true) @map("is_active")
+
+  // Relations
+  bookings  Booking[]  // ประวัติการถูกจัดสรรคิวรถยนต์
+  logs      DriverLog[] // ประวัติบันทึกฟอร์ม 4 จริงหลังวิ่งงานเสร็จ
+
+  @@map("drivers")
+}
+
+model Booking {
+  id              String        @id // ใช้รหัสรูปแบบเฉพาะ เช่น UP-2567-0132
+  requesterId     Int           @map("requester_id")
+  requester       User          @relation("Requester", fields: [requesterId], references: [id])
+  
+  targetFacultyId Int           @map("target_faculty_id")
+  targetFaculty   Faculty       @relation("TargetFaculty", fields: [targetFacultyId], references: [id])
+  
+  destination     String        @db.Text
+  objective       String        @db.Text
+  departureDate   DateTime      @map("departure_date")
+  returnDate      DateTime      @map("return_date")
+  passengersCount Int           @map("passengers_count")
+  budgetSource    String        @map("budget_source")
+  
+  // ตัวควบคุม State Machine
+  status          BookingStatus @default(WAITING_ADMIN)
+  rejectReason    String?       @db.Text @map("reject_reason") // เหตุผลกรณีปัดตก
+
+  // ข้อมูลที่ Admin คณะจะเข้ามาแสตมป์จัดสรรให้ (Nullable ตอนส่งฟอร์มแรกสุด)
+  assignedDriverId Int?         @map("assigned_driver_id")
+  assignedDriver   Driver?      @relation(fields: [assignedDriverId], references: [id])
+
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  attachments     Attachment[]  // 1 คำขอแนบไฟล์โครงการได้หลายไฟล์ (1:N)
+  driverLog       DriverLog?    // ทริปที่เดินทางเสร็จแล้วจะมีบันทึกการใช้งาน 1 ใบ (1:1)
+
+  @@map("bookings")
+}
+
+model Attachment {
+  id        Int      @id @default(autoincrement())
+  bookingId String   @map("booking_id")
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  fileName  String   @map("file_name") // เช่น บันทึกข้อความขออนุมัติ.pdf
+  fileUrl   String   @db.Text @map("file_url") // ลิงก์เก็บไฟล์บน Cloud Storage
+  fileSize  Float    @map("file_size") // ขนาดหน่วย MB
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("attachments")
+}
+
+model DriverLog {
+  id            Int      @id @default(autoincrement())
+  bookingId     String   @unique @map("booking_id") // 1 ทริปจอง มีบันทึกปิดงานได้ใบเดียว
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  driverId      Int      @map("driver_id")
+  driver        Driver   @relation(fields: [driverId], references: [id])
+  
+  // ตัวเลขฟอร์ม 4 และข้อมูลสแกนหน้าปัดรถยนต์ (AI OCR)
+  mileageStart  Int      @map("mileage_start")
+  mileageEnd    Int      @map("mileage_end")
+  totalDistance Int      @map("total_distance") // ระยะรวมคำนวณอัตโนมัติ
+  fuelRemark    String?  @map("fuel_remark") // บันทึกหมวดหมู่ค่าน้ำมัน
+  
+  imgStartUrl   String?  @db.Text @map("img_start_url") // รูปหน้าปัดตอนสตาร์ทรถ
+  imgEndUrl     String?  @db.Text @map("img_end_url") // รูปหน้าปัดตอนดับเครื่อง
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("driver_logs")
+}

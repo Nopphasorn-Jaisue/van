@@ -1,0 +1,618 @@
+"use client";
+import React, { useState } from 'react';
+import AppShell from '@/components/AppShell';
+import { 
+  FileText, Search, Filter,
+  CheckCircle2, XCircle, Info, Calendar,
+  MapPin, Users, User, Clock, 
+  MoreVertical, X, Download, ChevronDown
+} from 'lucide-react';
+
+export default function ApprovalsPage() {
+  const [activeTab, setActiveTab] = useState('pending');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+
+  // Mock data for requests
+  const [requests, setRequests] = useState([
+    {
+      id: "UPVAN-2569-00123",
+      time: "เมื่อวาน 14:32 น.",
+      requester: "ดร.ณรงค์เดช รักพืช",
+      department: "ภาควิชาพืชศาสตร์",
+      date: "12 ก.ค. 2569",
+      timeRange: "08:00 - 17:00",
+      destination: "ศูนย์วิจัยและพัฒนาการเกษตร จ.พะเยา",
+      passengers: 12,
+      reason: "พานิสิตลงพื้นที่ปฏิบัติการ",
+      status: "pending",
+      files: 1,
+      isCrossFaculty: false,
+      coordinator: {
+        name: "ดร.ณรงค์เดช รักพืช",
+        role: "อาจารย์",
+        dept: "ภาควิชาพืชศาสตร์",
+        phone: "081-234-5678",
+        email: "narongdej.r@up.ac.th"
+      },
+      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
+      departureLocation: "คณะเกษตรศาสตร์ ม.พะเยา",
+      budget: "งบปฏิบัติการ (โครงการวิจัย)"
+    },
+    {
+      id: "UPVAN-2569-00121",
+      time: "3 ชั่วโมงที่แล้ว",
+      requester: "นายสมนึก ดีงาม",
+      department: "ภาควิชาสัตวศาสตร์",
+      date: "14 ก.ค. 2569",
+      timeRange: "09:00 - 18:00",
+      destination: "ฟาร์มเครือข่าย จ.ลำปาง",
+      passengers: 10,
+      reason: "ศึกษาดูงานฟาร์ม",
+      status: "pending",
+      files: 0,
+      isCrossFaculty: false,
+      coordinator: {
+        name: "นายสมนึก ดีงาม",
+        role: "เจ้าหน้าที่",
+        dept: "ภาควิชาสัตวศาสตร์",
+        phone: "089-876-5432",
+        email: "somnuek.d@up.ac.th"
+      },
+      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
+      departureLocation: "คณะเกษตรศาสตร์ ม.พะเยา",
+      budget: "งบประมาณประจำปี"
+    },
+    {
+      id: "UPVAN-CF-2569-001",
+      time: "4 ชั่วโมงที่แล้ว",
+      requester: "รศ.ดร.วิทยา รักเรียน",
+      department: "คณะวิทยาศาสตร์",
+      date: "18 ก.ค. 2569",
+      timeRange: "07:00 - 18:00",
+      destination: "อ.แม่สาย จ.เชียงราย",
+      passengers: 8,
+      reason: "โครงการวิจัยร่วม (ยืมรถตู้คณะเกษตร)",
+      status: "cross_faculty_pending",
+      files: 1,
+      isCrossFaculty: true,
+      coordinator: {
+        name: "รศ.ดร.วิทยา รักเรียน",
+        role: "อาจารย์",
+        dept: "คณะวิทยาศาสตร์",
+        phone: "082-345-6789",
+        email: "wittaya.r@up.ac.th"
+      },
+      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
+      departureLocation: "คณะวิทยาศาสตร์ ม.พะเยา",
+      budget: "งบโครงการวิจัย (คณะวิทยาศาสตร์)"
+    },
+    {
+      id: "UPVAN-2569-00119",
+      time: "เมื่อวาน 11:15 น.",
+      requester: "อ.ดร.กิตติพงษ์ ใจดี",
+      department: "ศูนย์วิจัยพืชสวน",
+      date: "16 ก.ค. 2569",
+      timeRange: "06:00 - 18:00",
+      destination: "แปลงทดลอง จ.เชียงราย",
+      passengers: 14,
+      reason: "เก็บตัวอย่างงานวิจัย",
+      status: "pending",
+      files: 2,
+      isCrossFaculty: false,
+      coordinator: {
+        name: "อ.ดร.กิตติพงษ์ ใจดี",
+        role: "นักวิจัย",
+        dept: "ศูนย์วิจัยพืชสวน",
+        phone: "083-456-7890",
+        email: "kittipong.j@up.ac.th"
+      },
+      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
+      departureLocation: "ศูนย์วิจัยพืชสวน ม.พะเยา",
+      budget: "งบโครงการวิจัย"
+    },
+    {
+      id: "UPVAN-2569-00118",
+      time: "2 วันที่แล้ว",
+      requester: "นางสาวสมใจ รักษ์โลก",
+      department: "ภาควิชาปฐพีวิทยา",
+      date: "20 ก.ค. 2569",
+      timeRange: "07:00 - 16:00",
+      destination: "สถานีวิจัยดิน จ.น่าน",
+      passengers: 8,
+      reason: "วิเคราะห์คุณภาพดินร่วมกับหน่วยงาน",
+      status: "pending",
+      files: 1,
+      isCrossFaculty: false,
+      coordinator: {
+        name: "นางสาวสมใจ รักษ์โลก",
+        role: "นักวิทยาศาสตร์",
+        dept: "ภาควิชาปฐพีวิทยา",
+        phone: "084-567-8901",
+        email: "somjai.r@up.ac.th"
+      },
+      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
+      departureLocation: "ภาควิชาปฐพีวิทยา ม.พะเยา",
+      budget: "งบประมาณประจำปี"
+    },
+    {
+      id: "UPVAN-2569-00115",
+      time: "3 วันที่แล้ว",
+      requester: "ผศ.ดร.วิชัย มั่นคง",
+      department: "ภาควิชากีฏวิทยา",
+      date: "25 ก.ค. 2569",
+      timeRange: "08:30 - 16:30",
+      destination: "สวนพฤกษศาสตร์ จ.เชียงใหม่",
+      passengers: 5,
+      reason: "สำรวจแมลงศัตรูพืช",
+      status: "need_info",
+      files: 0,
+      isCrossFaculty: false,
+      coordinator: {
+        name: "ผศ.ดร.วิชัย มั่นคง",
+        role: "อาจารย์",
+        dept: "ภาควิชากีฏวิทยา",
+        phone: "085-678-9012",
+        email: "wichai.m@up.ac.th"
+      },
+      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
+      departureLocation: "ภาควิชากีฏวิทยา ม.พะเยา",
+      budget: "งบภาควิชา"
+    }
+  ]);
+
+  const handleAction = (id: string, actionType: string) => {
+    alert(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จ`);
+    if (actionType === 'อนุมัติ' || actionType === 'ปฏิเสธ' || actionType === 'อนุญาตให้ยืม') {
+      setRequests(prev => prev.filter(req => req.id !== id));
+      if (selectedRequestId === id) setSelectedRequestId(null);
+    } else {
+      setRequests(prev => prev.map(req => 
+        req.id === id ? { ...req, status: 'need_info' } : req
+      ));
+    }
+  };
+
+  const filteredRequests = requests.filter(req => {
+    const matchesTab = 
+      activeTab === 'all' ? true :
+      activeTab === 'pending' ? req.status === 'pending' :
+      activeTab === 'need_info' ? req.status === 'need_info' :
+      activeTab === 'cross_faculty' ? req.status === 'cross_faculty_pending' : true;
+      
+    const matchesSearch = 
+      req.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      req.requester.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      req.destination.toLowerCase().includes(searchQuery.toLowerCase());
+      
+    return matchesTab && matchesSearch;
+  });
+
+  const selectedRequest = requests.find(r => r.id === selectedRequestId);
+
+  const pendingCount = requests.filter(r => r.status === 'pending').length;
+  const crossFacultyCount = requests.filter(r => r.status === 'cross_faculty_pending').length;
+  const needInfoCount = requests.filter(r => r.status === 'need_info').length;
+
+  return (
+    <AppShell>
+      <div className="max-w-[1600px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0">
+        
+        {/* ----- Header ----- */}
+        <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4 shrink-0">
+          <div>
+            <h1 className="text-[26px] font-black text-gray-900 leading-tight mb-2">คำขอที่ต้องอนุมัติ</h1>
+            <p className="text-sm text-gray-500">จัดการและตรวจสอบคำขอใช้รถตู้ทั้งหมดของคณะ</p>
+          </div>
+          
+          {/* Minimalist Stats Badges */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-200 bg-yellow-50/50 text-yellow-700 text-sm font-bold">
+              <Clock size={16} /> รอพิจารณา {pendingCount}
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 bg-purple-50/50 text-purple-700 text-sm font-bold">
+              <Users size={16} /> ยืมคณะ {crossFacultyCount}
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50/50 text-blue-700 text-sm font-bold">
+              <Info size={16} /> รอข้อมูล {needInfoCount}
+            </div>
+          </div>
+        </div>
+
+        {/* ----- Main Grid Layout ----- */}
+        <div className={`flex-1 min-h-0 flex gap-6 ${selectedRequestId ? 'grid grid-cols-1 xl:grid-cols-[1fr_400px]' : ''}`}>
+          
+          {/* ----- Left Table Area ----- */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+            
+            {/* Tabs & Search Bar */}
+            <div className="border-b border-gray-100 flex flex-col md:flex-row justify-between items-end gap-4 px-6 pt-4 bg-white shrink-0">
+              <div className="flex gap-6 overflow-x-auto w-full md:w-auto [&::-webkit-scrollbar]:hidden">
+                <button
+                  onClick={() => setActiveTab('pending')}
+                  className={`py-3 text-[14px] font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === 'pending' ? 'border-[#311171] text-[#311171]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  รอการพิจารณา
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] ${activeTab === 'pending' ? 'bg-[#f0eaff] text-[#311171]' : 'bg-gray-100 text-gray-500'}`}>
+                    {pendingCount}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('cross_faculty')}
+                  className={`py-3 text-[14px] font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === 'cross_faculty' ? 'border-[#311171] text-[#311171]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  ยืมข้ามคณะ
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] ${activeTab === 'cross_faculty' ? 'bg-[#f0eaff] text-[#311171]' : 'bg-gray-100 text-gray-500'}`}>
+                    {crossFacultyCount}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('need_info')}
+                  className={`py-3 text-[14px] font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === 'need_info' ? 'border-[#311171] text-[#311171]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  รอข้อมูลเพิ่ม
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] ${activeTab === 'need_info' ? 'bg-[#f0eaff] text-[#311171]' : 'bg-gray-100 text-gray-500'}`}>
+                    {needInfoCount}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('all')}
+                  className={`py-3 text-[14px] font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === 'all' ? 'border-[#311171] text-[#311171]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  ทั้งหมด
+                </button>
+              </div>
+
+              <div className="flex gap-3 pb-3 w-full md:w-auto">
+                <div className="relative flex-1 md:w-64">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input 
+                    type="text" 
+                    placeholder="ค้นหาเลขคำขอ, ผู้ขอ, ปลายทาง..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:bg-white transition-all"
+                  />
+                </div>
+                <button className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-bold shrink-0">
+                  <Filter size={16} /> ตัวกรอง
+                </button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-auto bg-white [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-white z-10 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                  <tr className="text-[12px] font-bold text-gray-500 border-b border-gray-100">
+                    <th className="py-4 pl-6 pr-2 w-10">
+                      <div className="w-4 h-4 rounded border border-gray-300 bg-white"></div>
+                    </th>
+                    <th className="py-4 px-4 font-bold min-w-[200px]">เลขคำขอ</th>
+                    <th className="py-4 px-4 font-bold min-w-[180px]">ผู้ขอใช้รถ</th>
+                    <th className="py-4 px-4 font-bold min-w-[150px]">กำหนดการ</th>
+                    <th className="py-4 px-4 font-bold min-w-[260px]">รายละเอียดการเดินทาง</th>
+                    <th className="py-4 px-4 font-bold text-center w-32">สถานะ</th>
+                    <th className="py-4 px-6 font-bold text-center min-w-[200px]">การดำเนินการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filteredRequests.length > 0 ? filteredRequests.map((req) => (
+                    <tr 
+                      key={req.id} 
+                      onClick={() => setSelectedRequestId(req.id)}
+                      className={`transition-colors cursor-pointer group ${selectedRequestId === req.id ? 'bg-[#fcfaff]' : 'hover:bg-gray-50/50'}`}
+                    >
+                      <td className="py-5 pl-6 pr-2 align-top">
+                        <div className="w-4 h-4 rounded border border-gray-300 bg-white mt-1 cursor-pointer"></div>
+                      </td>
+                      
+                      {/* เลขคำขอ */}
+                      <td className="py-5 px-4 align-top">
+                        <div className="flex items-start gap-3">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${req.isCrossFaculty ? 'bg-purple-100 text-purple-700' : 'bg-[#f0eaff] text-[#311171]'}`}>
+                            <FileText size={18} />
+                          </div>
+                          <div>
+                            <div className={`text-[13px] font-black mb-1 ${req.isCrossFaculty ? 'text-purple-700' : 'text-[#311171]'}`}>{req.id}</div>
+                            <div className="text-[11px] font-medium text-gray-400 flex items-center gap-1">
+                              <Clock size={10} /> {req.time}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* ผู้ขอใช้รถ */}
+                      <td className="py-5 px-4 align-top">
+                        <div className="flex flex-col gap-1">
+                          <div className="text-[13px] font-bold text-gray-900 flex items-center gap-1.5">
+                            <User size={14} className="text-gray-400" /> {req.requester}
+                          </div>
+                          <div className="text-[11px] text-gray-500 ml-5">{req.department}</div>
+                        </div>
+                      </td>
+
+                      {/* กำหนดการ */}
+                      <td className="py-5 px-4 align-top">
+                        <div className="flex flex-col gap-1">
+                          <div className="text-[13px] font-bold text-gray-900 flex items-center gap-1.5">
+                            <Calendar size={14} className="text-gray-400" /> {req.date}
+                          </div>
+                          <div className="text-[11px] text-gray-500 ml-5">{req.timeRange}</div>
+                        </div>
+                      </td>
+
+                      {/* รายละเอียด */}
+                      <td className="py-5 px-4 align-top">
+                        <div className="flex flex-col gap-1.5">
+                          <div className="text-[13px] font-bold text-gray-900 flex items-start gap-1.5 line-clamp-1">
+                            <MapPin size={14} className="text-red-500 shrink-0 mt-0.5" /> 
+                            <span title={req.destination}>{req.destination}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-[11px] text-gray-500 ml-5">
+                            <div className="flex items-center gap-1">
+                              <Users size={12} className="text-gray-400" /> {req.passengers} คน
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <FileText size={12} className="text-gray-400" /> แนบ {req.files} ไฟล์
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-gray-400 ml-5 line-clamp-1" title={req.reason}>
+                            เหตุผล: {req.reason}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* สถานะ */}
+                      <td className="py-5 px-4 align-top text-center">
+                        {req.status === 'pending' ? (
+                          <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-yellow-50 text-yellow-700 text-[11px] font-bold">
+                            รอพิจารณา
+                          </div>
+                        ) : req.status === 'cross_faculty_pending' ? (
+                          <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 text-[11px] font-bold">
+                            ขอยืมจากคณะอื่น
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold">
+                            รอข้อมูลเพิ่ม
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-5 px-6 align-top text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleAction(req.id, "อนุมัติ"); }}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-green-50 border border-green-200 text-green-600 text-[12px] font-bold rounded-lg transition-colors"
+                          >
+                            <CheckCircle2 size={14} /> อนุมัติ
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleAction(req.id, "ขอข้อมูลเพิ่ม"); }}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-blue-50 border border-blue-200 text-blue-600 text-[12px] font-bold rounded-lg transition-colors"
+                          >
+                            <Info size={14} /> ข้อมูลเพิ่ม
+                          </button>
+                          <button className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors">
+                            <MoreVertical size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={7} className="py-16 text-center">
+                        <div className="flex flex-col items-center justify-center text-gray-400">
+                          <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center mb-4">
+                            <CheckCircle2 size={32} className="text-gray-300" />
+                          </div>
+                          <p className="text-lg font-bold text-gray-900 mb-1">ไม่มีคำขอรอพิจารณา</p>
+                          <p className="text-sm">คุณจัดการคำขอใช้รถตู้ครบหมดแล้วในขณะนี้</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Footer Pagination */}
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between text-[13px] bg-white">
+              <p className="text-gray-500 font-medium">
+                แสดง 1 ถึง {filteredRequests.length} จาก {filteredRequests.length} รายการ
+              </p>
+              <div className="flex gap-2">
+                <button disabled className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 bg-gray-50 font-medium">
+                  ก่อนหน้า
+                </button>
+                <button className="px-3 py-1.5 rounded-lg border border-[#311171] text-white bg-[#311171] font-bold">
+                  1
+                </button>
+                <button disabled className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 bg-gray-50 font-medium">
+                  ถัดไป
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ----- Right Sidebar (Details) ----- */}
+          {selectedRequestId && selectedRequest && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-lg flex flex-col min-h-0 w-full xl:w-[400px] shrink-0 animate-in slide-in-from-right-4 fade-in">
+              {/* Header */}
+              <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
+                <h2 className="text-[16px] font-black text-gray-900">รายละเอียดคำขอ</h2>
+                <button onClick={() => setSelectedRequestId(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-6 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                
+                {/* ID & Status */}
+                <div className="flex items-start gap-4">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${selectedRequest.isCrossFaculty ? 'bg-purple-100 text-purple-700' : 'bg-[#f0eaff] text-[#311171]'}`}>
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-[15px] font-black text-gray-900">{selectedRequest.id}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        selectedRequest.status === 'pending' ? 'bg-yellow-50 text-yellow-700' : 
+                        selectedRequest.status === 'cross_faculty_pending' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'
+                      }`}>
+                        {selectedRequest.status === 'pending' ? 'รอพิจารณา' : 
+                         selectedRequest.status === 'cross_faculty_pending' ? 'ยืมข้ามคณะ' : 'รอข้อมูลเพิ่ม'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      {selectedRequest.time} (โดย {selectedRequest.requester})
+                    </p>
+                  </div>
+                </div>
+
+                {/* Trip Data */}
+                <div>
+                  <h4 className="text-[13px] font-black text-[#311171] mb-3">ข้อมูลการเดินทาง</h4>
+                  <div className="space-y-2.5">
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">ประเภทการเดินทาง</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.tripType}</span>
+                    </div>
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">จุดออกเดินทาง</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.departureLocation}</span>
+                    </div>
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">ปลายทาง</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.destination}</span>
+                    </div>
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">วันที่ออกเดินทาง</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.date} เวลา {selectedRequest.timeRange.split(' - ')[0]} น.</span>
+                    </div>
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">วันที่กลับ</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.date} เวลา {selectedRequest.timeRange.split(' - ')[1]} น.</span>
+                    </div>
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">จำนวนผู้โดยสาร</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.passengers} คน</span>
+                    </div>
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">วัตถุประสงค์</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.reason}</span>
+                    </div>
+                    <div className="flex gap-2 text-[12px]">
+                      <span className="w-24 shrink-0 text-gray-500">งบประมาณ</span>
+                      <span className="text-gray-900 font-medium">{selectedRequest.budget}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Coordinator */}
+                <div>
+                  <h4 className="text-[13px] font-black text-[#311171] mb-3">ผู้ประสานงาน</h4>
+                  <div className="flex gap-3 items-start">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
+                      <User size={20} />
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-bold text-gray-900">{selectedRequest.coordinator.name}</p>
+                      <p className="text-[11px] text-gray-500">{selectedRequest.coordinator.role}</p>
+                      <p className="text-[11px] text-gray-500 mb-1">{selectedRequest.coordinator.dept}</p>
+                      <p className="text-[11px] text-gray-600 font-medium">{selectedRequest.coordinator.phone}</p>
+                      <p className="text-[11px] text-gray-600 font-medium">{selectedRequest.coordinator.email}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Attachments */}
+                <div>
+                  <h4 className="text-[13px] font-black text-[#311171] mb-3">เอกสารแนบ</h4>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-100 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer group">
+                    <div className="flex items-center gap-3">
+                      <FileText size={20} className="text-red-500" />
+                      <div>
+                        <p className="text-[12px] font-bold text-gray-900">โครงการและกำหนดการ.pdf</p>
+                        <p className="text-[10px] text-gray-500">1.2 MB</p>
+                      </div>
+                    </div>
+                    <Download size={16} className="text-gray-400 group-hover:text-gray-700 transition-colors" />
+                  </div>
+                </div>
+
+                {/* Allocation Selection */}
+                <div>
+                  <h4 className="text-[13px] font-black text-[#311171] mb-3">การจัดสรร (โดยแอดมิน)</h4>
+                  
+                  <div className="space-y-4">
+                    {/* Van Select */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-500 mb-1.5">รถที่ต้องการ</label>
+                      <div className="relative">
+                        <select className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 text-[12px] font-bold rounded-xl px-3 py-2.5 pr-8 focus:outline-none focus:ring-2 focus:ring-[#311171]/20">
+                          <option>รถตู้คณะเกษตร 01 (นข 1234 พะเยา)</option>
+                          <option>รถตู้คณะเกษตร 02 (นข 5678 พะเยา)</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* Driver Select */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-500 mb-1.5">คนขับที่ต้องการ</label>
+                      <div className="relative">
+                        <select className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 text-[12px] font-bold rounded-xl px-3 py-2.5 pr-8 focus:outline-none focus:ring-2 focus:ring-[#311171]/20">
+                          <option>นายสมชาย ใจดี</option>
+                          <option>นายสมคิด ดีงาม</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                        <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full pointer-events-none flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div> พร้อมปฏิบัติงาน
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Sidebar Actions */}
+              <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-3 gap-2">
+                <button 
+                  onClick={() => handleAction(selectedRequest.id, "ปฏิเสธ")}
+                  className="py-2.5 px-2 bg-white hover:bg-red-50 border border-red-200 text-red-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <XCircle size={14} /> ปฏิเสธ
+                </button>
+                <button 
+                  onClick={() => handleAction(selectedRequest.id, "ข้อมูลเพิ่ม")}
+                  className="py-2.5 px-2 bg-white hover:bg-blue-50 border border-blue-200 text-blue-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Info size={14} /> ข้อมูลเพิ่ม
+                </button>
+                <button 
+                  onClick={() => handleAction(selectedRequest.id, "อนุมัติ")}
+                  className="py-2.5 px-2 bg-[#2a8b5c] hover:bg-[#206a46] text-white text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <CheckCircle2 size={14} /> อนุมัติ
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </AppShell>
+  );
+}

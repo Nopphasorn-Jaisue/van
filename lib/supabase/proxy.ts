@@ -2,6 +2,24 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasEnvVars } from "../utils";
 
+type AppRole = "USER" | "FACULTY_ADMIN" | "EXECUTIVE" | "SUPER_ADMIN" | "DRIVER";
+
+const ROLE_RULES: Array<{ startsWith: string; allowed: AppRole[] }> = [
+  { startsWith: "/faculty-admin", allowed: ["FACULTY_ADMIN", "SUPER_ADMIN"] },
+  { startsWith: "/executive", allowed: ["EXECUTIVE", "SUPER_ADMIN"] },
+  { startsWith: "/driver", allowed: ["DRIVER", "SUPER_ADMIN"] },
+  { startsWith: "/super-admin", allowed: ["SUPER_ADMIN"] },
+  { startsWith: "/reports", allowed: ["FACULTY_ADMIN", "EXECUTIVE", "SUPER_ADMIN"] },
+];
+
+function normalizeRole(value: unknown): AppRole {
+  const role = String(value || "USER").toUpperCase();
+  if (["USER", "FACULTY_ADMIN", "EXECUTIVE", "SUPER_ADMIN", "DRIVER"].includes(role)) {
+    return role as AppRole;
+  }
+  return "USER";
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -45,18 +63,24 @@ export async function updateSession(request: NextRequest) {
   // IMPORTANT: If you remove getClaims() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
   const { data } = await supabase.auth.getClaims();
-  const user = data?.claims;
+  const claims = data?.claims as Record<string, unknown> | undefined;
 
-  if (
-    request.nextUrl.pathname !== "/" &&
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
-    const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
-    return NextResponse.redirect(url);
+  const appMeta = claims?.app_metadata && typeof claims.app_metadata === "object"
+    ? claims.app_metadata as Record<string, unknown>
+    : {};
+  const userMeta = claims?.user_metadata && typeof claims.user_metadata === "object"
+    ? claims.user_metadata as Record<string, unknown>
+    : {};
+
+  const role = normalizeRole(appMeta.role || userMeta.role || claims?.role);
+
+  const pathname = request.nextUrl.pathname;
+  const matchedRule = ROLE_RULES.find((rule) => pathname.startsWith(rule.startsWith));
+  if (matchedRule && !matchedRule.allowed.includes(role)) {
+    const deniedUrl = request.nextUrl.clone();
+    deniedUrl.pathname = "/faculty-admin/calendar";
+    deniedUrl.searchParams.set("denied", "1");
+    return NextResponse.redirect(deniedUrl);
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
