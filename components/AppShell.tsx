@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, BarChart3, Clock, ShieldAlert, LayoutDashboard, Wrench, Settings, Phone,
-  X, ShieldCheck, UserPlus, Bus, Calendar, Info
+  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 
@@ -144,7 +144,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               { icon: LayoutDashboard, label: "แดชบอร์ด", href: "/driver/dashboard" },
               { icon: CalendarDays, label: "ตารางงาน", href: "/driver/schedule" },
               { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-              { icon: Wrench, label: "แจ้งซ่อม/ตรวจสภาพ", href: "/driver/maintenance" },
+              { icon: FileText, label: "ข้อมูลรถและสัญญา", href: "/driver/contract" },
             ].map((item, idx) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
@@ -276,7 +276,6 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: FileSignature, label: "คำขอที่ต้องอนุมัติ", href: "/faculty-admin/approvals" },
         { icon: CarFront, label: "จัดการรถประจำคณะ", href: "/faculty-admin/vans" },
         { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
-        { icon: Wrench, label: "จัดการซ่อมบำรุง", href: "/faculty-admin/maintenance" },
         { icon: BarChart3, label: "รายงานและสถิติ", href: "/faculty-admin/reports" },
         { icon: Phone, label: "ข้อมูลติดต่อคณะ", href: "/faculty-admin/contact" },
         { icon: Settings, label: "ตั้งค่าคณะ", href: "/faculty-admin/settings" },
@@ -291,7 +290,7 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: LayoutDashboard, label: "แดชบอร์ดคนขับ", href: "/driver/dashboard" },
         { icon: CalendarDays, label: "ตารางงานของฉัน", href: "/driver/schedule" },
         { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-        { icon: Wrench, label: "แจ้งซ่อม/ตรวจสภาพ", href: "/driver/maintenance" },
+        { icon: FileText, label: "ข้อมูลรถและสัญญา", href: "/driver/contract" },
       ];
     }
 

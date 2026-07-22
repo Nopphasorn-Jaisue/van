@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { Clock, Users, Phone, Navigation, AlertTriangle, CheckCircle, Gauge, X, Camera } from 'lucide-react';
+import { Clock, Users, Phone, Navigation, AlertTriangle, CheckCircle, Gauge, X, Camera, MapPin, Plus } from 'lucide-react';
 
 export default function DriverDashboard() {
   const [tripStatus, setTripStatus] = useState<"pending" | "started" | "completed">("pending");
@@ -11,6 +11,28 @@ export default function DriverDashboard() {
   const [showEndModal, setShowEndModal] = useState(false);
   const [startMileage, setStartMileage] = useState("");
   const [endMileage, setEndMileage] = useState("");
+  const [stopovers, setStopovers] = useState<{name: string, distance: string}[]>([{ name: "", distance: "" }]);
+
+  const addStopover = () => {
+    setStopovers([...stopovers, { name: "", distance: "" }]);
+  };
+
+  const updateStopoverName = (index: number, value: string) => {
+    const newStopovers = [...stopovers];
+    newStopovers[index].name = value;
+    setStopovers(newStopovers);
+  };
+  
+  const updateStopoverDistance = (index: number, value: string) => {
+    const newStopovers = [...stopovers];
+    newStopovers[index].distance = value;
+    setStopovers(newStopovers);
+  };
+
+  const removeStopover = (index: number) => {
+    const newStopovers = stopovers.filter((_, i) => i !== index);
+    setStopovers(newStopovers);
+  };
 
   // Mock data for today's trip
   const todaysTrip = {
@@ -28,9 +50,24 @@ export default function DriverDashboard() {
   useEffect(() => {
     const savedStart = localStorage.getItem('driver_start_mileage');
     const savedEnd = localStorage.getItem('driver_end_mileage');
+    const savedStopovers = localStorage.getItem('driver_stopovers');
     if (savedStart) setStartMileage(savedStart);
     if (savedEnd) {
       setEndMileage(savedEnd);
+      if (savedStopovers) {
+        try {
+          const parsed = JSON.parse(savedStopovers);
+          if (Array.isArray(parsed)) {
+            if (typeof parsed[0] === 'string') {
+              setStopovers(parsed.map(s => ({ name: s, distance: "" })));
+            } else {
+              setStopovers(parsed);
+            }
+          }
+        } catch (e) {
+          setStopovers([{ name: savedStopovers, distance: "" }]);
+        }
+      }
       setTripStatus("completed");
     } else if (savedStart) {
       setTripStatus("started");
@@ -53,6 +90,7 @@ export default function DriverDashboard() {
       return;
     }
     localStorage.setItem('driver_end_mileage', endMileage);
+    localStorage.setItem('driver_stopovers', JSON.stringify(stopovers.filter(s => s.name.trim() !== "")));
     // In a real app, you would validate that endMileage > startMileage
     setTripStatus("completed");
     setShowEndModal(false);
@@ -131,6 +169,28 @@ export default function DriverDashboard() {
               <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 flex justify-between items-center">
                 <div className="text-xs font-bold text-gray-500">เลขไมล์สิ้นสุด</div>
                 <div className="text-sm font-black text-[#311171]">{endMileage} กม.</div>
+              </div>
+            )}
+            
+            {tripStatus === "completed" && stopovers.filter(s => s.name.trim() !== "").length > 0 && (
+              <div className="bg-orange-50 rounded-xl p-3 border border-orange-100 flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-orange-600">
+                  <MapPin size={14} /> สถานที่แวะเพิ่มเติม
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {stopovers.filter(s => s.name.trim() !== "").map((stopover, index) => (
+                    <div key={index} className="text-sm font-bold text-gray-900 flex justify-between items-start gap-2">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-orange-400 mt-0.5">•</span> {stopover.name}
+                      </div>
+                      {stopover.distance && (
+                        <div className="text-xs text-gray-500 whitespace-nowrap bg-white px-2 py-0.5 rounded-md border border-orange-100">
+                          {stopover.distance} กม.
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -244,6 +304,63 @@ export default function DriverDashboard() {
                       placeholder="เช่น 125150"
                       className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#311171] focus:border-transparent font-bold text-gray-900"
                     />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-500">สถานที่แวะเพิ่มเติม (ถ้ามี)</label>
+                    <button 
+                      type="button" 
+                      onClick={addStopover}
+                      className="flex items-center gap-1 text-[11px] font-bold text-[#311171] bg-purple-50 px-2 py-1 rounded-md hover:bg-purple-100 transition-colors"
+                    >
+                      <Plus size={12} /> เพิ่มสถานที่
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {stopovers.map((stopover, index) => (
+                      <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-xl relative">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[11px] font-bold text-gray-500">สถานที่ที่ {index + 1}</span>
+                          {stopovers.length > 1 && (
+                            <button 
+                              type="button"
+                              onClick={() => removeStopover(index)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <div className="absolute top-2.5 left-0 pl-2.5 flex items-start pointer-events-none text-gray-400">
+                              <MapPin size={16} />
+                            </div>
+                            <input 
+                              type="text"
+                              value={stopover.name}
+                              onChange={(e) => updateStopoverName(index, e.target.value)}
+                              placeholder="ชื่อสถานที่"
+                              className="w-full pl-8 pr-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all text-sm font-bold text-gray-900"
+                            />
+                          </div>
+                          
+                          <div className="w-[90px] relative">
+                            <input 
+                              type="number"
+                              value={stopover.distance}
+                              onChange={(e) => updateStopoverDistance(index, e.target.value)}
+                              placeholder="ระยะทาง"
+                              className="w-full pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all text-sm font-bold text-gray-900"
+                            />
+                            <span className="absolute top-2.5 right-2 text-xs text-gray-400 font-bold">กม.</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

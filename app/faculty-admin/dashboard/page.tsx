@@ -3,14 +3,14 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
   CarFront, User, FileText, CalendarDays, 
-  ChevronLeft, ChevronRight, ExternalLink
-} from 'lucide-react';
+  ChevronLeft, ChevronRight, ExternalLink} from 'lucide-react';
 import AppShell from '@/components/AppShell';
+import { useRouter } from 'next/navigation';
 
 export default function FacultyAdminDashboard() {
 
   // Request State
-  const [requests, setRequests] = useState([
+  const [requests] = useState([
     {
       id: "UPVAN-2569-00123",
       time: "เมื่อวาน 14:32 น.",
@@ -45,14 +45,16 @@ export default function FacultyAdminDashboard() {
     }
   ]);
 
-  const handleAction = (id: string, actionType: string) => {
-    alert(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จ`);
-    setRequests(prev => prev.filter(req => req.id !== id));
-  };
+  const router = useRouter();
 
-  // Dynamic Calendar State starting July 19, 2026
+  // Dynamic Calendar State starting from actual today (initialized with static to prevent prerender error)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 19)); 
-  const [selectedDay, setSelectedDay] = useState<number | null>(19); // Today is 19
+  const [selectedDay, setSelectedDay] = useState<number | null>(19);
+  React.useEffect(() => {
+    const now = new Date();
+    setCurrentDate(now);
+    setSelectedDay(now.getDate());
+  }, []);
 
   const nextMonth = () => {
     setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
@@ -218,14 +220,18 @@ export default function FacultyAdminDashboard() {
                         <th className="p-4 font-bold min-w-[120px]">วันที่เดินทาง</th>
                         <th className="p-4 font-bold min-w-[120px]">ปลายทาง</th>
                         <th className="p-4 font-bold text-center">จำนวนผู้โดยสาร</th>
-                        <th className="p-4 font-bold text-center min-w-[200px]">การดำเนินการ</th>
+                        <th className="p-4 font-bold text-center w-[60px]"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {requests.length > 0 ? requests.map((req) => (
-                        <tr key={req.id} className="hover:bg-gray-50/50 transition-colors">
+                        <tr 
+                          key={req.id} 
+                          onClick={() => router.push('/faculty-admin/approvals')}
+                          className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
+                        >
                           <td className="p-4 align-top">
-                            <div className="text-sm font-bold text-[#311171] mb-0.5">{req.id}</div>
+                            <div className="text-sm font-bold text-[#311171] group-hover:text-[#250d55] mb-0.5">{req.id}</div>
                             <div className="text-[11px] text-gray-400">{req.time}</div>
                           </td>
                           <td className="p-4 text-sm font-medium text-gray-800 align-top whitespace-pre-line leading-relaxed">
@@ -240,26 +246,9 @@ export default function FacultyAdminDashboard() {
                           <td className="p-4 text-sm font-bold text-gray-900 align-top text-center">
                             {req.passengers}
                           </td>
-                          <td className="p-4 align-top text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button 
-                                onClick={() => handleAction(req.id, "อนุมัติ")}
-                                className="text-[11px] font-bold text-green-600 border border-green-200 bg-white rounded-lg px-3 py-1.5 hover:bg-green-50 transition-colors shadow-sm"
-                              >
-                                อนุมัติ
-                              </button>
-                              <button 
-                                onClick={() => alert(`แสดงข้อมูลเพิ่มเติมสำหรับคำขอ ${req.id}`)}
-                                className="text-[11px] font-bold text-blue-600 border border-blue-200 bg-white rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors shadow-sm"
-                              >
-                                ขอข้อมูลเพิ่ม
-                              </button>
-                              <button 
-                                onClick={() => handleAction(req.id, "ปฏิเสธ")}
-                                className="text-[11px] font-bold text-red-600 border border-red-200 bg-white rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors shadow-sm"
-                              >
-                                ปฏิเสธ
-                              </button>
+                          <td className="p-4 align-middle text-right">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-gray-300 group-hover:bg-[#f0eaff] group-hover:text-[#311171] transition-colors ml-auto">
+                              <ChevronRight size={20} />
                             </div>
                           </td>
                         </tr>

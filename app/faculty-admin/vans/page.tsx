@@ -3,8 +3,19 @@ import React, { useState } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Plus, Edit, Trash2, 
-  Users, Fuel, Wrench, Share2, Lock, Check, Search
+  Users, Fuel, Wrench, Share2, Lock, Check, Search, X, Image as ImageIcon
 } from 'lucide-react';
+
+interface Van {
+  id: string;
+  vanName: string;
+  plate: string;
+  capacity: number;
+  fuelType: string;
+  status: string;
+  isShared?: boolean;
+  image: string;
+}
 
 export default function VansPage() {
   // Mock Data
@@ -22,6 +33,59 @@ export default function VansPage() {
   ]);
 
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Modal States
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    vanName: "",
+    plate: "",
+    capacity: 12,
+    fuelType: "ดีเซล",
+    status: "ready",
+    image: ""
+  });
+
+  const openAddModal = () => {
+    setEditingId(null);
+    setFormData({
+      vanName: "",
+      plate: "",
+      capacity: 12,
+      fuelType: "ดีเซล",
+      status: "ready",
+      image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80"
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (van: Van) => {
+    setEditingId(van.id);
+    setFormData({
+      vanName: van.vanName,
+      plate: van.plate,
+      capacity: van.capacity,
+      fuelType: van.fuelType,
+      status: van.status,
+      image: van.image
+    });
+    setIsModalOpen(true);
+  };
+
+  const saveVan = () => {
+    if (editingId) {
+      setVans(vans.map(v => v.id === editingId ? { ...v, ...formData } : v));
+    } else {
+      setVans([...vans, { id: `v${Date.now()}`, ...formData, isShared: false }]);
+    }
+    setIsModalOpen(false);
+  };
+
+  const deleteVan = (id: string) => {
+    if (confirm('คุณต้องการลบรถตู้คันนี้ใช่หรือไม่?')) {
+      setVans(vans.filter(v => v.id !== id));
+    }
+  };
 
   const toggleShareStatus = (id: string) => {
     setVans(vans.map(van => 
@@ -46,14 +110,17 @@ export default function VansPage() {
           </div>
           
           <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-[#311171] hover:bg-[#240c55] text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
+            <button 
+              onClick={openAddModal}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#311171] hover:bg-[#240c55] text-white text-sm font-bold rounded-xl transition-colors shadow-sm"
+            >
               <Plus size={18} /> เพิ่มรถตู้ใหม่
             </button>
           </div>
         </div>
 
         {/* ----- Toolbar ----- */}
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm mb-6 flex flex-col sm:flex-row justify-between gap-4 shrink-0">
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
           <div className="relative w-full sm:w-72">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input 
@@ -142,10 +209,16 @@ export default function VansPage() {
                     </div>
 
                     <div className="flex gap-2">
-                      <button className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                      <button 
+                        onClick={() => openEditModal(van)}
+                        className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                      >
                         <Edit size={14} /> แก้ไขข้อมูล
                       </button>
-                      <button className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-colors">
+                      <button 
+                        onClick={() => deleteVan(van.id)}
+                        className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-colors"
+                      >
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -158,6 +231,157 @@ export default function VansPage() {
         </div>
 
       </div>
+
+      {/* Add/Edit Modal */}
+      {isModalOpen && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+              <h2 className="text-xl font-black text-[#311171]">
+                {editingId ? 'แก้ไขข้อมูลรถตู้' : 'เพิ่มรถตู้ใหม่'}
+              </h2>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-xl transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-5">
+              
+              {/* Image Preview */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">รูปภาพรถ</label>
+                <div className="flex gap-4 items-start">
+                  <div className="w-24 h-24 rounded-xl overflow-hidden bg-gray-100 border border-gray-200 shrink-0 flex items-center justify-center">
+                    {formData.image ? (
+                      <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon className="text-gray-400" size={32} />
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setFormData({...formData, image: reader.result as string});
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-[#311171]/10 file:text-[#311171] hover:file:bg-[#311171]/20 file:transition-colors file:cursor-pointer cursor-pointer border border-gray-200 rounded-xl p-1"
+                    />
+                    <p className="text-xs text-gray-500 mt-2 font-medium">อัปโหลดรูปภาพรถตู้จากอุปกรณ์ของคุณ</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">ชื่อรถตู้</label>
+                  <input 
+                    type="text" 
+                    value={formData.vanName}
+                    onChange={(e) => setFormData({...formData, vanName: e.target.value})}
+                    placeholder="เช่น รถตู้คณะเกษตร 01"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">ป้ายทะเบียน</label>
+                  <input 
+                    type="text" 
+                    value={formData.plate}
+                    onChange={(e) => setFormData({...formData, plate: e.target.value})}
+                    placeholder="เช่น นข 1234 พะเยา"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">จำนวนที่นั่ง</label>
+                  <input 
+                    type="number" 
+                    value={formData.capacity}
+                    onChange={(e) => setFormData({...formData, capacity: parseInt(e.target.value) || 0})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">ประเภทเชื้อเพลิง</label>
+                  <select 
+                    value={formData.fuelType}
+                    onChange={(e) => setFormData({...formData, fuelType: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171]"
+                  >
+                    <option value="ดีเซล">ดีเซล</option>
+                    <option value="เบนซิน">เบนซิน</option>
+                    <option value="EV (ไฟฟ้า)">EV (ไฟฟ้า)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">สถานะความพร้อม</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="status" 
+                      value="ready"
+                      checked={formData.status === 'ready'}
+                      onChange={(e) => setFormData({...formData, status: e.target.value})}
+                      className="accent-[#311171] w-4 h-4"
+                    />
+                    <span className="text-sm font-bold text-green-600">พร้อมใช้งาน</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="status" 
+                      value="maintenance"
+                      checked={formData.status === 'maintenance'}
+                      onChange={(e) => setFormData({...formData, status: e.target.value})}
+                      className="accent-[#311171] w-4 h-4"
+                    />
+                    <span className="text-sm font-bold text-orange-600">กำลังซ่อมบำรุง</span>
+                  </label>
+                </div>
+              </div>
+
+            </div>
+            
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="px-5 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={saveVan}
+                className="px-6 py-2 text-sm font-bold text-white bg-[#311171] hover:bg-[#240c55] rounded-xl transition-colors shadow-sm"
+              >
+                บันทึกข้อมูล
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

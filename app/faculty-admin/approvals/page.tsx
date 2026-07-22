@@ -5,13 +5,27 @@ import {
   FileText, Search, Filter,
   CheckCircle2, XCircle, Info, Calendar,
   MapPin, Users, User, Clock, 
-  MoreVertical, X, Download, ChevronDown
+  X, Download
 } from 'lucide-react';
 
 export default function ApprovalsPage() {
   const [activeTab, setActiveTab] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{id: string, type: string} | null>(null);
+  const [infoReason, setInfoReason] = useState("");
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      if (id) {
+        setSelectedRequestId(id);
+        setActiveTab('all');
+      }
+    }
+  }, []);
 
   // Mock data for requests
   const [requests, setRequests] = useState([
@@ -161,8 +175,16 @@ export default function ApprovalsPage() {
     }
   ]);
 
-  const handleAction = (id: string, actionType: string) => {
-    alert(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จ`);
+  const confirmAction = (id: string, actionType: string) => {
+    setPendingAction({ id, type: actionType });
+    setInfoReason("");
+  };
+
+  const executeAction = () => {
+    if (!pendingAction) return;
+    const { id, type: actionType } = pendingAction;
+    
+    setAlertMessage(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จ`);
     if (actionType === 'อนุมัติ' || actionType === 'ปฏิเสธ' || actionType === 'อนุญาตให้ยืม') {
       setRequests(prev => prev.filter(req => req.id !== id));
       if (selectedRequestId === id) setSelectedRequestId(null);
@@ -171,6 +193,7 @@ export default function ApprovalsPage() {
         req.id === id ? { ...req, status: 'need_info' } : req
       ));
     }
+    setPendingAction(null);
   };
 
   const filteredRequests = requests.filter(req => {
@@ -293,15 +316,11 @@ export default function ApprovalsPage() {
               <table className="w-full text-left border-collapse">
                 <thead className="sticky top-0 bg-white z-10 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
                   <tr className="text-[12px] font-bold text-gray-500 border-b border-gray-100">
-                    <th className="py-4 pl-6 pr-2 w-10">
-                      <div className="w-4 h-4 rounded border border-gray-300 bg-white"></div>
-                    </th>
-                    <th className="py-4 px-4 font-bold min-w-[200px]">เลขคำขอ</th>
+                    <th className="py-4 pl-6 pr-4 font-bold min-w-[200px]">เลขคำขอ</th>
                     <th className="py-4 px-4 font-bold min-w-[180px]">ผู้ขอใช้รถ</th>
                     <th className="py-4 px-4 font-bold min-w-[150px]">กำหนดการ</th>
                     <th className="py-4 px-4 font-bold min-w-[260px]">รายละเอียดการเดินทาง</th>
                     <th className="py-4 px-4 font-bold text-center w-32">สถานะ</th>
-                    <th className="py-4 px-6 font-bold text-center min-w-[200px]">การดำเนินการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -309,14 +328,10 @@ export default function ApprovalsPage() {
                     <tr 
                       key={req.id} 
                       onClick={() => setSelectedRequestId(req.id)}
-                      className={`transition-colors cursor-pointer group ${selectedRequestId === req.id ? 'bg-[#fcfaff]' : 'hover:bg-gray-50/50'}`}
+                      className={`transition-colors cursor-pointer group ${selectedRequestId === req.id ? 'bg-[#f0eaff]' : 'hover:bg-gray-50/50'}`}
                     >
-                      <td className="py-5 pl-6 pr-2 align-top">
-                        <div className="w-4 h-4 rounded border border-gray-300 bg-white mt-1 cursor-pointer"></div>
-                      </td>
-                      
                       {/* เลขคำขอ */}
-                      <td className="py-5 px-4 align-top">
+                      <td className="py-5 pl-6 pr-4 align-top">
                         <div className="flex items-start gap-3">
                           <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${req.isCrossFaculty ? 'bg-purple-100 text-purple-700' : 'bg-[#f0eaff] text-[#311171]'}`}>
                             <FileText size={18} />
@@ -388,30 +403,11 @@ export default function ApprovalsPage() {
                         )}
                       </td>
 
-                      {/* Actions */}
-                      <td className="py-5 px-6 align-top text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleAction(req.id, "อนุมัติ"); }}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-green-50 border border-green-200 text-green-600 text-[12px] font-bold rounded-lg transition-colors"
-                          >
-                            <CheckCircle2 size={14} /> อนุมัติ
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleAction(req.id, "ขอข้อมูลเพิ่ม"); }}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-blue-50 border border-blue-200 text-blue-600 text-[12px] font-bold rounded-lg transition-colors"
-                          >
-                            <Info size={14} /> ข้อมูลเพิ่ม
-                          </button>
-                          <button className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors">
-                            <MoreVertical size={16} />
-                          </button>
-                        </div>
-                      </td>
+
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={7} className="py-16 text-center">
+                      <td colSpan={5} className="py-16 text-center">
                         <div className="flex flex-col items-center justify-center text-gray-400">
                           <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center mb-4">
                             <CheckCircle2 size={32} className="text-gray-300" />
@@ -557,28 +553,20 @@ export default function ApprovalsPage() {
                   <h4 className="text-[13px] font-black text-[#311171] mb-3">การจัดสรร (โดยแอดมิน)</h4>
                   
                   <div className="space-y-4">
-                    {/* Van Select */}
+                    {/* Van Display */}
                     <div>
-                      <label className="block text-[11px] font-bold text-gray-500 mb-1.5">รถที่ต้องการ</label>
-                      <div className="relative">
-                        <select className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 text-[12px] font-bold rounded-xl px-3 py-2.5 pr-8 focus:outline-none focus:ring-2 focus:ring-[#311171]/20">
-                          <option>รถตู้คณะเกษตร 01 (นข 1234 พะเยา)</option>
-                          <option>รถตู้คณะเกษตร 02 (นข 5678 พะเยา)</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <label className="block text-[11px] font-bold text-gray-500 mb-1.5">รถประจำคณะ</label>
+                      <div className="w-full bg-gray-50 border border-gray-200 text-[#311171] text-[12px] font-bold rounded-xl px-3 py-2.5">
+                        รถตู้คณะเกษตร 01 (นข 1234 พะเยา)
                       </div>
                     </div>
 
-                    {/* Driver Select */}
+                    {/* Driver Display */}
                     <div>
-                      <label className="block text-[11px] font-bold text-gray-500 mb-1.5">คนขับที่ต้องการ</label>
-                      <div className="relative">
-                        <select className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 text-[12px] font-bold rounded-xl px-3 py-2.5 pr-8 focus:outline-none focus:ring-2 focus:ring-[#311171]/20">
-                          <option>นายสมชาย ใจดี</option>
-                          <option>นายสมคิด ดีงาม</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full pointer-events-none flex items-center gap-1">
+                      <label className="block text-[11px] font-bold text-gray-500 mb-1.5">คนขับประจำคณะ</label>
+                      <div className="relative w-full bg-gray-50 border border-gray-200 text-[#311171] text-[12px] font-bold rounded-xl px-3 py-2.5 flex items-center justify-between">
+                        <span>นายสมชาย ใจดี</span>
+                        <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1">
                           <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div> พร้อมปฏิบัติงาน
                         </span>
                       </div>
@@ -591,19 +579,19 @@ export default function ApprovalsPage() {
               {/* Sidebar Actions */}
               <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-3 gap-2">
                 <button 
-                  onClick={() => handleAction(selectedRequest.id, "ปฏิเสธ")}
+                  onClick={() => confirmAction(selectedRequest.id, "ปฏิเสธ")}
                   className="py-2.5 px-2 bg-white hover:bg-red-50 border border-red-200 text-red-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
                 >
                   <XCircle size={14} /> ปฏิเสธ
                 </button>
                 <button 
-                  onClick={() => handleAction(selectedRequest.id, "ข้อมูลเพิ่ม")}
+                  onClick={() => confirmAction(selectedRequest.id, "ข้อมูลเพิ่ม")}
                   className="py-2.5 px-2 bg-white hover:bg-blue-50 border border-blue-200 text-blue-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Info size={14} /> ข้อมูลเพิ่ม
                 </button>
                 <button 
-                  onClick={() => handleAction(selectedRequest.id, "อนุมัติ")}
+                  onClick={() => confirmAction(selectedRequest.id, "อนุมัติ")}
                   className="py-2.5 px-2 bg-[#2a8b5c] hover:bg-[#206a46] text-white text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <CheckCircle2 size={14} /> อนุมัติ
@@ -613,6 +601,115 @@ export default function ApprovalsPage() {
           )}
         </div>
       </div>
+
+      {/* Pending Action Confirmation Modal */}
+      {pendingAction && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setPendingAction(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5">
+              <div className="flex justify-between items-start mb-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-inner ${
+                  pendingAction.type === 'ปฏิเสธ' ? 'bg-red-100 text-red-600' :
+                  pendingAction.type === 'ข้อมูลเพิ่ม' ? 'bg-blue-100 text-blue-600' :
+                  'bg-green-100 text-green-600'
+                }`}>
+                  {pendingAction.type === 'ปฏิเสธ' ? <XCircle size={24} strokeWidth={2.5} /> :
+                   pendingAction.type === 'ข้อมูลเพิ่ม' ? <Info size={24} strokeWidth={2.5} /> :
+                   <CheckCircle2 size={24} strokeWidth={2.5} />}
+                </div>
+                <button 
+                  onClick={() => setPendingAction(null)}
+                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1.5 rounded-xl transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <h3 className="text-lg font-black text-gray-900 mb-1">
+                {pendingAction.type === 'ปฏิเสธ' ? 'ยืนยันการปฏิเสธ' :
+                 pendingAction.type === 'ข้อมูลเพิ่ม' ? 'ขอข้อมูลเพิ่มเติม' :
+                 'ยืนยันการอนุมัติ'}
+              </h3>
+              <p className="text-sm font-medium text-gray-600 leading-relaxed mb-4">
+                {pendingAction.type === 'ข้อมูลเพิ่ม' 
+                  ? `ระบุข้อมูลที่คุณต้องการเพิ่มเติมสำหรับคำขอ ${pendingAction.id}`
+                  : `คุณต้องการ${pendingAction.type}คำขอ ${pendingAction.id} ใช่หรือไม่?`}
+              </p>
+
+              {pendingAction.type === 'ข้อมูลเพิ่ม' && (
+                <textarea
+                  className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none h-24"
+                  placeholder="พิมพ์ข้อความที่นี่..."
+                  value={infoReason}
+                  onChange={(e) => setInfoReason(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="bg-gray-50 px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingAction(null)}
+                className="bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-sm font-bold py-2 px-4 rounded-xl transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={executeAction}
+                className={`text-white text-sm font-bold py-2 px-6 rounded-xl transition-colors shadow-sm ${
+                  pendingAction.type === 'ปฏิเสธ' ? 'bg-red-600 hover:bg-red-700' :
+                  pendingAction.type === 'ข้อมูลเพิ่ม' ? 'bg-blue-600 hover:bg-blue-700' :
+                  'bg-[#2a8b5c] hover:bg-[#206a46]'
+                }`}
+              >
+                {pendingAction.type === 'ข้อมูลเพิ่ม' ? 'ส่งข้อความ' : 'ยืนยัน'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Modal */}
+      {alertMessage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setAlertMessage(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5">
+              <div className="flex justify-between items-start mb-3">
+                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 shrink-0 shadow-inner">
+                  <CheckCircle2 size={24} strokeWidth={2.5} />
+                </div>
+                <button 
+                  onClick={() => setAlertMessage(null)}
+                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1.5 rounded-xl transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <h3 className="text-lg font-black text-gray-900 mb-1">สำเร็จ!</h3>
+              <p className="text-sm font-medium text-gray-600 leading-relaxed">
+                {alertMessage}
+              </p>
+            </div>
+            <div className="bg-gray-50 px-5 py-4 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setAlertMessage(null)}
+                className="bg-[#311171] hover:bg-[#250d55] text-white text-sm font-bold py-2 px-6 rounded-xl transition-colors shadow-sm"
+              >
+                ตกลง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

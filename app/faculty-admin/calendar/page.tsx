@@ -8,21 +8,32 @@ import {
   MapPin, Calendar, Clock, User, FileText, Info,
   CalendarDays, FileSignature, X
 } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
-
+import { useSearchParams, useRouter } from 'next/navigation';
+import { facultiesList } from '@/Frontend/data/faculties';
+import { TrackingContent } from '@/components/TrackingContent';
 
 function CalendarContent() {
+  const router = useRouter();
+  const [toastMessage, setToastMessage] = useState<{title: string, desc: string, redirectUrl?: string} | null>(null);
+
   // State for view mode: "week" or "month"
-  const [viewMode, setViewMode] = useState<"week" | "month">("week");
+  const [viewMode, setViewMode] = useState<"week" | "month">("month");
 
   // States for filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFacultyFilter, setSelectedFacultyFilter] = useState("คณะวิทยาศาสตร์");
+  const [selectedFacultyFilter, setSelectedFacultyFilter] = useState("all");
   const [selectedVanFilter, setSelectedVanFilter] = useState("all");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("all");
 
-  // Base Date starts at July 19, 2026
-  const [baseDate, setBaseDate] = useState(new Date(2026, 6, 19)); 
+  // Base Date starts at today (initialized with static to prevent prerender error)
+  const [baseDate, setBaseDate] = useState(new Date(2026, 6, 19));
+  const [todayDate, setTodayDate] = useState(new Date(2026, 6, 19));
+
+  React.useEffect(() => {
+    const now = new Date();
+    setBaseDate(now);
+    setTodayDate(now);
+  }, []); 
 
   // Functions to navigate dates
   const handlePrevDateRange = () => {
@@ -112,7 +123,7 @@ function CalendarContent() {
       purpose: "ศึกษาดูงาน",
       passengers: 10,
       status: "cross_faculty",
-      bookingFaculty: "คณะวิศวกรรมศาสตร์",
+      bookingFaculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
       requester: "ดร.สมเกียรติ เรียนดี",
       department: "ภาควิชาวิศวกรรมคอมพิวเตอร์",
       purposeDetail: "อบรมเกษตรกรในโครงการสวนพฤกษศาสตร์",
@@ -234,7 +245,26 @@ function CalendarContent() {
     },
   ];
 
-  // Helper styling
+  // Helper styling based on Faculty
+  const getEventColor = (facultyName: string | undefined, defaultFaculty: string) => {
+    const nameToMatch = facultyName || defaultFaculty;
+    const faculty = facultiesList.find(f => f.name === nameToMatch);
+    if (faculty) {
+      return `${faculty.palette.surface} ${faculty.palette.border} ${faculty.palette.accent}`;
+    }
+    return "bg-gray-50 border-gray-200 text-gray-700";
+  };
+
+  const getEventDotColor = (facultyName: string | undefined, defaultFaculty: string) => {
+    const nameToMatch = facultyName || defaultFaculty;
+    const faculty = facultiesList.find(f => f.name === nameToMatch);
+    if (faculty) {
+      return faculty.palette.chip;
+    }
+    return "bg-gray-400";
+  };
+
+  // Status colors still needed for the status badge in the details sidebar
   const getStatusColor = (status: string) => {
     switch (status) {
       case "approved": return "bg-green-50 border-green-200 text-green-700";
@@ -274,8 +304,8 @@ function CalendarContent() {
   const vansList = [
     {
       id: "v1",
-      faculty: "คณะเกษตรศาสตร์",
-      vanName: "รถตู้คณะเกษตร 01",
+      faculty: "คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ",
+      vanName: "รถตู้คณะเกษตรฯ 01",
       plate: "ทะเบียน นข 1234 พะเยา",
       driverName: "นายสมชาย ใจดี",
       driverPhone: "081-234-5678",
@@ -283,14 +313,34 @@ function CalendarContent() {
       driverImage: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=100&q=80"
     },
     {
-      id: "v4",
-      faculty: "คณะวิศวกรรมศาสตร์",
-      vanName: "รถตู้คณะวิศวะ 01",
+      id: "v2",
+      faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+      vanName: "รถตู้ ICT 01",
       plate: "ทะเบียน กท 4455 พะเยา",
-      driverName: "นายช่าง ใหญ่",
+      driverName: "นายช่าง ไอที",
       driverPhone: "088-111-2222",
       vanImage: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80",
       driverImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&q=80"
+    },
+    {
+      id: "v3",
+      faculty: "คณะพลังงานและสิ่งแวดล้อม",
+      vanName: "รถตู้พลังงานฯ 01",
+      plate: "ทะเบียน พพ 7788 พะเยา",
+      driverName: "นายสะอาด รักษ์โลก",
+      driverPhone: "089-555-4444",
+      vanImage: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80",
+      driverImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&q=80"
+    },
+    {
+      id: "v4",
+      faculty: "คณะเภสัชศาสตร์",
+      vanName: "รถตู้เภสัชฯ 01",
+      plate: "ทะเบียน ภภ 1122 พะเยา",
+      driverName: "นายยาดี มีสุข",
+      driverPhone: "081-999-1111",
+      vanImage: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80",
+      driverImage: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&q=80"
     },
     {
       id: "v5",
@@ -410,9 +460,11 @@ function CalendarContent() {
               className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none font-bold text-gray-700"
             >
               <option value="all">ทุกคณะรวมกัน</option>
-              <option value="คณะเกษตรศาสตร์">คณะเกษตรศาสตร์ (คณะของคุณ)</option>
-              <option value="คณะวิศวกรรมศาสตร์">คณะวิศวกรรมศาสตร์</option>
-              <option value="คณะวิทยาศาสตร์">คณะวิทยาศาสตร์</option>
+              {facultiesList.map(faculty => (
+                <option key={faculty.id} value={faculty.name}>
+                  {faculty.name} {faculty.id === 'agri' ? '(คณะของคุณ)' : ''}
+                </option>
+              ))}
             </select>
 
             {/* Van Filter */}
@@ -520,9 +572,9 @@ function CalendarContent() {
                                       setSelectedEvent({ ...event, vanId: van.id });
                                     }
                                   }}
-                                  className={`p-2 rounded-xl border ${getStatusColor(event.status)} shadow-sm relative group cursor-pointer hover:brightness-95 transition-all h-full min-h-[75px] ${isSelected ? 'scale-[1.02] z-10 shadow-md border-[#311171]/30' : ''}`}
+                                  className={`p-2 rounded-xl border shadow-sm relative group cursor-pointer hover:brightness-95 transition-all h-full min-h-[75px] ${isSelected ? 'scale-[1.02] z-10 shadow-md border-[#311171]/30' : ''} ${getEventColor(event.bookingFaculty, van.faculty)}`}
                                 >
-                                  <div className={`absolute top-0 left-0 w-1 h-full rounded-l-xl ${getStatusDot(event.status)}`} />
+                                  <div className={`absolute top-0 left-0 w-1 h-full rounded-l-xl ${getEventDotColor(event.bookingFaculty, van.faculty)}`} />
                                   <div className="pl-1.5">
                                     <p className="text-[10px] font-black mb-1">{event.time}</p>
                                     <p className="text-[11px] font-bold mb-0.5 truncate leading-tight">{event.destination}</p>
@@ -564,7 +616,7 @@ function CalendarContent() {
                   {/* Month View Day Cells */}
                   {getCalendarDays(baseDate).map((cell) => {
                     const dayBookings = filteredBookings.filter(b => isSameDate(b.date, cell.dateObj));
-                    const isTodayCell = isSameDate(new Date(2026, 6, 19), cell.dateObj);
+                    const isTodayCell = isSameDate(todayDate, cell.dateObj);
                     
                     return (
                       <div 
@@ -611,8 +663,9 @@ function CalendarContent() {
                                 }}
                                 className={`text-[9px] font-bold py-0.5 px-1.5 rounded-md border text-left w-fit max-w-full mx-auto truncate leading-tight shadow-sm transition-all hover:brightness-95 ${
                                   isSelected ? 'scale-[1.02] shadow-md border-[#311171]/30' : ''
-                                } ${getStatusColor(b.status)}`}
+                                } ${getEventColor(b.bookingFaculty, vansMap[b.vanId]?.faculty)}`}
                               >
+                                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${getEventDotColor(b.bookingFaculty, vansMap[b.vanId]?.faculty)}`}></span>
                                 {b.time.split(' ')[0]} - {b.destination} ({vansMap[b.vanId]?.vanName.replace('รถตู้คณะเกษตร ', 'ค.')})
                               </button>
                             );
@@ -635,7 +688,10 @@ function CalendarContent() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col self-start max-h-full w-full overflow-hidden animate-in slide-in-from-right duration-300">
               {/* Sticky Header */}
               <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white z-10 shrink-0">
-                <h2 className="text-[15px] font-black text-gray-900">รายละเอียดการจอง</h2>
+                <div className="flex flex-col gap-0.5">
+                  <h2 className="text-[15px] font-black text-gray-900">รายละเอียดการจอง</h2>
+                  <span className="text-[11px] font-bold text-gray-500">ID: {selectedEvent.id}</span>
+                </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${getStatusColor(selectedEvent.status).replace('border-', 'ring-1 ring-').replace('text-', 'text-').replace('bg-', 'bg-')}`}>
                     {selectedEvent.statusText}
@@ -779,7 +835,11 @@ function CalendarContent() {
               {/* Sticky Actions */}
               <div className="p-4 border-t border-gray-100 bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.02)] shrink-0 flex gap-3">
                 <button 
-                  onClick={() => alert(`เปิดหน้ารายละเอียดของ ${selectedEvent.id}`)}
+                  onClick={() => setToastMessage({
+                    title: "เปิดหน้ารายละเอียด",
+                    desc: `ระบบกำลังพาท่านไปยังรายละเอียดคำขอ ${selectedEvent.id}`,
+                    redirectUrl: '/faculty-admin/approvals'
+                  })}
                   className="flex-1 px-4 py-2.5 bg-[#311171] hover:bg-[#250d57] text-white text-[13px] font-bold rounded-xl transition-all text-center shadow-md shadow-[#311171]/20 hover:shadow-lg hover:-translate-y-0.5"
                 >
                   ดูรายละเอียดทั้งหมด
@@ -789,6 +849,32 @@ function CalendarContent() {
           )}
 
         </div>
+
+      {/* Cute Center Modal */}
+      {toastMessage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in duration-300">
+            <div className="w-16 h-16 rounded-full bg-[#f0eaff] flex items-center justify-center text-[#311171] mb-5">
+              <Info size={32} strokeWidth={2.5} />
+            </div>
+            <h3 className="text-xl font-black text-gray-900 mb-2">{toastMessage.title}</h3>
+            <p className="text-sm text-gray-500 font-medium mb-6">
+              {toastMessage.desc}
+            </p>
+            <button 
+              onClick={() => {
+                setToastMessage(null);
+                if (toastMessage.redirectUrl) {
+                  router.push(toastMessage.redirectUrl);
+                }
+              }}
+              className="w-full py-3.5 px-4 bg-[#311171] hover:bg-[#250d55] text-white font-bold rounded-2xl transition-colors shadow-sm"
+            >
+              ตกลง
+            </button>
+          </div>
+        </div>
+      )}
 
       </div>
   );
@@ -847,18 +933,8 @@ function AdminCalendarTabsContent() {
         )}
 
         {activeTab === 'tracking' && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1 flex flex-col items-center justify-center gap-4 min-h-[300px]">
-            <div className="w-16 h-16 rounded-2xl bg-[#efeaff] flex items-center justify-center">
-              <Search size={32} className="text-[#311171]" />
-            </div>
-            <h3 className="text-lg font-black text-gray-900">ติดตามสถานะคำขอ</h3>
-            <p className="text-sm text-gray-500 text-center max-w-md">ตรวจสอบสถานะการอนุมัติคำขอจองรถตู้ทั้งหมด</p>
-            <Link
-              href="/bookings/tracking"
-              className="mt-2 inline-flex items-center gap-2 px-6 py-3 bg-[#311171] hover:bg-[#250d55] text-white font-bold rounded-xl transition-colors shadow-sm"
-            >
-              <Search size={18} /> เปิดหน้าติดตาม
-            </Link>
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1">
+            <TrackingContent />
           </div>
         )}
       </div>

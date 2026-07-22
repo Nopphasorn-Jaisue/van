@@ -1,14 +1,37 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { Camera, FileText, UploadCloud, MapPin, CheckCircle } from 'lucide-react';
+import { Camera, FileText, UploadCloud, MapPin, CheckCircle, Plus, X } from 'lucide-react';
 
 export default function DriverRecords() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [tripType, setTripType] = useState<'scheduled' | 'manual'>('scheduled');
   
   const [startMileage, setStartMileage] = useState("");
   const [endMileage, setEndMileage] = useState("");
+  const [stopovers, setStopovers] = useState<{name: string, distance: string}[]>([{ name: "", distance: "" }]);
+
+  const addStopover = () => {
+    setStopovers([...stopovers, { name: "", distance: "" }]);
+  };
+
+  const updateStopoverName = (index: number, value: string) => {
+    const newStopovers = [...stopovers];
+    newStopovers[index].name = value;
+    setStopovers(newStopovers);
+  };
+  
+  const updateStopoverDistance = (index: number, value: string) => {
+    const newStopovers = [...stopovers];
+    newStopovers[index].distance = value;
+    setStopovers(newStopovers);
+  };
+
+  const removeStopover = (index: number) => {
+    const newStopovers = stopovers.filter((_, i) => i !== index);
+    setStopovers(newStopovers);
+  };
 
   useEffect(() => {
     const savedStart = localStorage.getItem('driver_start_mileage');
@@ -42,6 +65,7 @@ export default function DriverRecords() {
               localStorage.removeItem('driver_end_mileage');
               setStartMileage("");
               setEndMileage("");
+              setStopovers([{ name: "", distance: "" }]);
             }}
             className="px-6 py-3 bg-[#311171] text-white font-bold rounded-xl shadow-sm hover:bg-[#250d55]"
           >
@@ -64,17 +88,74 @@ export default function DriverRecords() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           
-          {/* Assigned Trip Display (Automatic) */}
-          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-row items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold text-gray-500 mb-0.5">ภารกิจประจำวันที่ 19 กรกฎาคม 2569</p>
-              <p className="text-base font-black text-[#311171]">UPVAN-2569-0123</p>
-              <p className="text-xs font-bold text-gray-600 mt-0.5">ศูนย์การเรียนรู้ จ.เชียงราย • เวลา 08:00 - 17:00 น.</p>
-            </div>
-            <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center shrink-0">
-              <CheckCircle size={20} className="text-green-500" />
-            </div>
+          {/* Trip Type Toggle */}
+          <div className="flex bg-gray-100 p-1 rounded-xl mb-2">
+            <button
+              type="button"
+              onClick={() => setTripType('scheduled')}
+              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${tripType === 'scheduled' ? 'bg-white text-[#311171] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              ภารกิจตามตาราง
+            </button>
+            <button
+              type="button"
+              onClick={() => setTripType('manual')}
+              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${tripType === 'manual' ? 'bg-white text-[#311171] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              บันทึกภารกิจเอง
+            </button>
           </div>
+
+          {/* Assigned Trip Display (Automatic or Manual Input) */}
+          {tripType === 'scheduled' ? (
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-row items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-gray-500 mb-0.5">ภารกิจประจำวันที่ 19 กรกฎาคม 2569</p>
+                <p className="text-base font-black text-[#311171]">UPVAN-2569-0123</p>
+                <p className="text-xs font-bold text-gray-600 mt-0.5">ศูนย์การเรียนรู้ จ.เชียงราย • เวลา 08:00 - 17:00 น.</p>
+              </div>
+              <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center shrink-0">
+                <CheckCircle size={20} className="text-green-500" />
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">วันที่เดินทาง</label>
+                <input 
+                  type="date" 
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all font-bold text-gray-900"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">รายละเอียด / สถานที่ปลายทาง</label>
+                <input 
+                  type="text" 
+                  placeholder="เช่น ส่งเอกสารที่อาคารอธิการบดี" 
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all font-bold text-gray-900"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">เวลาเริ่มเดินทาง</label>
+                    <input 
+                      type="time" 
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all font-bold text-gray-900"
+                      required
+                    />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">เวลาสิ้นสุด</label>
+                    <input 
+                      type="time" 
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all font-bold text-gray-900"
+                    />
+                 </div>
+              </div>
+            </div>
+          )}
 
           {/* Mileage */}
           <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 space-y-4">
@@ -119,6 +200,63 @@ export default function DriverRecords() {
                   <p className="text-[11px] font-bold text-gray-600">ถ่ายรูป (หลังกลับมา)</p>
                   <input type="file" accept="image/*" capture="environment" className="hidden" />
                 </label>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-gray-500">สถานที่แวะระหว่างทาง (ถ้ามี)</label>
+                <button 
+                  type="button" 
+                  onClick={addStopover}
+                  className="flex items-center gap-1 text-[11px] font-bold text-[#311171] bg-purple-50 px-2 py-1 rounded-md hover:bg-purple-100 transition-colors"
+                >
+                  <Plus size={12} /> เพิ่มสถานที่
+                </button>
+              </div>
+              <div className="space-y-3">
+                {stopovers.map((stopover, index) => (
+                  <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-xl relative">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[11px] font-bold text-gray-500">สถานที่ที่ {index + 1}</span>
+                      {stopovers.length > 1 && (
+                        <button 
+                          type="button"
+                          onClick={() => removeStopover(index)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <div className="absolute top-2.5 left-0 pl-2.5 flex items-start pointer-events-none text-gray-400">
+                          <MapPin size={16} />
+                        </div>
+                        <input 
+                          type="text"
+                          value={stopover.name}
+                          onChange={(e) => updateStopoverName(index, e.target.value)}
+                          placeholder="ชื่อสถานที่"
+                          className="w-full pl-8 pr-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all text-sm font-bold text-gray-900"
+                        />
+                      </div>
+                      
+                      <div className="w-[100px] relative">
+                        <input 
+                          type="number"
+                          value={stopover.distance}
+                          onChange={(e) => updateStopoverDistance(index, e.target.value)}
+                          placeholder="ระยะทาง"
+                          className="w-full pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#311171]/20 outline-none transition-all text-sm font-bold text-gray-900"
+                        />
+                        <span className="absolute top-2.5 right-2.5 text-xs text-gray-400 font-bold">กม.</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
