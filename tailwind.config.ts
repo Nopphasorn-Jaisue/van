@@ -12,6 +12,14 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["'Google Sans'", "'IBM Plex Sans Thai Looped'", "Kanit", "'Chakra Petch'", "'Roboto Condensed'", "sans-serif"],
+        google: ["'Google Sans'", "sans-serif"],
+        ibm: ["'IBM Plex Sans Thai Looped'", "sans-serif"],
+        kanit: ["Kanit", "sans-serif"],
+        chakra: ["'Chakra Petch'", "sans-serif"],
+        roboto: ["'Roboto Condensed'", "sans-serif"],
+      },
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

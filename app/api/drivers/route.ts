@@ -1,1 +1,1 @@
-export { handleListDrivers as GET } from "@/Backend/routes/system-drivers";
+export { handleListDrivers as GET, handleCreateDriver as POST } from "@/Backend/routes/system-drivers";

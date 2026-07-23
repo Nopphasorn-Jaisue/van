@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Plus, Edit, Trash2, 
@@ -18,21 +18,9 @@ interface Van {
 }
 
 export default function VansPage() {
-  // Mock Data
-  const [vans, setVans] = useState([
-    {
-      id: "v1",
-      vanName: "รถตู้คณะเกษตร 01",
-      plate: "ทะเบียน นข 1234 พะเยา",
-      capacity: 12,
-      fuelType: "ดีเซล",
-      status: "ready",
-      isShared: true, // เปิดให้คณะอื่นยืมได้
-      image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80"
-    }
-  ]);
-
+  const [vans, setVans] = useState<Van[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -45,6 +33,22 @@ export default function VansPage() {
     status: "ready",
     image: ""
   });
+
+  const loadVans = async () => {
+    try {
+      const res = await fetch('/api/vans');
+      const data = await res.json();
+      setVans(data.vans || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadVans();
+  }, []);
 
   const openAddModal = () => {
     setEditingId(null);
@@ -72,25 +76,56 @@ export default function VansPage() {
     setIsModalOpen(true);
   };
 
-  const saveVan = () => {
-    if (editingId) {
-      setVans(vans.map(v => v.id === editingId ? { ...v, ...formData } : v));
-    } else {
-      setVans([...vans, { id: `v${Date.now()}`, ...formData, isShared: false }]);
+  const saveVan = async () => {
+    try {
+      if (editingId) {
+        await fetch(`/api/vans/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        });
+      } else {
+        await fetch('/api/vans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        });
+      }
+      setIsModalOpen(false);
+      loadVans();
+    } catch (err) {
+      console.error("Failed to save van", err);
     }
-    setIsModalOpen(false);
   };
 
-  const deleteVan = (id: string) => {
+  const deleteVan = async (id: string) => {
     if (confirm('คุณต้องการลบรถตู้คันนี้ใช่หรือไม่?')) {
-      setVans(vans.filter(v => v.id !== id));
+      try {
+        await fetch(`/api/vans/${id}`, { method: 'DELETE' });
+        loadVans();
+      } catch (err) {
+        console.error("Failed to delete van", err);
+      }
     }
   };
 
-  const toggleShareStatus = (id: string) => {
-    setVans(vans.map(van => 
-      van.id === id ? { ...van, isShared: !van.isShared } : van
-    ));
+  const toggleShareStatus = async (van: Van) => {
+    const nextState = !(van.isShared ?? true);
+    // Optimistic UI update
+    setVans(prev => prev.map(v => v.id === van.id ? { ...v, isShared: nextState } : v));
+
+    try {
+      await fetch(`/api/vans/${van.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...van, isShared: nextState })
+      });
+      loadVans();
+    } catch (err) {
+      console.error("Failed to toggle share", err);
+      // Revert if error
+      setVans(prev => prev.map(v => v.id === van.id ? { ...v, isShared: van.isShared } : v));
+    }
   };
 
   const filteredVans = vans.filter(v => 
@@ -139,95 +174,99 @@ export default function VansPage() {
 
         {/* ----- Grid Content ----- */}
         <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredVans.map(van => (
-              <div key={van.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
-                {/* Image */}
-                <div className="h-40 relative overflow-hidden bg-gray-100">
-                  <img src={van.image} alt={van.vanName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  
-                  {/* Status Badge */}
-                  <div className="absolute top-3 left-3">
-                    {van.status === 'ready' ? (
-                      <span className="px-2.5 py-1 bg-green-500 text-white text-[10px] font-black rounded-lg shadow-sm flex items-center gap-1.5">
-                        <Check size={12} strokeWidth={3} /> พร้อมใช้งาน
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 bg-orange-500 text-white text-[10px] font-black rounded-lg shadow-sm flex items-center gap-1.5">
-                        <Wrench size={12} strokeWidth={3} /> ซ่อมบำรุง
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="p-5 flex-1 flex flex-col">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-black text-gray-900 text-lg leading-tight">{van.vanName}</h3>
-                      <p className="text-xs font-bold text-[#311171]">{van.plate}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 mb-5">
-                    <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                      <Users size={14} className="text-gray-400" />
-                      <span className="font-bold">{van.capacity} ที่นั่ง</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                      <Fuel size={14} className="text-gray-400" />
-                      <span className="font-bold">{van.fuelType}</span>
-                    </div>
-                  </div>
-
-                  {/* Settings section */}
-                  <div className="mt-auto">
-                    <div className="h-px w-full bg-gray-100 mb-4"></div>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-40 text-gray-500 font-bold">กำลังโหลดข้อมูล...</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredVans.map(van => (
+                <div key={van.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
+                  {/* Image */}
+                  <div className="h-40 relative overflow-hidden bg-gray-100">
+                    <img src={van.image} alt={van.vanName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     
-                    <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 mb-4">
-                      <div className="flex gap-2.5">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${van.isShared ? 'bg-green-100 text-green-600' : 'bg-gray-200 text-gray-500'}`}>
-                          {van.isShared ? <Share2 size={16} /> : <Lock size={16} />}
-                        </div>
-                        <div>
-                          <p className="text-[11px] font-black text-gray-900 leading-tight">
-                            {van.isShared ? 'เปิดให้คณะอื่นยืม' : 'สงวนสิทธิ์เฉพาะคณะ'}
-                          </p>
-                          <p className="text-[10px] text-gray-500">
-                            {van.isShared ? 'คณะอื่นสามารถเห็นและจองได้' : 'ไม่แสดงในส่วนกลาง'}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Toggle Switch */}
-                      <button 
-                        onClick={() => toggleShareStatus(van.id)}
-                        className={`w-11 h-6 rounded-full relative transition-colors duration-300 focus:outline-none ${van.isShared ? 'bg-green-500' : 'bg-gray-300'}`}
-                      >
-                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-sm ${van.isShared ? 'left-6' : 'left-1'}`}></div>
-                      </button>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => openEditModal(van)}
-                        className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <Edit size={14} /> แก้ไขข้อมูล
-                      </button>
-                      <button 
-                        onClick={() => deleteVan(van.id)}
-                        className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    {/* Status Badge */}
+                    <div className="absolute top-3 left-3">
+                      {van.status === 'ready' ? (
+                        <span className="px-2.5 py-1 bg-green-500 text-white text-[10px] font-black rounded-lg shadow-sm flex items-center gap-1.5">
+                          <Check size={12} strokeWidth={3} /> พร้อมใช้งาน
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 bg-orange-500 text-white text-[10px] font-black rounded-lg shadow-sm flex items-center gap-1.5">
+                          <Wrench size={12} strokeWidth={3} /> ซ่อมบำรุง
+                        </span>
+                      )}
                     </div>
                   </div>
-                </div>
 
-              </div>
-            ))}
-          </div>
+                  {/* Content */}
+                  <div className="p-5 flex-1 flex flex-col">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-black text-gray-900 text-lg leading-tight">{van.vanName}</h3>
+                        <p className="text-xs font-bold text-[#311171]">{van.plate}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-5">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <Users size={14} className="text-gray-400" />
+                        <span className="font-bold">{van.capacity} ที่นั่ง</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <Fuel size={14} className="text-gray-400" />
+                        <span className="font-bold">{van.fuelType}</span>
+                      </div>
+                    </div>
+
+                    {/* Settings section */}
+                    <div className="mt-auto">
+                      <div className="h-px w-full bg-gray-100 mb-4"></div>
+                      
+                      <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 mb-4">
+                        <div className="flex gap-2.5">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${van.isShared ? 'bg-green-100 text-green-600' : 'bg-gray-200 text-gray-500'}`}>
+                            {van.isShared ? <Share2 size={16} /> : <Lock size={16} />}
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-black text-gray-900 leading-tight">
+                              {van.isShared ? 'เปิดให้คณะอื่นยืม' : 'สงวนสิทธิ์เฉพาะคณะ'}
+                            </p>
+                            <p className="text-[10px] text-gray-500">
+                              {van.isShared ? 'คณะอื่นสามารถเห็นและจองได้' : 'ไม่แสดงในส่วนกลาง'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Toggle Switch */}
+                        <button 
+                          onClick={() => toggleShareStatus(van)}
+                          className={`w-11 h-6 rounded-full relative transition-colors duration-300 focus:outline-none ${van.isShared ? 'bg-green-500' : 'bg-gray-300'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-sm ${van.isShared ? 'left-6' : 'left-1'}`}></div>
+                        </button>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => openEditModal(van)}
+                          className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <Edit size={14} /> แก้ไขข้อมูล
+                        </button>
+                        <button 
+                          onClick={() => deleteVan(van.id)}
+                          className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>

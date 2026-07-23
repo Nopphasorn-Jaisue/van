@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, FileText, Printer, Plus } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import type { SystemDriverLog } from "@/lib/booking-system-types";
 
@@ -20,14 +20,32 @@ function formatDate(value: string) {
   });
 }
 
+// Sample mock multi-leg log items matching user's image structure
+const sampleLogbookItems = [
+  {
+    id: "log-1",
+    tripNo: "1",
+    date: "01/04/69",
+    legs: [
+      { deptTime: "07.00", passenger: "ict", destination: "โครงการ Work from home", startMileage: 97750, returnDate: "01/04/69", returnTime: "08.00", endMileage: 97825, distance: 75, driver: "มีลายเซ็น", remark: "" },
+      { deptTime: "14.00", passenger: "ict", destination: "ตึก PKY", startMileage: 97825, returnDate: "01/04/69", returnTime: "14.30", endMileage: 97835, distance: 10, driver: "มีลายเซ็น", remark: "" },
+      { deptTime: "14.30", passenger: "ict", destination: "ธนาคารกรุงไทย", startMileage: 97835, returnDate: "01/04/69", returnTime: "15.00", endMileage: 97845, distance: 10, driver: "มีลายเซ็น", remark: "" },
+    ]
+  }
+];
+
 export default function DriverLogsPage() {
   const [driverId, setDriverId] = useState("drv-001");
   const [logs, setLogs] = useState<SystemDriverLog[]>([]);
 
   const loadLogs = async (id: string) => {
-    const response = await fetch(`/api/drivers/${id}/dashboard`, { cache: "no-store" });
-    const data = (await response.json()) as DriverDashboardResponse;
-    setLogs(data.dashboard?.logs || []);
+    try {
+      const response = await fetch(`/api/drivers/${id}/dashboard`, { cache: "no-store" });
+      const data = (await response.json()) as DriverDashboardResponse;
+      setLogs(data.dashboard?.logs || []);
+    } catch {
+      setLogs([]);
+    }
   };
 
   useEffect(() => {
@@ -36,41 +54,115 @@ export default function DriverLogsPage() {
 
   return (
     <AppShell>
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-6 flex items-center justify-between gap-3">
+      <div className="max-w-5xl mx-auto space-y-6 pb-20">
+        
+        {/* Sticky Fixed Top Header */}
+        <div className="sticky -top-6 lg:-top-8 z-20 bg-[#f3f4f7]/95 backdrop-blur-md pt-8 lg:pt-10 pb-4 border-b border-gray-200/80 -mt-6 lg:-mt-8 -mx-6 lg:-mx-8 px-6 lg:px-8 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-black text-gray-900">รายงานการใช้รถ (แบบ 4)</h1>
-            <p className="text-gray-500">ประวัติบันทึกเลขไมล์จากระบบคนขับ</p>
+            <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+              <FileText className="w-7 h-7 text-[#311171]" /> รายงานการใช้รถ (แบบ 4)
+            </h1>
+            <p className="text-xs text-gray-500">ประวัติบันทึกสมุดการใช้รถและเลขไมล์ประจำวัน</p>
           </div>
-          <div className="flex items-center gap-2">
+          
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               value={driverId}
               onChange={(e) => setDriverId(e.target.value)}
-              className="rounded-xl border border-gray-200 px-3 py-2 bg-white text-sm font-semibold"
+              className="rounded-xl border border-gray-200 px-3 py-2 bg-white text-xs font-semibold"
             >
-              <option value="drv-001">นายสมชาย ใจดี</option>
+              <option value="drv-001">นายสมชาย ใจดี (คนขับ)</option>
               <option value="drv-002">นายอนุชา คำมี</option>
               <option value="drv-003">นายวิชัย แสนดี</option>
-              <option value="drv-004">นายประเสริฐ จันทรดี</option>
-              <option value="drv-005">นายชูชาติ สุขใจ</option>
-              <option value="drv-006">นายธนวัฒน์ วันดี</option>
             </select>
-            <Link href="/driver/dashboard" className="inline-flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2 text-sm font-bold text-gray-700">
-              <ArrowLeft size={14} /> กลับหน้าแดชบอร์ด
+
+            <Link href="/driver/records" className="inline-flex items-center gap-1.5 rounded-xl bg-[#311171] text-white px-3.5 py-2 text-xs font-bold shadow-sm hover:bg-[#250d55]">
+              <Plus size={14} /> บันทึกการเดินทางใหม่
+            </Link>
+
+            <Link href="/driver/dashboard" className="inline-flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-50">
+              <ArrowLeft size={14} /> แดชบอร์ด
             </Link>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-100 flex items-center gap-2 text-gray-700">
-            <FileText size={18} /> รายการบันทึกล่าสุด
+        {/* Official Logbook Table Container */}
+        <div className="bg-white rounded-2xl border border-slate-300 shadow-sm p-4 md:p-6 space-y-4">
+          <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+            <h2 className="text-sm font-bold text-slate-800">สมุดบันทึกการใช้รถทางการ (Logbook Table View)</h2>
+            <button 
+              onClick={() => window.print()}
+              className="text-xs font-bold text-[#311171] hover:underline flex items-center gap-1"
+            >
+              <Printer size={14} /> พิมพ์รายงาน
+            </button>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-gray-50 text-gray-600">
+            <table className="w-full text-xs text-left border-collapse border border-slate-900 min-w-[880px] font-sans">
+              <thead>
+                <tr className="bg-slate-200/90 text-slate-900 border-b border-slate-900 text-center font-bold">
+                  <th rowSpan={2} className="border border-slate-900 p-2 w-12">ลำดับที่</th>
+                  <th colSpan={2} className="border border-slate-900 p-2">ออกเดินทาง</th>
+                  <th rowSpan={2} className="border border-slate-900 p-2 w-20">ผู้ใช้รถ</th>
+                  <th rowSpan={2} className="border border-slate-900 p-2">สถานที่ไป</th>
+                  <th rowSpan={2} className="border border-slate-900 p-2 w-28">ระยะ กม./ไมล์<br/>เมื่อออกเดินทาง</th>
+                  <th colSpan={2} className="border border-slate-900 p-2">กลับถึงสำนักงาน</th>
+                  <th rowSpan={2} className="border border-slate-900 p-2 w-28">ระยะ กม./ไมล์<br/>เมื่อกลับถึงสำนักงาน</th>
+                  <th rowSpan={2} className="border border-slate-900 p-2 w-24">รวมระยะทาง<br/>กม./ไมล์</th>
+                  <th rowSpan={2} className="border border-slate-900 p-2 w-24">พนักงานขับรถ</th>
+                  <th rowSpan={2} className="border border-slate-900 p-2 w-24">หมายเหตุ</th>
+                </tr>
+                <tr className="bg-slate-200/90 text-slate-900 border-b border-slate-900 text-center font-bold">
+                  <th className="border border-slate-900 p-1.5 w-24">วันที่</th>
+                  <th className="border border-slate-900 p-1.5 w-16">เวลา</th>
+                  <th className="border border-slate-900 p-1.5 w-24">วันที่</th>
+                  <th className="border border-slate-900 p-1.5 w-16">เวลา</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sampleLogbookItems.map((item) => (
+                  <React.Fragment key={item.id}>
+                    {item.legs.map((leg, index) => (
+                      <tr key={index} className="hover:bg-slate-50 border-b border-slate-400">
+                        {index === 0 ? (
+                          <td rowSpan={item.legs.length} className="border border-slate-900 p-2 text-center font-bold align-top bg-slate-50">
+                            {item.tripNo}.
+                          </td>
+                        ) : null}
+                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap">{leg.returnDate}</td>
+                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap font-mono">{leg.deptTime}</td>
+                        <td className="border border-slate-900 p-2 text-center font-bold text-slate-700">{leg.passenger}</td>
+                        <td className="border border-slate-900 p-2 font-bold text-slate-900">{leg.destination}</td>
+                        <td className="border border-slate-900 p-2 text-right font-mono">{leg.startMileage.toLocaleString("th-TH")}</td>
+                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap">{leg.returnDate}</td>
+                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap font-mono">{leg.returnTime}</td>
+                        <td className="border border-slate-900 p-2 text-right font-mono">{leg.endMileage.toLocaleString("th-TH")}</td>
+                        <td className="border border-slate-900 p-2 text-right font-mono font-bold text-emerald-700">{leg.distance}</td>
+                        <td className="border border-slate-900 p-2 text-center font-medium">{leg.driver}</td>
+                        <td className="border border-slate-900 p-2 text-center text-slate-400">{leg.remark || "-"}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Database Logs List */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between text-gray-700">
+            <span className="font-bold text-xs flex items-center gap-2">
+              <FileText size={16} /> รายการบันทึกจากระบบฐานข้อมูล ({logs.length} รายการ)
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-xs">
+              <thead className="bg-gray-50 text-gray-600 font-bold">
                 <tr>
-                  <th className="p-3 text-left">เวลา</th>
+                  <th className="p-3 text-left">เวลาบันทึก</th>
                   <th className="p-3 text-left">เลขคำขอ</th>
                   <th className="p-3 text-right">ไมล์เริ่ม</th>
                   <th className="p-3 text-right">ไมล์สิ้นสุด</th>
@@ -80,24 +172,25 @@ export default function DriverLogsPage() {
               </thead>
               <tbody>
                 {logs.map((log) => (
-                  <tr key={log.id} className="border-t border-gray-100">
+                  <tr key={log.id} className="border-t border-gray-100 hover:bg-slate-50">
                     <td className="p-3">{formatDate(log.createdAt)}</td>
                     <td className="p-3 font-bold text-gray-900">{log.bookingId}</td>
-                    <td className="p-3 text-right">{log.mileageStart.toLocaleString("th-TH")}</td>
-                    <td className="p-3 text-right">{log.mileageEnd.toLocaleString("th-TH")}</td>
-                    <td className="p-3 text-right font-bold text-green-700">{log.totalDistance.toLocaleString("th-TH")}</td>
+                    <td className="p-3 text-right font-mono">{log.mileageStart.toLocaleString("th-TH")}</td>
+                    <td className="p-3 text-right font-mono">{log.mileageEnd.toLocaleString("th-TH")}</td>
+                    <td className="p-3 text-right font-mono font-bold text-emerald-700">{log.totalDistance.toLocaleString("th-TH")} กม.</td>
                     <td className="p-3">{log.fuelRemark || "-"}</td>
                   </tr>
                 ))}
                 {logs.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-gray-500">ยังไม่มีข้อมูลบันทึกการเดินทาง</td>
+                    <td colSpan={6} className="text-center py-6 text-gray-400">ไม่มีข้อมูลบันทึกเพิ่มเติมในฐานข้อมูล</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+
       </div>
     </AppShell>
   );

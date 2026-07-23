@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   CarFront, User, FileText, CalendarDays, 
@@ -7,53 +7,107 @@ import {
 import AppShell from '@/components/AppShell';
 import { useRouter } from 'next/navigation';
 
+type RequestItem = {
+  id: string | number;
+  time: string;
+  requester: string;
+  date: string;
+  destination: string;
+  passengers: string;
+};
+
+type CalendarEvent = {
+  id?: string | number;
+  startAt?: string;
+  status?: string;
+};
+
+type Booking = {
+  id: string | number;
+  submittedAt: string;
+  requester: string;
+  requesterFaculty: string;
+  startAt: string;
+  endAt: string;
+  destination: string;
+  passengers: string | number;
+};
+
+type Van = {
+  status: string;
+};
+
+type Driver = {
+  isLocked: boolean;
+};
+
 export default function FacultyAdminDashboard() {
 
-  // Request State
-  const [requests] = useState([
-    {
-      id: "UPVAN-2569-00123",
-      time: "เมื่อวาน 14:32 น.",
-      requester: "ดร.ณรงค์เดช รักพืช\nภาควิชาพืชศาสตร์",
-      date: "12 ก.ค. 2569\n08:00 - 17:00",
-      destination: "ศูนย์วิจัยและพัฒนา\nการเกษตร",
-      passengers: "12 คน",
-    },
-    {
-      id: "UPVAN-2569-00121",
-      time: "3 ชั่วโมงที่แล้ว",
-      requester: "นายสมนึก ดีงาม\nภาควิชาสัตวศาสตร์",
-      date: "14 ก.ค. 2569\n09:00 - 18:00",
-      destination: "ฟาร์มเครือข่าย\nจ.ลำปาง",
-      passengers: "10 คน",
-    },
-    {
-      id: "UPVAN-2569-00119",
-      time: "เมื่อวาน 11:15 น.",
-      requester: "อ.ดร.กิตติพงษ์ ใจดี\nศูนย์วิจัยพืชสวน",
-      date: "16 ก.ค. 2569\n06:00 - 18:00",
-      destination: "แปลงทดลอง\nจ.เชียงราย",
-      passengers: "14 คน",
-    },
-    {
-      id: "UPVAN-2569-00118",
-      time: "2 วันที่แล้ว",
-      requester: "นางสาวสมใจ รักษ์โลก\nภาควิชาปฐพีวิทยา",
-      date: "20 ก.ค. 2569\n07:00 - 16:00",
-      destination: "สถานีวิจัยดิน\nจ.น่าน",
-      passengers: "8 คน",
+  const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [vansCount, setVansCount] = useState(0);
+  const [readyVansCount, setReadyVansCount] = useState(0);
+  const [driversCount, setDriversCount] = useState(0);
+  const [activeDriversCount, setActiveDriversCount] = useState(0);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [reqRes, vanRes, drvRes, calRes] = await Promise.all([
+          fetch('/api/bookings?status=WAITING_ADMIN'),
+          fetch('/api/vans'),
+          fetch('/api/drivers'),
+          fetch('/api/calendar-events')
+        ]);
+        
+        const reqData = await reqRes.json();
+        const vanData = await vanRes.json();
+        const drvData = await drvRes.json();
+        const calData = await calRes.json();
+        
+        const formatThaiDateTime = (dateStr: string) => {
+          const d = new Date(dateStr);
+          return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) + 
+                 ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+        };
+        
+        const mapped = (reqData.bookings || []).map((b: Booking) => ({
+          id: b.id,
+          time: formatThaiDateTime(b.submittedAt),
+          requester: `${b.requester}\n${b.requesterFaculty}`,
+          date: `${new Date(b.startAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}\n${new Date(b.startAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.endAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
+          destination: b.destination,
+          passengers: `${b.passengers} คน`,
+        }));
+        
+        setRequests(mapped);
+
+        const vans = vanData.vans || [];
+        setVansCount(vans.length);
+        setReadyVansCount(vans.filter((v: Van) => v.status === 'ready').length);
+
+        const drivers = drvData.drivers || [];
+        setDriversCount(drivers.length);
+        setActiveDriversCount(drivers.filter((d: Driver) => !d.isLocked).length);
+
+        setCalendarEvents(Array.isArray(calData.rawEvents) ? calData.rawEvents : []);
+
+      } catch (err) {
+        console.error(err);
+      }
     }
-  ]);
+    loadData();
+  }, []);
 
   const router = useRouter();
 
   // Dynamic Calendar State starting from actual today (initialized with static to prevent prerender error)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 19)); 
-  const [selectedDay, setSelectedDay] = useState<number | null>(19);
-  React.useEffect(() => {
-    const now = new Date();
-    setCurrentDate(now);
-    setSelectedDay(now.getDate());
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCurrentDate(new Date());
+    setSelectedDay(new Date().getDate());
   }, []);
 
   const nextMonth = () => {
@@ -92,11 +146,20 @@ export default function FacultyAdminDashboard() {
     return cells;
   };
 
+  const getEventsForDay = (day: number) => {
+    const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    const dateStr = targetDate.toISOString().slice(0, 10);
+    const events = Array.isArray(calendarEvents) ? calendarEvents : [];
+    return events.filter(e => e && e.startAt && e.startAt.startsWith(dateStr));
+  };
+
   const thaiMonths = [
     "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
     "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
   ];
   const displayMonthName = `${thaiMonths[currentDate.getMonth()]} ${currentDate.getFullYear() + 543}`;
+
+  const todayEventsCount = getEventsForDay(selectedDay || 19).length;
 
   return (
     <AppShell>
@@ -105,7 +168,7 @@ export default function FacultyAdminDashboard() {
         {/* ----- Header ----- */}
         <div className="mb-6 shrink-0">
           <h1 className="text-[26px] font-black text-gray-900 leading-tight">แดชบอร์ดคณะ</h1>
-          <p className="text-sm text-gray-500 mt-1">ภาพรวมการดำเนินงานระบบขอใช้รถตู้ของคณะเกษตรศาสตร์ ทั้งคน รถ และภารกิจในภาพรวม</p>
+          <p className="text-sm text-gray-500 mt-1">ภาพรวมการดำเนินงานระบบขอใช้รถตู้ของคณะ ทั้งคน รถ และภารกิจในภาพรวม</p>
         </div>
 
         {/* ----- KPI Cards (4 กล่อง) ----- */}
@@ -122,9 +185,9 @@ export default function FacultyAdminDashboard() {
               <div>
                 <p className="text-sm font-bold text-gray-600 mb-0.5">รถประจำคณะ</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-gray-900">1 คัน</span>
+                  <span className="text-2xl font-black text-gray-900">{vansCount} คัน</span>
                 </div>
-                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมใช้งาน 1 คัน</p>
+                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมใช้งาน {readyVansCount} คัน</p>
               </div>
             </div>
             <ChevronRight size={20} className="text-gray-300 group-hover:text-[#311171] transition-colors" />
@@ -142,9 +205,9 @@ export default function FacultyAdminDashboard() {
               <div>
                 <p className="text-sm font-bold text-gray-600 mb-0.5">คนขับประจำ</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-gray-900">1 คน</span>
+                  <span className="text-2xl font-black text-gray-900">{driversCount} คน</span>
                 </div>
-                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมปฏิบัติหน้าที่ 1 คน</p>
+                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมปฏิบัติหน้าที่ {activeDriversCount} คน</p>
               </div>
             </div>
             <ChevronRight size={20} className="text-gray-300 group-hover:text-green-500 transition-colors" />
@@ -186,9 +249,13 @@ export default function FacultyAdminDashboard() {
               <div>
                 <p className="text-sm font-bold text-gray-600 mb-0.5">วันนี้มีภารกิจ</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-gray-900">4 รายการ</span>
+                  <span className="text-2xl font-black text-gray-900">{todayEventsCount} รายการ</span>
                 </div>
-                <p className="text-xs font-bold text-blue-600 mt-0.5">เดินทางตามแผน</p>
+                {todayEventsCount > 0 ? (
+                  <p className="text-xs font-bold text-blue-600 mt-0.5">เดินทางตามแผน</p>
+                ) : (
+                  <p className="text-xs font-bold text-gray-400 mt-0.5">ไม่มีภารกิจวันนี้</p>
+                )}
               </div>
             </div>
             <ChevronRight size={20} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
@@ -326,11 +393,9 @@ export default function FacultyAdminDashboard() {
                     }
                     
                     const isSelected = selectedDay === cell.day;
-                    
-                    // Add dots on specific days for July 2026 (to keep visual matching)
-                    const isJuly2026 = currentDate.getFullYear() === 2026 && currentDate.getMonth() === 6;
-                    const hasDot = isJuly2026 && (cell.day === 12 || cell.day === 26 || cell.day === 28);
-                    const dotColor = cell.day === 12 ? 'bg-[#C39B22]' : cell.day === 26 ? 'bg-green-500' : 'bg-[#311171]';
+                    const events = getEventsForDay(cell.day);
+                    const hasDot = events.length > 0;
+                    const dotColor = events.some(e => e.status === 'WAITING_EXEC') ? 'bg-[#C39B22]' : 'bg-[#311171]';
                     
                     return (
                       <button

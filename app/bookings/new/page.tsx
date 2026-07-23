@@ -1,5 +1,5 @@
 "use client";
-import React, { useState,Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   MapPin, Users, FileText, Send, 
@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import ThaiDatePicker from '@/components/ThaiDatePicker';
+import ThaiTimePicker from '@/components/ThaiTimePicker';
 
 // Component that uses useSearchParams must be wrapped in Suspense
 function BookingFormContent() {
@@ -19,6 +21,7 @@ function BookingFormContent() {
   const [success, setSuccess] = useState(false);
   
   const [form, setForm] = useState({
+    vanId: prefilledVanId || "",
     destination: "",
     startDate: prefilledDate || "",
     startTime: "",
@@ -28,6 +31,17 @@ function BookingFormContent() {
     passengers: "",
     budgetSource: "",
   });
+
+  const [availableVans, setAvailableVans] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/vans')
+      .then(res => res.json())
+      .then(data => {
+        if (data.vans) setAvailableVans(data.vans);
+      })
+      .catch(err => console.error("Error fetching vans:", err));
+  }, []);
 
   const [attachments, setAttachments] = useState<File[]>([]);
 
@@ -147,19 +161,33 @@ function BookingFormContent() {
             <h2 className="text-lg font-black">รายละเอียดการเดินทาง</h2>
           </div>
 
-          {prefilledVanId && (
-            <div className="mb-4 p-3 rounded-xl bg-[#311171]/5 border border-[#311171]/10 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#311171]/10 flex items-center justify-center text-[#311171]">
-                <CheckCircle size={16} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-[#311171]">คุณเลือกรถตู้เฉพาะเจาะจง</p>
-                <p className="text-[10px] text-gray-500">รหัสรถ: {prefilledVanId}</p>
-              </div>
-            </div>
-          )}
-
           <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">เลือกรถตู้ (ตัวเลือก) <span className="text-gray-400 font-normal">ระบบแสดงเฉพาะคิวที่ว่าง</span></label>
+              <select 
+                value={form.vanId}
+                onChange={e => setForm({...form, vanId: e.target.value})}
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium"
+              >
+                <option value="">-- ให้ส่วนกลาง/แอดมิน จัดสรรให้ --</option>
+                {availableVans.map(van => {
+                  const isReady = van.isShared !== false; // Only disable if explicitly false
+                  const textStatus = isReady ? '(ว่าง)' : '(ไม่พร้อมใช้งาน)';
+                  const textStyle = isReady ? "text-green-600 font-bold" : "text-gray-400 bg-gray-50";
+
+                  return (
+                    <option 
+                      key={van.id} 
+                      value={van.id} 
+                      disabled={!isReady}
+                      className={textStyle}
+                    >
+                      {van.vanName} ({van.plate}) {textStatus}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">สถานที่ปลายทาง <span className="text-red-500">*</span></label>
               <input 
@@ -176,38 +204,26 @@ function BookingFormContent() {
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-gray-700">กำหนดการขาไป <span className="text-red-500">*</span></label>
                 <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    type="date" 
-                    required
+                  <ThaiDatePicker 
                     value={form.startDate}
-                    onChange={e => setForm({...form, startDate: e.target.value})}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-[#311171]/10 outline-none transition-all text-xs font-medium"
+                    onChange={val => setForm({...form, startDate: val})}
                   />
-                  <input 
-                    type="time" 
-                    required
+                  <ThaiTimePicker 
                     value={form.startTime}
-                    onChange={e => setForm({...form, startTime: e.target.value})}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-[#311171]/10 outline-none transition-all text-xs font-medium"
+                    onChange={val => setForm({...form, startTime: val})}
                   />
                 </div>
               </div>
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-gray-700">กำหนดการขากลับ <span className="text-red-500">*</span></label>
                 <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    type="date" 
-                    required
+                  <ThaiDatePicker 
                     value={form.endDate}
-                    onChange={e => setForm({...form, endDate: e.target.value})}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-[#311171]/10 outline-none transition-all text-xs font-medium"
+                    onChange={val => setForm({...form, endDate: val})}
                   />
-                  <input 
-                    type="time" 
-                    required
+                  <ThaiTimePicker 
                     value={form.endTime}
-                    onChange={e => setForm({...form, endTime: e.target.value})}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-[#311171]/10 outline-none transition-all text-xs font-medium"
+                    onChange={val => setForm({...form, endTime: val})}
                   />
                 </div>
               </div>

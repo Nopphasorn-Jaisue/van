@@ -41,14 +41,14 @@ export default function DriverDispatchPage() {
 
   const loadData = async () => {
     const [bookingResponse, driverResponse] = await Promise.all([
-      fetch("/api/bookings?status=WAITING_ADMIN", { cache: "no-store" }),
+      fetch("/api/bookings", { cache: "no-store" }),
       fetch("/api/drivers", { cache: "no-store" }),
     ]);
 
     const bookingData = await bookingResponse.json();
     const driverData = await driverResponse.json();
 
-    const bookingRows = bookingData.bookings || [];
+    const bookingRows = (bookingData.bookings || []).filter((b: SystemBooking) => !b.assignedDriverId && b.status !== "REJECTED");
     setBookings(bookingRows);
     setDrivers(driverData.drivers || []);
 
@@ -59,6 +59,7 @@ export default function DriverDispatchPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedBooking = useMemo(
@@ -196,7 +197,7 @@ export default function DriverDispatchPage() {
                 >
                   มอบหมายให้คำขอการจองนี้
                 </button>
-                <p className="text-xs text-gray-500 mt-3">เมื่อมอบหมายแล้ว สถานะจะเปลี่ยนเป็น "รอผู้บริหารอนุมัติ" โดยอัตโนมัติ</p>
+                <p className="text-xs text-gray-500 mt-3">เมื่อมอบหมายแล้ว สถานะจะเปลี่ยนเป็น &quot;รอผู้บริหารอนุมัติ&quot; โดยอัตโนมัติ</p>
               </>
             ) : (
               <p className="text-sm text-gray-500 mt-4">ยังไม่มีคำขอรอตรวจสอบ</p>

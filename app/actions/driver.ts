@@ -1,0 +1,273 @@
+"use server";
+
+import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+
+interface TripLegInput {
+  deptDate: string;
+  deptTime: string;
+  passenger: string;
+  destination: string;
+  startMileage: string;
+  returnDate: string;
+  returnTime: string;
+  endMileage: string;
+  remark?: string;
+}
+
+interface DriverLogData {
+  mileageStart: number | string;
+  mileageEnd: number | string;
+  totalDistance: number | string;
+  fuelRemark?: string;
+  imgStartUrl?: string;
+  imgEndUrl?: string;
+  legs: TripLegInput[];
+}
+
+interface ExpenseData {
+  category: string;
+  amount: number | string;
+  remark?: string;
+}
+
+export async function getDriverDashboardData(driverId: number) {
+  try {
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: {
+        user: true,
+        faculty: {
+          include: {
+            vans: true
+          }
+        }
+      }
+    });
+
+    if (!driver) {
+      return { success: false, error: "Driver not found" };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        assignedDriverId: driverId,
+        status: "APPROVED"
+      },
+      include: {
+        requester: true,
+        targetFaculty: true,
+        driverLog: true
+      },
+      orderBy: {
+        departureDate: 'asc'
+      }
+    });
+
+    // Find today's trip
+    const todaysTrip = bookings.find(b => 
+      new Date(b.departureDate) >= today && new Date(b.departureDate) < tomorrow
+    );
+
+    // Find upcoming trips
+    const upcomingTrips = bookings.filter(b => 
+      new Date(b.departureDate) >= tomorrow
+    );
+
+    // Calculate stats for current month
+    const thisMonthBookings = bookings.filter(b => 
+      new Date(b.departureDate) >= firstDayOfMonth && b.driverLog
+    );
+    
+    const totalTrips = thisMonthBookings.length;
+    const totalDistance = thisMonthBookings.reduce((sum, b) => 
+      sum + (b.driverLog?.totalDistance || 0), 0
+    );
+
+    return { 
+      success: true, 
+      data: {
+        driver: {
+          name: driver.user.name,
+          faculty: driver.faculty.nameTh,
+          vanPlate: driver.faculty.vans?.[0]?.plate || "ยังไม่ระบุรถตู้"
+        },
+        todaysTrip: todaysTrip || null,
+        upcomingTrips: upcomingTrips,
+        stats: {
+          totalTrips,
+          totalDistance
+        }
+      } 
+    };
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
+    return { success: false, error: "Failed to fetch dashboard data" };
+  }
+}
+
+export async function getAssignedBookings(driverId: number) {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: {
+        assignedDriverId: driverId,
+        status: "APPROVED" // Ensure it's approved and assigned
+      },
+      include: {
+        requester: true,
+        targetFaculty: true,
+        driverLog: true
+      },
+      orderBy: {
+        departureDate: 'asc'
+      }
+    });
+
+    return { success: true, bookings };
+  } catch (error) {
+    console.error("Error fetching bookings:", error);
+    return { success: false, error: "Failed to fetch bookings" };
+  }
+}
+
+export async function createAdhocBooking(driverId: number) {
+  try {
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: { user: true }
+    });
+
+    if (!driver) {
+      return { success: false, error: "Driver not found" };
+    }
+
+    const newBookingId = `UP-ADHOC-${Date.now()}`;
+    const now = new Date();
+
+    const booking = await prisma.booking.create({
+      data: {
+        id: newBookingId,
+        requesterId: driver.userId,
+        targetFacultyId: driver.facultyId,
+        destination: "การใช้รถนอกแผน",
+        objective: "ใช้งานนอกแผน / ภารกิจเร่งด่วน",
+        departureDate: now,
+        returnDate: now,
+        passengersCount: 0,
+        budgetSource: "-",
+        status: "APPROVED",
+        assignedDriverId: driverId
+      }
+    });
+
+    revalidatePath('/driver/records');
+    
+    return { success: true, booking };
+  } catch (error) {
+    console.error("Error creating ad-hoc booking:", error);
+    return { success: false, error: "Failed to create ad-hoc booking" };
+  }
+}
+
+export async function submitDriverLog(bookingId: string, driverId: number, data: DriverLogData) {
+  try {
+    const existingLog = await prisma.driverLog.findUnique({
+      where: { bookingId }
+    });
+
+    if (existingLog) {
+      return { success: false, error: "Log already exists for this booking." };
+    }
+
+    const { mileageStart, mileageEnd, totalDistance, fuelRemark, imgStartUrl, imgEndUrl, legs } = data;
+
+    const newLog = await prisma.driverLog.create({
+      data: {
+        bookingId,
+        driverId,
+        mileageStart: Number(mileageStart),
+        mileageEnd: Number(mileageEnd),
+        totalDistance: Number(totalDistance),
+        fuelRemark,
+        imgStartUrl,
+        imgEndUrl,
+        tripLegs: {
+          create: legs.map((leg: TripLegInput) => ({
+            deptDate: leg.deptDate,
+            deptTime: leg.deptTime,
+            passenger: leg.passenger,
+            destination: leg.destination,
+            startMileage: leg.startMileage,
+            returnDate: leg.returnDate,
+            returnTime: leg.returnTime,
+            endMileage: leg.endMileage,
+            remark: leg.remark
+          }))
+        }
+      }
+    });
+
+    revalidatePath('/driver/records');
+    revalidatePath('/driver/schedule');
+    
+    return { success: true, log: newLog };
+  } catch (error) {
+    console.error("Error submitting log:", error);
+    return { success: false, error: "Failed to submit log" };
+  }
+}
+
+export async function getDriverExpensesHistory(driverId: number) {
+  try {
+    const expenses = await prisma.expense.findMany({
+      where: {
+        driverLog: {
+          driverId: driverId
+        }
+      },
+      include: {
+        driverLog: {
+          include: {
+            booking: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    return { success: true, expenses };
+  } catch (error) {
+    console.error("Error fetching expenses:", error);
+    return { success: false, error: "Failed to fetch expenses" };
+  }
+}
+
+export async function submitTripExpenses(driverLogId: number, expenses: ExpenseData[]) {
+  try {
+    await prisma.expense.createMany({
+      data: expenses.map((exp: ExpenseData) => ({
+        driverLogId,
+        category: exp.category,
+        amount: Number(exp.amount),
+        remark: exp.remark,
+        status: "PENDING"
+      }))
+    });
+
+    revalidatePath('/driver/expenses');
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error submitting expenses:", error);
+    return { success: false, error: "Failed to submit expenses" };
+  }
+}

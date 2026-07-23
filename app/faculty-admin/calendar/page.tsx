@@ -113,137 +113,42 @@ function CalendarContent() {
   const monthRangeText = `${getThaiMonthFull(baseDate.getMonth())} ${baseDate.getFullYear() + 543}`;
 
   // Mock data for bookings (1 คณะ = 1 คัน, ใช้รถคันเดียว v1)
-  const bookingsData = [
-    {
-      id: "UPVAN-2569-00123",
-      vanId: "v5",
-      date: new Date(2026, 6, 19), // Sun 19 July
-      time: "08:00 - 17:00",
-      destination: "เชียงราย",
-      purpose: "ศึกษาดูงาน",
-      passengers: 10,
-      status: "cross_faculty",
-      bookingFaculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-      requester: "ดร.สมเกียรติ เรียนดี",
-      department: "ภาควิชาวิศวกรรมคอมพิวเตอร์",
-      purposeDetail: "อบรมเกษตรกรในโครงการสวนพฤกษศาสตร์",
-      routeDetail: "ม.พะเยา → ตัวเมืองเชียงราย → อ.แม่สาย",
-      statusText: "อนุมัติแล้ว",
-      statusTime: "อนุมัติเมื่อ 15 ก.ค. 2569"
-    },
-    {
-      id: "UPVAN-2569-00124",
-      vanId: "v1",
-      date: new Date(2026, 6, 21), // Tue 21 July
-      time: "09:00 - 18:00",
-      destination: "เชียงใหม่",
-      purpose: "กิจกรรมภาคสนาม",
-      passengers: 12,
-      status: "approved",
-      requester: "อ.วิจิตรา ใจดี",
-      department: "ภาควิชาพืชศาสตร์",
-      purposeDetail: "เก็บตัวอย่างโรคพืชและวัชพืช",
-      routeDetail: "ม.พะเยา → แปลงทดลอง อ.สะเมิง จ.เชียงใหม่",
-      statusText: "อนุมัติแล้ว",
-      statusTime: "อนุมัติเมื่อ 17 ก.ค. 2569"
-    },
-    {
-      id: "UPVAN-2569-00125",
-      vanId: "v1",
-      date: new Date(2026, 6, 15), // Wed 15 July
-      time: "06:30 - 16:30",
-      destination: "พะเยา",
-      purpose: "กิจกรรมคณะ",
-      passengers: 8,
-      status: "ongoing",
-      requester: "สำนักงานคณะเกษตรฯ",
-      department: "ส่วนกลาง",
-      purposeDetail: "อบรมเกษตรกร",
-      routeDetail: "มหาวิทยาลัยพะเยา → อำเภอเชียงคำ",
-      statusText: "อยู่ระหว่างเดินทาง",
-      statusTime: "เริ่มเดินทาง 06:30 น."
-    },
-    {
-      id: "UPVAN-2569-00126",
-      vanId: "v1",
-      date: new Date(2026, 6, 17), // Fri 17 July
-      time: "09:00 - 16:00",
-      destination: "เชียงราย",
-      purpose: "ประชุมสัมมนา",
-      passengers: 9,
-      status: "completed",
-      requester: "รศ.สมหญิง เก่งมาก",
-      department: "ภาควิชาสัตวศาสตร์",
-      purposeDetail: "ประชุมเครือข่ายวิจัย",
-      routeDetail: "มหาวิทยาลัยพะเยา → ศูนย์วิจัยเชียงราย",
-      statusText: "เสร็จสิ้น",
-      statusTime: "กลับถึง 16:05 น."
-    },
-    {
-      id: "UPVAN-2569-00127",
-      vanId: "v1",
-      date: new Date(2026, 6, 13), // Mon 13 July
-      time: "07:30 - 16:00",
-      destination: "พะเยา",
-      purpose: "รับ-ส่งนิสิต",
-      passengers: 12,
-      status: "completed",
-      requester: "กองกิจการนิสิต",
-      department: "ส่วนกลาง",
-      purposeDetail: "รับ-ส่งนิสิตทำกิจกรรม",
-      routeDetail: "หอพัก → แปลงเกษตร",
-      statusText: "เสร็จสิ้น",
-      statusTime: "กลับถึง 16:00 น."
-    },
-    {
-      id: "UPVAN-2569-00128",
-      vanId: "v1",
-      date: new Date(2026, 6, 14), // Tue 14 July
-      time: "08:00 - 17:00",
-      destination: "ลำพูน",
-      purpose: "อบรม",
-      passengers: 11,
-      status: "approved",
-      requester: "ดร.สมชาย ใจเพชร",
-      department: "ศูนย์วิจัยดิน",
-      purposeDetail: "โครงการอบรมดิน",
-      routeDetail: "ม.พะเยา → ศูนย์วิจัยลำพูน",
-      statusText: "อนุมัติแล้ว",
-      statusTime: "อนุมัติเมื่อ 11 ก.ค. 2569"
-    },
-    {
-      id: "UPVAN-2569-00129",
-      vanId: "v1",
-      date: new Date(2026, 6, 16), // Thu 16 July
-      time: "09:00 - 15:30",
-      destination: "เชียงราย",
-      purpose: "กิจกรรมภาคสนาม",
-      passengers: 12,
-      status: "pending",
-      requester: "อ.วิชัย แก้วใจดี",
-      department: "ภาควิชาสัตวศาสตร์",
-      purposeDetail: "พานิสิตดูงานฟาร์ม",
-      routeDetail: "ม.พะเยา → ฟาร์มเชียงราย",
-      statusText: "รออนุมัติ",
-      statusTime: "ยื่นเมื่อ 12 ก.ค. 2569"
-    },
-    {
-      id: "UPVAN-2569-00130",
-      vanId: "v1",
-      date: new Date(2026, 6, 18), // Sat 18 July
-      time: "08:00 - 12:00",
-      destination: "พะเยา",
-      purpose: "กิจกรรมคณะ",
-      passengers: 6,
-      status: "approved",
-      requester: "คณบดี",
-      department: "สำนักงานคณะ",
-      purposeDetail: "ต้อนรับแขกวีไอพี",
-      routeDetail: "ม.พะเยา → ตัวเมืองพะเยา",
-      statusText: "อนุมัติแล้ว",
-      statusTime: "อนุมัติอัตโนมัติ"
-    },
-  ];
+  const [bookingsData, setBookingsData] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    async function fetchEvents() {
+      try {
+        const res = await fetch('/api/calendar-events');
+        const data = await res.json();
+        
+        const mapped = (data.rawEvents || []).map((e: any) => {
+          const start = new Date(e.startAt);
+          const end = new Date(e.endAt);
+          return {
+            id: e.id,
+            vanId: e.assignedVanPlate || 'v1',
+            date: start,
+            time: `${start.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
+            destination: e.title.split(' - ')[1] || e.title,
+            purpose: "กิจกรรม",
+            passengers: 12,
+            status: e.status === "APPROVED" ? "approved" : e.status === "WAITING_EXEC" ? "pending" : "completed",
+            bookingFaculty: e.title.split(' - ')[0] || "คณะทั่วไป",
+            requester: e.requester || "ผู้ขอใช้รถ",
+            department: "ส่วนกลาง",
+            purposeDetail: e.title,
+            routeDetail: e.title,
+            statusText: e.status === "APPROVED" ? "อนุมัติแล้ว" : "รอจัดการ",
+            statusTime: "อัปเดตระบบ"
+          };
+        });
+        setBookingsData(mapped);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    fetchEvents();
+  }, []);
 
   // Helper styling based on Faculty
   const getEventColor = (facultyName: string | undefined, defaultFaculty: string) => {

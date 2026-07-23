@@ -7,6 +7,32 @@ import {
   MapPin, Users, User, Clock, 
   X, Download
 } from 'lucide-react';
+import type { SystemBooking } from '@/lib/booking-system-types';
+
+interface MappedRequest {
+  id: string;
+  time: string;
+  requester: string;
+  department: string;
+  date: string;
+  timeRange: string;
+  destination: string;
+  passengers: number;
+  reason: string;
+  status: string;
+  files: number;
+  isCrossFaculty: boolean;
+  coordinator: {
+    name: string;
+    role: string;
+    dept: string;
+    phone: string;
+    email: string;
+  };
+  tripType: string;
+  departureLocation: string;
+  budget: string;
+}
 
 export default function ApprovalsPage() {
   const [activeTab, setActiveTab] = useState('pending');
@@ -27,167 +53,92 @@ export default function ApprovalsPage() {
     }
   }, []);
 
-  // Mock data for requests
-  const [requests, setRequests] = useState([
-    {
-      id: "UPVAN-2569-00123",
-      time: "เมื่อวาน 14:32 น.",
-      requester: "ดร.ณรงค์เดช รักพืช",
-      department: "ภาควิชาพืชศาสตร์",
-      date: "12 ก.ค. 2569",
-      timeRange: "08:00 - 17:00",
-      destination: "ศูนย์วิจัยและพัฒนาการเกษตร จ.พะเยา",
-      passengers: 12,
-      reason: "พานิสิตลงพื้นที่ปฏิบัติการ",
-      status: "pending",
-      files: 1,
-      isCrossFaculty: false,
-      coordinator: {
-        name: "ดร.ณรงค์เดช รักพืช",
-        role: "อาจารย์",
-        dept: "ภาควิชาพืชศาสตร์",
-        phone: "081-234-5678",
-        email: "narongdej.r@up.ac.th"
-      },
-      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
-      departureLocation: "คณะเกษตรศาสตร์ ม.พะเยา",
-      budget: "งบปฏิบัติการ (โครงการวิจัย)"
-    },
-    {
-      id: "UPVAN-2569-00121",
-      time: "3 ชั่วโมงที่แล้ว",
-      requester: "นายสมนึก ดีงาม",
-      department: "ภาควิชาสัตวศาสตร์",
-      date: "14 ก.ค. 2569",
-      timeRange: "09:00 - 18:00",
-      destination: "ฟาร์มเครือข่าย จ.ลำปาง",
-      passengers: 10,
-      reason: "ศึกษาดูงานฟาร์ม",
-      status: "pending",
-      files: 0,
-      isCrossFaculty: false,
-      coordinator: {
-        name: "นายสมนึก ดีงาม",
-        role: "เจ้าหน้าที่",
-        dept: "ภาควิชาสัตวศาสตร์",
-        phone: "089-876-5432",
-        email: "somnuek.d@up.ac.th"
-      },
-      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
-      departureLocation: "คณะเกษตรศาสตร์ ม.พะเยา",
-      budget: "งบประมาณประจำปี"
-    },
-    {
-      id: "UPVAN-CF-2569-001",
-      time: "4 ชั่วโมงที่แล้ว",
-      requester: "รศ.ดร.วิทยา รักเรียน",
-      department: "คณะวิทยาศาสตร์",
-      date: "18 ก.ค. 2569",
-      timeRange: "07:00 - 18:00",
-      destination: "อ.แม่สาย จ.เชียงราย",
-      passengers: 8,
-      reason: "โครงการวิจัยร่วม (ยืมรถตู้คณะเกษตร)",
-      status: "cross_faculty_pending",
-      files: 1,
-      isCrossFaculty: true,
-      coordinator: {
-        name: "รศ.ดร.วิทยา รักเรียน",
-        role: "อาจารย์",
-        dept: "คณะวิทยาศาสตร์",
-        phone: "082-345-6789",
-        email: "wittaya.r@up.ac.th"
-      },
-      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
-      departureLocation: "คณะวิทยาศาสตร์ ม.พะเยา",
-      budget: "งบโครงการวิจัย (คณะวิทยาศาสตร์)"
-    },
-    {
-      id: "UPVAN-2569-00119",
-      time: "เมื่อวาน 11:15 น.",
-      requester: "อ.ดร.กิตติพงษ์ ใจดี",
-      department: "ศูนย์วิจัยพืชสวน",
-      date: "16 ก.ค. 2569",
-      timeRange: "06:00 - 18:00",
-      destination: "แปลงทดลอง จ.เชียงราย",
-      passengers: 14,
-      reason: "เก็บตัวอย่างงานวิจัย",
-      status: "pending",
-      files: 2,
-      isCrossFaculty: false,
-      coordinator: {
-        name: "อ.ดร.กิตติพงษ์ ใจดี",
-        role: "นักวิจัย",
-        dept: "ศูนย์วิจัยพืชสวน",
-        phone: "083-456-7890",
-        email: "kittipong.j@up.ac.th"
-      },
-      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
-      departureLocation: "ศูนย์วิจัยพืชสวน ม.พะเยา",
-      budget: "งบโครงการวิจัย"
-    },
-    {
-      id: "UPVAN-2569-00118",
-      time: "2 วันที่แล้ว",
-      requester: "นางสาวสมใจ รักษ์โลก",
-      department: "ภาควิชาปฐพีวิทยา",
-      date: "20 ก.ค. 2569",
-      timeRange: "07:00 - 16:00",
-      destination: "สถานีวิจัยดิน จ.น่าน",
-      passengers: 8,
-      reason: "วิเคราะห์คุณภาพดินร่วมกับหน่วยงาน",
-      status: "pending",
-      files: 1,
-      isCrossFaculty: false,
-      coordinator: {
-        name: "นางสาวสมใจ รักษ์โลก",
-        role: "นักวิทยาศาสตร์",
-        dept: "ภาควิชาปฐพีวิทยา",
-        phone: "084-567-8901",
-        email: "somjai.r@up.ac.th"
-      },
-      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
-      departureLocation: "ภาควิชาปฐพีวิทยา ม.พะเยา",
-      budget: "งบประมาณประจำปี"
-    },
-    {
-      id: "UPVAN-2569-00115",
-      time: "3 วันที่แล้ว",
-      requester: "ผศ.ดร.วิชัย มั่นคง",
-      department: "ภาควิชากีฏวิทยา",
-      date: "25 ก.ค. 2569",
-      timeRange: "08:30 - 16:30",
-      destination: "สวนพฤกษศาสตร์ จ.เชียงใหม่",
-      passengers: 5,
-      reason: "สำรวจแมลงศัตรูพืช",
-      status: "need_info",
-      files: 0,
-      isCrossFaculty: false,
-      coordinator: {
-        name: "ผศ.ดร.วิชัย มั่นคง",
-        role: "อาจารย์",
-        dept: "ภาควิชากีฏวิทยา",
-        phone: "085-678-9012",
-        email: "wichai.m@up.ac.th"
-      },
-      tripType: "ไป-กลับ (ในจังหวัด/ต่างจังหวัด)",
-      departureLocation: "ภาควิชากีฏวิทยา ม.พะเยา",
-      budget: "งบภาควิชา"
+  const [requests, setRequests] = useState<MappedRequest[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadRequests = async () => {
+    try {
+      const res = await fetch('/api/bookings');
+      const data = await res.json();
+      
+      const formatThaiDateTime = (dateStr: string) => {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) + 
+               ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+      };
+      
+      const mapped = (data.bookings || []).map((b: SystemBooking) => {
+        let statusLabel = 'pending';
+        if (b.status === 'WAITING_ADMIN') statusLabel = 'pending';
+        if (b.status === 'WAITING_EXEC') statusLabel = 'cross_faculty_pending';
+        if (b.status === 'APPROVED') statusLabel = 'approved';
+        if (b.status === 'REJECTED') statusLabel = 'rejected';
+        
+        return {
+          id: b.id,
+          time: formatThaiDateTime(b.submittedAt),
+          requester: b.requester,
+          department: b.requesterFaculty,
+          date: new Date(b.startAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }),
+          timeRange: `${new Date(b.startAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.endAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
+          destination: b.destination,
+          passengers: b.passengers,
+          reason: b.purpose,
+          status: statusLabel,
+          files: 0,
+          isCrossFaculty: false,
+          coordinator: {
+            name: b.requester,
+            role: "ผู้ใช้งาน",
+            dept: b.requesterFaculty,
+            phone: "-",
+            email: "-"
+          },
+          tripType: "ไป-กลับ",
+          departureLocation: b.requesterFaculty,
+          budget: "งบประมาณคณะ"
+        };
+      });
+      setRequests(mapped);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
     }
-  ]);
+  };
+
+  React.useEffect(() => {
+    loadRequests();
+  }, []);
 
   const confirmAction = (id: string, actionType: string) => {
     setPendingAction({ id, type: actionType });
     setInfoReason("");
   };
 
-  const executeAction = () => {
+  const executeAction = async () => {
     if (!pendingAction) return;
     const { id, type: actionType } = pendingAction;
     
-    setAlertMessage(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จ`);
-    if (actionType === 'อนุมัติ' || actionType === 'ปฏิเสธ' || actionType === 'อนุญาตให้ยืม') {
-      setRequests(prev => prev.filter(req => req.id !== id));
-      if (selectedRequestId === id) setSelectedRequestId(null);
+    let dbStatus = '';
+    if (actionType === 'อนุมัติ' || actionType === 'อนุญาตให้ยืม') dbStatus = 'APPROVED';
+    if (actionType === 'ปฏิเสธ') dbStatus = 'REJECTED';
+
+    if (dbStatus) {
+      try {
+        await fetch(`/api/bookings/${id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: dbStatus, reason: infoReason || actionType })
+        });
+        await loadRequests();
+        setAlertMessage(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จ`);
+        if (selectedRequestId === id) setSelectedRequestId(null);
+      } catch (err) {
+        console.error(err);
+        setAlertMessage(`เกิดข้อผิดพลาด: ${err}`);
+      }
     } else {
       setRequests(prev => prev.map(req => 
         req.id === id ? { ...req, status: 'need_info' } : req

@@ -4,6 +4,7 @@ import {
   SystemBookingStatus,
 } from "@/lib/booking-system-types";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 type CalendarRow = {
   id: string;
@@ -210,19 +211,14 @@ function toThaiDate(value: Date) {
   return value.toISOString();
 }
 
-async function toBookingDto(row: {
-  id: string;
-  destination: string;
-  objective: string;
-  passengersCount: number;
-  departureDate: Date;
-  returnDate: Date;
-  createdAt: Date;
-  status: string;
-  rejectReason: string | null;
-  requester: { name: string; faculty: { nameTh: string } };
-  assignedDriver: null | { id: number; user: { name: string }; faculty: { van: null | { id: number; plate: string } } };
-}) {
+type BookingWithRelations = Prisma.BookingGetPayload<{
+  include: {
+    requester: { include: { faculty: true } };
+    assignedDriver: { include: { user: true; faculty: { include: { vans: true } } } };
+  };
+}>;
+
+async function toBookingDto(row: BookingWithRelations) {
   return {
     id: row.id,
     requester: row.requester.name,
@@ -237,8 +233,8 @@ async function toBookingDto(row: {
     rejectReason: row.rejectReason || undefined,
     assignedDriverId: row.assignedDriver ? makeDriverCode(row.assignedDriver.id) : undefined,
     assignedDriverName: row.assignedDriver?.user.name,
-    assignedVanId: row.assignedDriver?.faculty.van?.id ? `van-${row.assignedDriver.faculty.van.id.toString().padStart(3, "0")}` : undefined,
-    assignedVanPlate: row.assignedDriver?.faculty.van?.plate,
+    assignedVanId: row.assignedDriver?.faculty.vans?.[0]?.id ? `van-${row.assignedDriver.faculty.vans[0].id.toString().padStart(3, "0")}` : undefined,
+    assignedVanPlate: row.assignedDriver?.faculty.vans?.[0]?.plate,
   };
 }
 
@@ -250,12 +246,12 @@ export async function listBookings(status?: SystemBookingStatus) {
     where,
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { van: true } } } },
+      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return Promise.all(rows.map((row: any) => toBookingDto(row)));
+  return Promise.all(rows.map((row) => toBookingDto(row)));
 }
 
 export async function getBookingById(id: string) {
@@ -265,7 +261,7 @@ export async function getBookingById(id: string) {
     where: { id },
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { van: true } } } },
+      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
     },
   });
 
@@ -314,7 +310,7 @@ export async function createBooking(payload: CreateBookingPayload) {
     },
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { van: true } } } },
+      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
     },
   });
 
@@ -341,10 +337,10 @@ export async function listDrivers(date?: string) {
 
   const [drivers, bookings] = await Promise.all([
     prisma.driver.findMany({
-      where: { isActive: true },
       include: {
         user: true,
-        faculty: { include: { van: true } },
+        faculty: { include: { vans: true } },
+        assignedVan: true,
       },
       orderBy: { id: "asc" },
     }),
@@ -362,9 +358,9 @@ export async function listDrivers(date?: string) {
 
   const normalizedDate = date ? new Date(date).toISOString().slice(0, 10) : null;
 
-  return drivers.map((driver: any) => {
+  return drivers.map((driver) => {
     const availability = detectAvailability(driver.id, bookings);
-    const driverBookings = bookings.filter((booking: any) => {
+    const driverBookings = bookings.filter((booking) => {
       if (booking.assignedDriverId !== driver.id) {
         return false;
       }
@@ -380,10 +376,13 @@ export async function listDrivers(date?: string) {
     return {
       id: makeDriverCode(driver.id),
       name: driver.user.name,
+      email: driver.user.email,
       phone: driver.phone,
+      avatar: driver.avatar || `https://i.pravatar.cc/150?u=${driver.id}`,
       faculty: driver.faculty.nameTh,
-      vanId: driver.faculty.van ? `van-${driver.faculty.van.id.toString().padStart(3, "0")}` : "",
-      vanPlate: driver.faculty.van?.plate || "ยังไม่ผูกทะเบียน",
+      vanId: driver.assignedVan?.id ? `van-${driver.assignedVan.id.toString().padStart(3, "0")}` : (driver.faculty.vans?.[0] ? `van-${driver.faculty.vans[0].id.toString().padStart(3, "0")}` : ""),
+      vanPlate: driver.assignedVan?.plate || driver.faculty.vans?.[0]?.plate || "ยังไม่ผูกทะเบียน",
+      contractStart: driver.contractStart ? driver.contractStart.toISOString().split('T')[0] : "2024-01-01",
       experienceYears,
       score: Number(score.toFixed(1)),
       availability,
@@ -396,6 +395,7 @@ export async function listDrivers(date?: string) {
             destination: driverBookings[0].destination,
           }
         : null,
+      isActive: driver.isActive,
     };
   });
 }
@@ -418,11 +418,11 @@ export async function assignDriver(bookingId: string, driverCode: string) {
     where: { id: bookingId },
     data: {
       assignedDriverId: driver.id,
-      status: "WAITING_EXEC",
+      status: "APPROVED",
     },
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { van: true } } } },
+      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
     },
   });
 
@@ -442,7 +442,7 @@ export async function updateBookingStatus(bookingId: string, status: SystemBooki
     },
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { van: true } } } },
+      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
     },
   });
 
@@ -460,27 +460,27 @@ export async function listCalendarEvents(year?: number, month?: number): Promise
     },
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { van: true } } } },
+      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
     },
     orderBy: { departureDate: "asc" },
   });
 
   return rows
-    .filter((row: any) => {
+    .filter((row) => {
       if (!year || !month) {
         return true;
       }
       const date = row.departureDate;
       return date.getFullYear() === year && date.getMonth() + 1 === month;
     })
-    .map((row: any) => ({
+    .map((row) => ({
       id: row.id,
       title: `${row.requester.faculty.nameTh} - ${row.destination}`,
       startAt: row.departureDate.toISOString(),
       endAt: row.returnDate.toISOString(),
       status: row.status,
       assignedDriverName: row.assignedDriver?.user.name || "รอจัดสรร",
-      assignedVanPlate: row.assignedDriver?.faculty.van?.plate || "รอจัดสรร",
+      assignedVanPlate: row.assignedDriver?.faculty.vans?.[0]?.plate || "รอจัดสรร",
     }));
 }
 
@@ -492,7 +492,7 @@ export async function getDriverDashboard(driverCode: string) {
     where: { id: driverId },
     include: {
       user: true,
-      faculty: { include: { van: true } },
+      faculty: { include: { vans: true } },
     },
   });
 
@@ -509,7 +509,7 @@ export async function getDriverDashboard(driverCode: string) {
       orderBy: { departureDate: "asc" },
       include: {
         requester: { include: { faculty: true } },
-        assignedDriver: { include: { user: true, faculty: { include: { van: true } } } },
+        assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
       },
     }),
     prisma.driverLog.findMany({
@@ -519,14 +519,14 @@ export async function getDriverDashboard(driverCode: string) {
   ]);
 
   const now = new Date();
-  const mapped = await Promise.all(assignedBookings.map((booking: any) => toBookingDto(booking)));
-  const todayTrip = mapped.find((trip: any) => {
+  const mapped = await Promise.all(assignedBookings.map((booking) => toBookingDto(booking)));
+  const todayTrip = mapped.find((trip) => {
     const start = new Date(trip.startAt);
     const end = new Date(trip.endAt);
     return now >= start && now <= end;
   }) || mapped[0] || null;
 
-  const upcoming = mapped.filter((trip: any) => new Date(trip.startAt) > now).slice(0, 5);
+  const upcoming = mapped.filter((trip) => new Date(trip.startAt) > now).slice(0, 5);
 
   return {
     driver: {
@@ -534,15 +534,15 @@ export async function getDriverDashboard(driverCode: string) {
       name: driver.user.name,
       phone: driver.phone,
       faculty: driver.faculty.nameTh,
-      vanId: driver.faculty.van ? `van-${driver.faculty.van.id.toString().padStart(3, "0")}` : "",
-      vanPlate: driver.faculty.van?.plate || "ยังไม่ผูกทะเบียน",
+      vanId: driver.faculty.vans?.[0] ? `van-${driver.faculty.vans[0].id.toString().padStart(3, "0")}` : "",
+      vanPlate: driver.faculty.vans?.[0]?.plate || "ยังไม่ผูกทะเบียน",
       experienceYears: Math.max(1, driver.age - 30),
       score: 4.5,
       availability: "AVAILABLE",
     },
     todayTrip,
     upcoming,
-    logs: logs.map((log: any) => ({
+    logs: logs.map((log) => ({
       id: `log-${log.id}`,
       bookingId: log.bookingId,
       driverId: makeDriverCode(log.driverId),

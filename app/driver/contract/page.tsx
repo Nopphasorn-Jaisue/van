@@ -39,11 +39,11 @@ export default function DriverContract() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  if (!mounted) return null; // Avoid Next.js hydration mismatch with Date
+
   const daysLeft = getDaysRemaining(expiryDate);
   const isWarning = daysLeft <= 180;
   const isExpired = daysLeft <= 0;
-
-  if (!mounted) return null; // Avoid Next.js hydration mismatch with Date
 
   return (
     <AppShell>

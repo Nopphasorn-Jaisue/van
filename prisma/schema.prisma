@@ -23,6 +23,12 @@ enum Role {
   DRIVER
 }
 
+enum MaintenanceType {
+  MAINTENANCE
+  TAX
+  INSURANCE
+}
+
 enum DriverType {
   PRIMARY
   BACKUP
@@ -47,7 +53,7 @@ model Faculty {
   // Relations
   users     User[]
   drivers   Driver[]
-  van       Van?      // 1 คณะมีรถตู้ประจำตำแหน่งได้สูงสุด 1 คัน (1:1)
+  vans      Van[]     // 1 คณะมีรถตู้หลายคันได้ (1:N)
   bookings  Booking[] @relation("TargetFaculty")
 
   @@map("faculties")
@@ -72,13 +78,23 @@ model User {
 
 model Van {
   id        Int      @id @default(autoincrement())
-  facultyId Int      @unique @map("faculty_id") // ล็อกความสัมพันธ์ 1 คณะต่อ 1 คัน
+  facultyId Int      @map("faculty_id") // 1 คณะต่อหลายคันได้
   faculty   Faculty  @relation(fields: [facultyId], references: [id])
   
   plate     String   @map("plate") // ทะเบียนรถ เช่น นข 1234 พะเยา
   engine    String?  @map("engine")
   capacity  Int      @default(12)  @map("capacity") // จำนวนที่นั่ง
   isActive  Boolean  @default(true) @map("is_active")
+  isShared  Boolean  @default(true) @map("is_shared")
+  
+  image            String?   @db.Text
+  taxExp           DateTime? @map("tax_exp")
+  insExp           DateTime? @map("ins_exp")
+  nextCheckMileage Int?      @map("next_check_mileage")
+
+  // Relations
+  assignedDrivers   Driver[]
+  maintenanceLogs   MaintenanceRecord[]
 
   @@map("vans")
 }
@@ -95,6 +111,12 @@ model Driver {
   age       Int
   type      DriverType @default(PRIMARY)
   isActive  Boolean    @default(true) @map("is_active")
+  avatar    String?    @db.Text
+  
+  contractStart DateTime?  @map("contract_start")
+  
+  assignedVanId Int?       @map("assigned_van_id")
+  assignedVan   Van?       @relation(fields: [assignedVanId], references: [id], onDelete: SetNull)
 
   // Relations
   bookings  Booking[]  // ประวัติการถูกจัดสรรคิวรถยนต์
@@ -166,5 +188,67 @@ model DriverLog {
   imgEndUrl     String?  @db.Text @map("img_end_url") // รูปหน้าปัดตอนดับเครื่อง
   createdAt     DateTime @default(now()) @map("created_at")
 
+  // Relations
+  tripLegs      TripLeg[]
+  expenses      Expense[]
+
   @@map("driver_logs")
+}
+
+model TripLeg {
+  id            Int      @id @default(autoincrement())
+  driverLogId   Int      @map("driver_log_id")
+  driverLog     DriverLog @relation(fields: [driverLogId], references: [id], onDelete: Cascade)
+
+  deptDate      String   @map("dept_date")
+  deptTime      String   @map("dept_time")
+  passenger     String
+  destination   String
+  startMileage  String   @map("start_mileage")
+  returnDate    String   @map("return_date")
+  returnTime    String   @map("return_time")
+  endMileage    String   @map("end_mileage")
+  remark        String?
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("trip_legs")
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Expense {
+  id            Int      @id @default(autoincrement())
+  driverLogId   Int      @map("driver_log_id")
+  driverLog     DriverLog @relation(fields: [driverLogId], references: [id], onDelete: Cascade)
+  
+  category      String
+  amount        Float
+  remark        String?
+  imgUrl        String?  @db.Text @map("img_url")
+  status        ExpenseStatus @default(PENDING)
+
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("expenses")
+}
+
+model MaintenanceRecord {
+  id        Int      @id @default(autoincrement())
+  vanId     Int      @map("van_id")
+  van       Van      @relation(fields: [vanId], references: [id], onDelete: Cascade)
+  
+  type      MaintenanceType
+  detail    String
+  amount    Float
+  garage    String?
+  date      DateTime
+  
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("maintenance_records")
 }
