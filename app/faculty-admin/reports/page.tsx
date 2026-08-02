@@ -47,6 +47,14 @@ type VehicleCompliance = {
   nextCheck: string;
 };
 
+type FacultyVan = {
+  id: string;
+  vanName: string;
+  plate: string;
+  driverName?: string;
+  status: string;
+};
+
 export default function Page() {
   const [timeRange, setTimeRange] = useState('month');
 
@@ -64,12 +72,17 @@ export default function Page() {
   const [totalExpense, setTotalExpense] = useState(0);
   const [driverSummary, setDriverSummary] = useState<DriverSummary[]>([]);
   const [vehicleCompliance, setVehicleCompliance] = useState<VehicleCompliance[]>([]);
+  const [facultyVans, setFacultyVans] = useState<FacultyVan[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const res = await fetch('/api/reports');
+        const [res, vanRes] = await Promise.all([
+          fetch('/api/reports'),
+          fetch('/api/vans')
+        ]);
         const data = await res.json();
+        const vanData = await vanRes.json();
         if (data.success) {
           setKpis([
             { title: data.kpis[0].title, value: data.kpis[0].value, unit: data.kpis[0].unit, trend: data.kpis[0].trend, trendUp: data.kpis[0].status === 'positive', icon: CalendarDays, color: "bg-indigo-50", iconColor: "text-indigo-600", valueColor: "text-slate-900" },
@@ -96,6 +109,9 @@ export default function Page() {
           if (data.totalExpense !== undefined) setTotalExpense(data.totalExpense);
           if (data.driverSummary) setDriverSummary(data.driverSummary);
           if (data.vehicleCompliance) setVehicleCompliance(data.vehicleCompliance);
+        }
+        if (vanData.vans) {
+          setFacultyVans(vanData.vans);
         }
       } catch (err) {
         console.error(err);
@@ -308,20 +324,31 @@ export default function Page() {
                 <Car className="w-4 h-4 text-indigo-300" />
                 <span className="text-xs font-semibold">รถตู้ประจำคณะ</span>
               </div>
-              <div className="p-5 flex items-center gap-4 my-auto">
-                <div className="w-20 h-16 bg-white/10 rounded-xl flex items-center justify-center p-2 shrink-0">
-                  <Car className="w-8 h-8 text-white/50" />
+              {facultyVans.length > 0 ? (
+                <div className="p-5 flex items-center gap-4 my-auto overflow-x-auto snap-x scrollbar-hide">
+                  {facultyVans.map(van => (
+                    <div key={van.id} className="flex-shrink-0 flex items-center gap-4 snap-center w-full min-w-full">
+                      <div className="w-20 h-16 bg-white/10 rounded-xl flex items-center justify-center p-2 shrink-0">
+                        <Car className="w-8 h-8 text-white/50" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black mb-2">{van.vanName} <span className="text-xs font-medium text-indigo-200">{van.plate}</span></h3>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+                          <div className="flex items-center gap-1.5 text-indigo-200"><Users className="w-3 h-3" /> คนขับ</div>
+                          <div className="flex items-center gap-1.5 text-indigo-200"><MapPin className="w-3 h-3" /> สถานะ</div>
+                          <div className="font-bold text-xs truncate max-w-[120px]" title={van.driverName}>{van.driverName || '-'}</div>
+                          <div className="font-bold text-xs">{van.status === 'ready' ? 'พร้อมใช้งาน' : van.status === 'maintenance' ? 'ซ่อมบำรุง' : van.status}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <h3 className="text-base font-black mb-2">นข 1234 <span className="text-xs font-medium text-indigo-200">พะเยา</span></h3>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-                    <div className="flex items-center gap-1.5 text-indigo-200"><MapPin className="w-3 h-3" /> ระยะทาง</div>
-                    <div className="flex items-center gap-1.5 text-indigo-200"><Users className="w-3 h-3" /> คนขับ</div>
-                    <div className="font-bold text-xs">1,250 กม.</div>
-                    <div className="font-bold text-xs">สมชาย ใจดี</div>
-                  </div>
+              ) : (
+                <div className="p-5 flex flex-col items-center justify-center gap-2 my-auto text-white/50 py-10">
+                  <Car className="w-10 h-10 mb-1 opacity-30" />
+                  <p className="text-sm font-medium">ยังไม่มีรถตู้ประจำคณะ</p>
                 </div>
-              </div>
+              )}
             </div>
 
           </div>
@@ -386,13 +413,6 @@ export default function Page() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {vehicleCompliance.map((v, i) => (
                 <div key={i} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between gap-3">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <Car className="w-4 h-4 text-indigo-600" />
-                      <span className="font-black text-sm text-slate-900">{v.plate}</span>
-                    </div>
-                    <span className="text-xs font-bold text-slate-500">เช็คระยะถัดไป: <span className="text-slate-800">{v.nextCheck}</span></span>
-                  </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="p-2.5 bg-white rounded-lg border border-slate-100 flex items-center justify-between">
                       <div>

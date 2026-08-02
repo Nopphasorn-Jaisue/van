@@ -3,8 +3,46 @@ import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Plus, Edit, Trash2, 
-  Users, Fuel, Wrench, Share2, Lock, Check, Search, X, Image as ImageIcon
+  Users, Fuel, Wrench, Share2, Lock, Check, Search, X, Image as ImageIcon, Calendar
 } from 'lucide-react';
+
+const ThaiDatePicker = ({ value, onChange }: { value: string, onChange: (val: string) => void }) => {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const formatThaiDate = (dateStr: string) => {
+    if (!dateStr) return "";
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${parseInt(y) + 543}`;
+  };
+
+  const handleClick = () => {
+    if (inputRef.current) {
+      try {
+        inputRef.current.showPicker();
+      } catch {
+        inputRef.current.focus();
+      }
+    }
+  };
+
+  return (
+    <div className="relative w-full cursor-pointer" onClick={handleClick}>
+      <input
+        ref={inputRef}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
+      />
+      <div className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm bg-white flex items-center justify-between hover:border-[#311171] transition-colors">
+        <span className={value ? "text-gray-900 font-bold" : "text-gray-400"}>
+          {value ? formatThaiDate(value) : "วว/ดด/ปปปป (พ.ศ.)"}
+        </span>
+        <Calendar size={16} className="text-gray-500" />
+      </div>
+    </div>
+  );
+};
 
 interface Van {
   id: string;
@@ -15,6 +53,8 @@ interface Van {
   status: string;
   isShared?: boolean;
   image: string;
+  taxExp?: string;
+  insExp?: string;
 }
 
 export default function VansPage() {
@@ -31,7 +71,9 @@ export default function VansPage() {
     capacity: 12,
     fuelType: "ดีเซล",
     status: "ready",
-    image: ""
+    image: "",
+    taxExp: "",
+    insExp: ""
   });
 
   const loadVans = async () => {
@@ -58,7 +100,9 @@ export default function VansPage() {
       capacity: 12,
       fuelType: "ดีเซล",
       status: "ready",
-      image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80"
+      image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80",
+      taxExp: "",
+      insExp: ""
     });
     setIsModalOpen(true);
   };
@@ -71,7 +115,9 @@ export default function VansPage() {
       capacity: van.capacity,
       fuelType: van.fuelType,
       status: van.status,
-      image: van.image
+      image: van.image,
+      taxExp: van.taxExp || "",
+      insExp: van.insExp || ""
     });
     setIsModalOpen(true);
   };
@@ -371,6 +417,23 @@ export default function VansPage() {
                     <option value="เบนซิน">เบนซิน</option>
                     <option value="EV (ไฟฟ้า)">EV (ไฟฟ้า)</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">วันหมดอายุภาษีรถยนต์</label>
+                  <ThaiDatePicker 
+                    value={formData.taxExp}
+                    onChange={(val) => setFormData({...formData, taxExp: val})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">วันหมดอายุประกันภัย</label>
+                  <ThaiDatePicker 
+                    value={formData.insExp}
+                    onChange={(val) => setFormData({...formData, insExp: val})}
+                  />
                 </div>
               </div>
 

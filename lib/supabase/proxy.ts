@@ -77,10 +77,10 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const matchedRule = ROLE_RULES.find((rule) => pathname.startsWith(rule.startsWith));
   if (matchedRule && !matchedRule.allowed.includes(role)) {
-    const deniedUrl = request.nextUrl.clone();
-    deniedUrl.pathname = "/faculty-admin/calendar";
-    deniedUrl.searchParams.set("denied", "1");
-    return NextResponse.redirect(deniedUrl);
+    // const deniedUrl = request.nextUrl.clone();
+    // deniedUrl.pathname = "/landing";
+    // deniedUrl.searchParams.set("denied", "1");
+    // return NextResponse.redirect(deniedUrl);
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

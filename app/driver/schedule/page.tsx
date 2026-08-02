@@ -1,18 +1,165 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { Calendar as CalendarIcon, Clock, Users, ChevronRight, ChevronLeft, CalendarDays, MapPin, Phone, User, Car, X, Hourglass, History } from 'lucide-react';
-import { getAssignedBookings } from '@/app/actions/driver';
+import { Calendar as CalendarIcon, Clock, Users, ChevronRight, ChevronLeft, CalendarDays, MapPin, Phone, User, Car, X, Hourglass, History, Plus, Trash2, Edit, AlertTriangle } from 'lucide-react';
+import { getAssignedBookings, createAdhocBooking, updateAdhocBooking, deleteAdhocBooking } from '@/app/actions/driver';
+import ThaiDatePicker from '@/components/ThaiDatePicker';
+import ThaiTimePicker from '@/components/ThaiTimePicker';
+
+interface TripLegData {
+  destination: string;
+  deptTime: string;
+  returnTime: string;
+  endMileage: string;
+  startMileage: string;
+}
+
+interface Trip {
+  id: string | number;
+  date: string;
+  destination: string;
+  time: string;
+  passengers: number;
+  requester: string;
+  phone: string;
+  pickup: string;
+  van: string;
+  project: string;
+  status: string;
+  isAdhoc?: boolean;
+  rawDate?: string;
+  rawStartTime?: string;
+  rawEndTime?: string;
+  actualData?: {
+    totalDistance: number;
+    legs: TripLegData[];
+    endLocation: string;
+    endTime: string;
+    lastMileage?: string | null;
+    startMileage?: string | null;
+  };
+}
+
+interface BookingData {
+  id: string | number;
+  departureDate: string | Date;
+  returnDate: string | Date;
+  destination: string;
+  passengersCount: number;
+  requester?: { name: string, faculty?: { nameTh: string } | null } | null;
+  objective: string;
+  driverLog?: {
+    totalDistance: number;
+    tripLegs: TripLegData[];
+  } | null;
+}
 
 export default function DriverSchedule() {
   const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
   const [calendarMode, setCalendarMode] = useState<"week" | "month">("week");
   const [selectedDate, setSelectedDate] = useState<number>(20); // Fallback date, update in useEffect
-  const [selectedTripDetails, setSelectedTripDetails] = useState<any>(null);
+  const [selectedTripDetails, setSelectedTripDetails] = useState<Trip | null>(null);
 
-  const [upcomingTrips, setUpcomingTrips] = useState<any[]>([]);
-  const [pastTrips, setPastTrips] = useState<any[]>([]);
+  const [upcomingTrips, setUpcomingTrips] = useState<Trip[]>([]);
+  const [pastTrips, setPastTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Adhoc form state
+  const [isAdhocModalOpen, setIsAdhocModalOpen] = useState(false);
+  const [adhocForm, setAdhocForm] = useState({
+    id: '',
+    destination: '',
+    date: '',
+    startTime: '',
+    endTime: '',
+    pickup: '',
+  });
+
+  // Delete confirmation state
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean, id: string | number | null}>({isOpen: false, id: null});
+
+  const handleOpenAdhoc = () => {
+    setAdhocForm({
+      id: '',
+      destination: '',
+      date: new Date().toISOString().split('T')[0],
+      startTime: '',
+      endTime: '',
+      pickup: '',
+    });
+    setIsAdhocModalOpen(true);
+  };
+
+  const handleEditAdhoc = (trip: Trip) => {
+    setAdhocForm({
+      id: trip.id.toString(),
+      destination: trip.destination,
+      date: trip.rawDate || new Date().toISOString().split('T')[0],
+      startTime: trip.rawStartTime || '',
+      endTime: trip.rawEndTime || '',
+      pickup: trip.pickup,
+    });
+    setIsAdhocModalOpen(true);
+    setSelectedTripDetails(null);
+  };
+
+  const handleDeleteAdhoc = (id: string | number) => {
+    setDeleteConfirmation({isOpen: true, id});
+  };
+
+  const confirmDeleteAdhoc = async () => {
+    if (deleteConfirmation.id) {
+      await deleteAdhocBooking(deleteConfirmation.id.toString());
+      setUpcomingTrips(prev => prev.filter(t => t.id !== deleteConfirmation.id));
+      setPastTrips(prev => prev.filter(t => t.id !== deleteConfirmation.id));
+      setSelectedTripDetails(null);
+      setDeleteConfirmation({isOpen: false, id: null});
+    }
+  };
+
+  const handleSaveAdhoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const isEditing = !!adhocForm.id;
+    
+    // Call server action to actually save to DB
+    const res = isEditing 
+      ? await updateAdhocBooking(adhocForm.id, adhocForm)
+      : await createAdhocBooking(1, adhocForm); // Mock driverId 1
+      
+    if (res.success && res.booking) {
+      const d = new Date(res.booking.departureDate);
+      const displayDate = d.toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+      const displayTime = `${adhocForm.startTime} - ${adhocForm.endTime}`;
+
+      const newTrip: Trip = {
+        id: res.booking.id,
+        date: displayDate,
+        destination: adhocForm.destination,
+        time: displayTime,
+        passengers: 0,
+        requester: "คนขับ (บันทึกเอง)",
+        phone: "-",
+        pickup: adhocForm.pickup,
+        van: "รถที่กำลังขับ",
+        project: "การใช้รถนอกแผน",
+        status: "ASSIGNED",
+        isAdhoc: true,
+        rawDate: adhocForm.date,
+        rawStartTime: adhocForm.startTime,
+        rawEndTime: adhocForm.endTime,
+      };
+
+      if (isEditing) {
+        setUpcomingTrips(prev => prev.map(t => t.id === adhocForm.id ? newTrip : t));
+        setPastTrips(prev => prev.map(t => t.id === adhocForm.id ? newTrip : t));
+      } else {
+        setUpcomingTrips(prev => [newTrip, ...prev]);
+      }
+      setIsAdhocModalOpen(false);
+    } else {
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+    }
+  };
 
   useEffect(() => {
     setSelectedDate(new Date().getDate());
@@ -21,22 +168,39 @@ export default function DriverSchedule() {
       // สมมติว่าคนขับที่เข้าสู่ระบบคือ driverId = 1 (สมชาย)
       const res = await getAssignedBookings(1); 
       if (res.success && res.bookings) {
-        const mapped = res.bookings.map((b: any) => ({
-          id: b.id,
-          date: new Date(b.departureDate).toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }),
-          destination: b.destination,
-          time: `${new Date(b.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
-          passengers: b.passengersCount,
-          requester: b.requester?.name || "-",
-          phone: "089-123-4567", 
-          pickup: "ตามที่นัดหมาย",
-          van: "รถตู้พะเยา",
-          project: b.objective,
-          status: b.driverLog ? "COMPLETED" : "ASSIGNED"
-        }));
+        const mapped: Trip[] = res.bookings.map((b: BookingData) => {
+          let actualData = undefined;
+          if (b.driverLog) {
+            const legs = b.driverLog.tripLegs || [];
+            const lastLeg = legs.length > 0 ? legs[legs.length - 1] : null;
+            actualData = {
+              totalDistance: b.driverLog.totalDistance,
+              legs: legs,
+              endLocation: lastLeg ? lastLeg.destination : b.destination,
+              endTime: lastLeg ? lastLeg.returnTime : "",
+              lastMileage: lastLeg ? lastLeg.endMileage : null,
+              startMileage: legs.length > 0 ? legs[0].startMileage : null,
+            };
+          }
 
-        setUpcomingTrips(mapped.filter((b: any) => b.status === "ASSIGNED"));
-        setPastTrips(mapped.filter((b: any) => b.status === "COMPLETED"));
+          return {
+            id: b.id,
+            date: new Date(b.departureDate).toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }),
+            destination: b.destination,
+            time: `${new Date(b.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
+            passengers: b.passengersCount,
+            requester: b.requester?.name || "-",
+            phone: "-", 
+            pickup: b.requester?.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
+            van: "รถตู้ที่รับผิดชอบ",
+            project: b.objective,
+            status: b.driverLog ? "COMPLETED" : "ASSIGNED",
+            actualData
+          };
+        });
+
+        setUpcomingTrips(mapped.filter((b: Trip) => b.status === "ASSIGNED"));
+        setPastTrips(mapped.filter((b: Trip) => b.status === "COMPLETED"));
       }
       setIsLoading(false);
     }
@@ -66,13 +230,22 @@ export default function DriverSchedule() {
             <h1 className="text-2xl font-black text-gray-900">ตารางงานของฉัน</h1>
             <p className="text-gray-500 text-sm mt-0.5">ตรวจสอบภารกิจการเดินทางล่วงหน้า</p>
           </div>
-          <button 
-            onClick={() => setCalendarMode(calendarMode === "week" ? "month" : "week")}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white shadow-sm border border-gray-200 text-[#311171] rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
-          >
-            <CalendarDays size={14} />
-            {calendarMode === "week" ? "ดูรายสัปดาห์" : "ดูรายเดือน"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleOpenAdhoc}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#311171] shadow-sm border border-[#311171] text-white rounded-xl text-xs font-bold hover:bg-[#270e59] transition-colors"
+            >
+              <Plus size={14} />
+              บันทึกงานด่วน
+            </button>
+            <button 
+              onClick={() => setCalendarMode(calendarMode === "week" ? "month" : "week")}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white shadow-sm border border-gray-200 text-[#311171] rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
+            >
+              <CalendarDays size={14} />
+              {calendarMode === "week" ? "ดูรายเดือน" : "ดูรายสัปดาห์"}
+            </button>
+          </div>
         </div>
 
         {/* Calendar Widget */}
@@ -141,6 +314,7 @@ export default function DriverSchedule() {
           </button>
         </div>
 
+
         {/* Trips List */}
         <div className="space-y-4">
           {isLoading ? (
@@ -169,14 +343,77 @@ export default function DriverSchedule() {
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Users size={16} className="text-gray-400" /> จำนวนผู้โดยสาร: {trip.passengers} คน
                     </div>
+                    {activeTab === "past" && trip.actualData && (
+                      <div className="mt-2 bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
+                        <div className="text-xs font-bold text-[#311171] mb-2 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin size={14} /> ข้อมูลการเดินทางจริง
+                          </div>
+                          {trip.actualData.lastMileage && (
+                            <div className="bg-[#311171] text-white px-2 py-1 rounded-md text-[10px] flex items-center gap-1 shadow-sm">
+                              <Car size={12} />
+                              เลขไมล์ล่าสุด: {Number(trip.actualData.lastMileage).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                        {trip.actualData.startMileage && (
+                          <div className="text-xs text-gray-600 flex justify-between">
+                            <span className="font-bold text-gray-500">เลขไมล์เริ่มต้น:</span>
+                            <span className="font-bold text-gray-900">{Number(trip.actualData.startMileage).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-600 flex justify-between">
+                          <span className="font-bold text-gray-500">เลขไมล์รวม:</span>
+                          <span className="font-bold text-gray-900">{trip.actualData.totalDistance.toLocaleString()} กม.</span>
+                        </div>
+                        {trip.actualData.legs.length > 1 && (
+                          <div className="text-xs text-gray-600">
+                            <span className="font-bold text-gray-500 mb-1 block">จุดแวะพัก:</span> 
+                            <ul className="list-disc pl-4 space-y-1">
+                              {trip.actualData.legs.slice(0, -1).map((leg, i) => (
+                                <li key={i}>{leg.destination} <span className="text-gray-400">(ออก {leg.deptTime} น. - ถึง {leg.returnTime} น.)</span></li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-600 flex justify-between">
+                          <span className="font-bold text-gray-500">จุดสิ้นสุด:</span>
+                          <span className="font-bold text-gray-900 text-right">{trip.actualData.endLocation}</span>
+                        </div>
+                        <div className="text-xs text-gray-600 flex justify-between">
+                          <span className="font-bold text-gray-500">เวลาสิ้นสุดจริง:</span>
+                          <span className="font-bold text-gray-900">{trip.actualData.endTime} น.</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <button 
-                    onClick={() => setSelectedTripDetails(trip)}
-                    className="w-full py-2.5 bg-gray-50 group-hover:bg-[#311171] text-gray-600 group-hover:text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all text-sm border border-gray-200 group-hover:border-[#311171] shadow-sm"
-                  >
-                    ดูรายละเอียดใบจองรถ <ChevronRight size={16} />
-                  </button>
+                  <div className="flex gap-2">
+                    {(trip.isAdhoc || String(trip.id).includes('UP-ADHOC') || trip.project === 'การใช้รถนอกแผน') && (
+                      <>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleEditAdhoc(trip); }}
+                          className="px-4 py-2.5 bg-white text-[#311171] font-bold rounded-xl flex items-center justify-center transition-all text-sm border border-gray-200 hover:bg-gray-50 shadow-sm"
+                          title="แก้ไข"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteAdhoc(trip.id); }}
+                          className="px-4 py-2.5 bg-white text-red-500 font-bold rounded-xl flex items-center justify-center transition-all text-sm border border-gray-200 hover:bg-red-50 shadow-sm"
+                          title="ลบ"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                    <button 
+                      onClick={() => setSelectedTripDetails(trip)}
+                      className="flex-1 py-2.5 bg-gray-50 group-hover:bg-[#311171] text-gray-600 group-hover:text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all text-sm border border-gray-200 group-hover:border-[#311171] shadow-sm"
+                    >
+                      ดูรายละเอียดใบจองรถ <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
               ))}
               
@@ -263,15 +500,139 @@ export default function DriverSchedule() {
               </div>
             </div>
 
-            <div className="p-4 border-t border-gray-100 bg-gray-50 shrink-0">
+            <div className="p-4 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-2">
+              {selectedTripDetails.isAdhoc && (
+                <>
+                  <button 
+                    onClick={() => handleEditAdhoc(selectedTripDetails)}
+                    className="flex-1 py-3 bg-white hover:bg-gray-100 text-[#311171] text-sm font-bold rounded-xl transition-colors border border-gray-200 flex items-center justify-center gap-2"
+                  >
+                    <Edit size={16} /> แก้ไข
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteAdhoc(selectedTripDetails.id)}
+                    className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-bold rounded-xl transition-colors border border-red-100 flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={16} /> ลบ
+                  </button>
+                </>
+              )}
               <button 
                 onClick={() => setSelectedTripDetails(null)}
-                className="w-full py-3 bg-white hover:bg-gray-100 text-gray-700 text-sm font-bold rounded-xl transition-colors border border-gray-200"
+                className={`${selectedTripDetails.isAdhoc ? 'flex-1' : 'w-full'} py-3 bg-white hover:bg-gray-100 text-gray-700 text-sm font-bold rounded-xl transition-colors border border-gray-200`}
               >
                 ปิดหน้าต่าง
               </button>
             </div>
             
+          </div>
+        </div>
+      )}
+
+      {/* Adhoc Form Modal */}
+      {isAdhocModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h2 className="text-lg font-black text-gray-900">
+                {adhocForm.id ? 'แก้ไขการใช้รถนอกแผน' : 'เพิ่มการใช้รถนอกแผน'}
+              </h2>
+              <button onClick={() => setIsAdhocModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveAdhoc} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">สถานที่ไป (ปลายทาง)</label>
+                <input 
+                  required
+                  type="text" 
+                  value={adhocForm.destination}
+                  onChange={e => setAdhocForm({...adhocForm, destination: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#311171] focus:ring-1 focus:ring-[#311171]"
+                  placeholder="เช่น เติมน้ำมัน, ล้างรถ, อื่นๆ"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">สถานที่รับ (จุดเริ่มต้น)</label>
+                <input 
+                  required
+                  type="text" 
+                  value={adhocForm.pickup}
+                  onChange={e => setAdhocForm({...adhocForm, pickup: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#311171] focus:ring-1 focus:ring-[#311171]"
+                  placeholder="เช่น มหาวิทยาลัยพะเยา"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 mb-1">วันที่</label>
+                <ThaiDatePicker 
+                  value={adhocForm.date}
+                  onChange={val => setAdhocForm({...adhocForm, date: val})}
+                  disabled={true}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">เวลาเริ่ม</label>
+                  <ThaiTimePicker 
+                    value={adhocForm.startTime}
+                    onChange={val => setAdhocForm({...adhocForm, startTime: val})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">เวลาสิ้นสุด</label>
+                  <ThaiTimePicker 
+                    value={adhocForm.endTime}
+                    onChange={val => setAdhocForm({...adhocForm, endTime: val})}
+                  />
+                </div>
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsAdhocModalOpen(false)}
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 py-2.5 bg-[#311171] hover:bg-[#2a0c63] text-white text-sm font-bold rounded-xl transition-colors shadow-md"
+                >
+                  บันทึก
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation.isOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden text-center">
+            <div className="p-6 pt-8">
+              <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} />
+              </div>
+              <h2 className="text-xl font-black text-gray-900 mb-2">ยืนยันการลบ</h2>
+              <p className="text-gray-500 text-sm">คุณแน่ใจหรือไม่ว่าต้องการลบรายการใช้รถนอกแผนนี้? การกระทำนี้ไม่สามารถเรียกคืนได้</p>
+            </div>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-3">
+              <button 
+                onClick={() => setDeleteConfirmation({isOpen: false, id: null})}
+                className="flex-1 py-3 bg-white hover:bg-gray-100 text-gray-700 text-sm font-bold rounded-xl transition-colors border border-gray-200"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={confirmDeleteAdhoc}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl transition-colors shadow-md"
+              >
+                ลบรายการ
+              </button>
+            </div>
           </div>
         </div>
       )}

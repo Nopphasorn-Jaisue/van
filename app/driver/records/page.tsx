@@ -18,6 +18,9 @@ export interface AssignedBooking {
   objective: string;
   requester?: {
     name: string;
+    faculty?: {
+      nameTh: string;
+    };
   };
   passengersCount?: number;
   driverLog?: unknown;
@@ -51,31 +54,64 @@ export default function DriverRecords() {
 
   const [assignedBookings, setAssignedBookings] = useState<AssignedBooking[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState("");
+  const [driverFaculty, setDriverFaculty] = useState("มหาวิทยาลัยพะเยา");
   const [isLoadingBookings, setIsLoadingBookings] = useState(true);
   const [isCreatingAdhoc, setIsCreatingAdhoc] = useState(false);
+  
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<'success' | 'warning'>('success');
 
-  const handleCreateAdhoc = async () => {
-    if (confirm("ต้องการสร้างรายการ 'ใช้รถนอกแผน' ใช่หรือไม่?")) {
-      setIsCreatingAdhoc(true);
-      const res = await createAdhocBooking(1); // Mock driverId
-      if (res.success && res.booking) {
-        // Add to assigned bookings list and select it
-        const newBooking = {
-          id: res.booking.id,
-          destination: res.booking.destination,
-          departureDate: res.booking.departureDate,
-          returnDate: res.booking.returnDate,
-          objective: res.booking.objective,
-          requester: { name: "คนขับ (นอกแผน)" }
-        };
-        setAssignedBookings(prev => [newBooking, ...prev]);
-        setSelectedBookingId(newBooking.id);
-        alert("สร้างรายการใช้รถนอกแผนสำเร็จ! กรุณากรอกข้อมูลการเดินทางด้านล่าง");
-      } else {
-        alert(res.error || "ไม่สามารถสร้างรายการได้");
-      }
-      setIsCreatingAdhoc(false);
+  const showNotification = (msg: string, type: 'success' | 'warning' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => {
+      setShowToast(false);
+    }, 3000);
+  };
+
+  const [isAdhocModalOpen, setIsAdhocModalOpen] = useState(false);
+  const [adhocForm, setAdhocForm] = useState({
+    destination: '',
+    date: '',
+    startTime: '',
+    endTime: '',
+    pickup: '',
+  });
+
+  const handleCreateAdhoc = () => {
+    setAdhocForm({
+      destination: '',
+      date: new Date().toISOString().split('T')[0],
+      startTime: '',
+      endTime: '',
+      pickup: '',
+    });
+    setIsAdhocModalOpen(true);
+  };
+
+  const handleSaveAdhoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAdhocModalOpen(false);
+    setIsCreatingAdhoc(true);
+    const res = await createAdhocBooking(1, adhocForm); // Mock driverId
+    if (res.success && res.booking) {
+      const newBooking = {
+        id: res.booking.id,
+        destination: res.booking.destination,
+        departureDate: res.booking.departureDate,
+        returnDate: res.booking.returnDate,
+        objective: res.booking.objective,
+        requester: { name: "คนขับ (นอกแผน)" }
+      };
+      setAssignedBookings(prev => [newBooking, ...prev]);
+      setSelectedBookingId(newBooking.id);
+      showNotification("สร้างรายการใช้รถนอกแผนสำเร็จ! กรุณากรอกข้อมูลการเดินทางด้านล่าง");
+    } else {
+      alert(res.error || "ไม่สามารถสร้างรายการได้");
     }
+    setIsCreatingAdhoc(false);
   };
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -84,7 +120,7 @@ export default function DriverRecords() {
     date: "",
     time: "",
     mileage: "",
-    location: "มหาวิทยาลัยพะเยา",
+    location: "",
     checklist: JSON.parse(JSON.stringify(defaultChecklist)) as ChecklistItem[]
   });
 
@@ -94,7 +130,7 @@ export default function DriverRecords() {
     date: "",
     time: "",
     mileage: "",
-    location: "",
+    location: "มหาวิทยาลัยพะเยา",
     checklist: JSON.parse(JSON.stringify(defaultChecklist)) as ChecklistItem[],
     fuelCost: "",
     fuelLiters: "",
@@ -104,9 +140,6 @@ export default function DriverRecords() {
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-  const [toastType, setToastType] = useState<'success' | 'warning'>('success');
 
   const [startImageFile, setStartImageFile] = useState<File | null>(null);
   const [startImagePreview, setStartImagePreview] = useState<string | null>(null);
@@ -129,6 +162,14 @@ export default function DriverRecords() {
         setAssignedBookings(available);
         if (available.length > 0) {
           setSelectedBookingId(available[0].id);
+        }
+        if (res.driverFacultyName) {
+          setDriverFaculty(res.driverFacultyName);
+          setEndTrip(s => ({ ...s, location: res.driverFacultyName }));
+        }
+        if (res.latestMileage !== null && res.latestMileage !== undefined) {
+          const mileageStr = res.latestMileage.toString();
+          setStartTrip(s => ({ ...s, mileage: mileageStr }));
         }
       }
       setIsLoadingBookings(false);
@@ -153,10 +194,16 @@ export default function DriverRecords() {
         return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       };
       
+      const isAdhoc = selectedBooking.id.includes("UP-ADHOC") || selectedBooking.requester?.name === "คนขับ (นอกแผน)";
+      const pickupLocation = isAdhoc 
+        ? driverFaculty 
+        : (selectedBooking.requester?.faculty?.nameTh || "มหาวิทยาลัยพะเยา");
+
       setStartTrip(s => ({
         ...s,
         date: deptDate.toISOString().split('T')[0],
-        time: formatTime(deptDate)
+        time: formatTime(deptDate),
+        location: pickupLocation
       }));
       
       setEndTrip(s => ({
@@ -164,6 +211,18 @@ export default function DriverRecords() {
         date: retDate.toISOString().split('T')[0],
         time: formatTime(retDate)
       }));
+
+      // Pre-fill the destination in step 2
+      setStopovers([
+        {
+          id: Date.now(),
+          location: selectedBooking.destination,
+          timeIn: "",
+          timeOut: "",
+          mileage: "",
+          remark: ""
+        }
+      ]);
     }
   }, [selectedBooking]);
 
@@ -171,15 +230,6 @@ export default function DriverRecords() {
   const startMileageNum = Number(startTrip.mileage) || 0;
   const endMileageNum = Number(endTrip.mileage) || 0;
   const totalDistance = endMileageNum > startMileageNum ? endMileageNum - startMileageNum : 0;
-
-  const showNotification = (msg: string, type: 'success' | 'warning' = 'success') => {
-    setToastMessage(msg);
-    setToastType(type);
-    setShowToast(true);
-    setTimeout(() => {
-      setShowToast(false);
-    }, 3000);
-  };
 
   const handleSaveDraft = () => {
     showNotification("บันทึกข้อมูลร่างเรียบร้อยแล้ว คุณสามารถกลับมาทำต่อได้ภายหลัง", "success");
@@ -196,7 +246,7 @@ export default function DriverRecords() {
   const handleNextToStep3 = () => {
     for (let i = 0; i < stopovers.length; i++) {
       const stop = stopovers[i];
-      if (!stop.location || !stop.timeIn || !stop.timeOut || !stop.mileage) {
+      if (!stop.location || !stop.timeIn || !stop.timeOut) {
         showNotification(`กรุณากรอกข้อมูลจุดแวะพักที่ ${i + 1} ให้ครบถ้วน`, "warning");
         return;
       }
@@ -368,7 +418,7 @@ export default function DriverRecords() {
               </div>
               <div className="flex gap-2">
                 <span className="text-gray-400 font-bold w-14 shrink-0">เส้นทาง:</span>
-                <span className="font-bold text-gray-900">มหาวิทยาลัยพะเยา → {selectedBooking.destination}</span>
+                <span className="font-bold text-gray-900">{startTrip.location || 'ระบุจุดเริ่มต้น'} → {selectedBooking.destination}</span>
               </div>
               <div className="flex gap-2">
                 <span className="text-gray-400 font-bold w-14 shrink-0">เวลา:</span>
@@ -397,7 +447,7 @@ export default function DriverRecords() {
                   {currentStep > step ? <CheckCircle size={16} /> : step}
                 </div>
                 <span className={`text-[10px] font-bold whitespace-nowrap ${currentStep === step ? 'text-gray-900' : ''}`}>
-                  {step === 1 ? 'เริ่มเดินทาง' : step === 2 ? 'ระหว่างทาง' : 'สิ้นสุด'}
+                  {step === 1 ? 'เริ่มเดินทาง' : step === 2 ? 'จุดหมาย/ระหว่างทาง' : 'สิ้นสุด'}
                 </span>
               </div>
               {step < 3 && (
@@ -486,14 +536,14 @@ export default function DriverRecords() {
             {stopovers.length === 0 ? (
               <div className="bg-orange-50 border border-orange-100 rounded-2xl p-6 text-center text-orange-600">
                 <MapPin size={24} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm font-bold">ยังไม่มีจุดแวะพักระหว่างทาง</p>
+                <p className="text-sm font-bold">ยังไม่มีจุดหมายปลายทางหรือจุดแวะพัก</p>
                 <p className="text-xs mt-1 opacity-80">หากขับตรงไปยังที่หมาย สามารถกดข้ามหน้านี้ได้เลย</p>
               </div>
             ) : (
               stopovers.map((stop, idx) => (
                 <div key={stop.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 space-y-3 relative">
                   <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                    <span className="font-black text-sm text-[#311171]">จุดแวะที่ {idx + 1}</span>
+                    <span className="font-black text-sm text-[#311171]">จุดหมาย/แวะที่ {idx + 1}</span>
                     <button onClick={() => setStopovers(stopovers.filter(s => s.id !== stop.id))} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={16}/></button>
                   </div>
                   
@@ -531,23 +581,13 @@ export default function DriverRecords() {
                       </div>
                     </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1">เลขไมล์</label>
-                      <input type="number" value={stop.mileage} onChange={e => {
-                        const newStops = [...stopovers];
-                        newStops[idx].mileage = e.target.value;
-                        setStopovers(newStops);
-                      }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1">หมายเหตุ</label>
-                      <input type="text" value={stop.remark} onChange={e => {
-                        const newStops = [...stopovers];
-                        newStops[idx].remark = e.target.value;
-                        setStopovers(newStops);
-                      }} placeholder="เช่น แวะทานข้าว" className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 outline-none" />
-                    </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1">หมายเหตุ</label>
+                    <input type="text" value={stop.remark} onChange={e => {
+                      const newStops = [...stopovers];
+                      newStops[idx].remark = e.target.value;
+                      setStopovers(newStops);
+                    }} placeholder="เช่น แวะทานข้าว" className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 outline-none" />
                   </div>
                 </div>
               ))
@@ -557,7 +597,7 @@ export default function DriverRecords() {
               onClick={() => setStopovers([...stopovers, { id: Date.now(), location: "", timeIn: "", timeOut: "", mileage: "", remark: "" }])}
               className="w-full py-3 bg-purple-50 border border-purple-200 border-dashed text-[#311171] font-bold rounded-xl text-sm flex justify-center items-center gap-2 hover:bg-purple-100 transition-colors"
             >
-              <Plus size={16} /> เพิ่มจุดแวะ
+              <Plus size={16} /> เพิ่มจุดหมาย/แวะพัก
             </button>
 
             <div className="flex gap-3 pt-4">
@@ -742,6 +782,86 @@ export default function DriverRecords() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Adhoc Form Modal */}
+        {isAdhocModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full flex flex-col max-h-[90vh]">
+              <div className="p-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center shrink-0 rounded-t-3xl">
+                <h2 className="text-xl font-black text-gray-900">เพิ่มการใช้รถนอกแผน</h2>
+                <button 
+                  onClick={() => setIsAdhocModalOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleSaveAdhoc} className="p-6 overflow-y-visible space-y-5">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">สถานที่ไป (ปลายทาง)</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={adhocForm.destination}
+                    onChange={e => setAdhocForm({...adhocForm, destination: e.target.value})}
+                    placeholder="เช่น เซ็นทรัลพะเยา" 
+                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#311171]/20" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">สถานที่รับ (จุดเริ่มต้น)</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={adhocForm.pickup}
+                    onChange={e => setAdhocForm({...adhocForm, pickup: e.target.value})}
+                    placeholder="เช่น หน้าคณะไอที" 
+                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#311171]/20" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">วันที่</label>
+                  <ThaiDatePicker 
+                    value={adhocForm.date}
+                    onChange={val => setAdhocForm({...adhocForm, date: val})}
+                    disabled={true}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1">เวลาเริ่ม</label>
+                    <ThaiTimePicker 
+                      value={adhocForm.startTime}
+                      onChange={val => setAdhocForm({...adhocForm, startTime: val})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1">เวลาสิ้นสุด</label>
+                    <ThaiTimePicker 
+                      value={adhocForm.endTime}
+                      onChange={val => setAdhocForm({...adhocForm, endTime: val})}
+                    />
+                  </div>
+                </div>
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsAdhocModalOpen(false)}
+                    className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-colors"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-1 py-2.5 bg-[#311171] hover:bg-[#2a0c63] text-white text-sm font-bold rounded-xl transition-colors shadow-md"
+                  >
+                    บันทึก
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

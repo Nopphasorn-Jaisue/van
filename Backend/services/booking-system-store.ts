@@ -38,7 +38,7 @@ type SeedBooking = {
 };
 
 const seedDrivers: SeedDriver[] = [
-  { name: "นายสมชาย ใจดี", phone: "081-234-5678", facultyName: "คณะเกษตรศาสตร์", vanPlate: "นข 6789 พะเยา", age: 45 },
+  { name: "นายสมชาย ใจดี", phone: "081-234-5678", facultyName: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร", vanPlate: "นข 6789 พะเยา", age: 45 },
   { name: "นายอนุชา คำมี", phone: "086-345-6789", facultyName: "คณะ ICT", vanPlate: "นข 1122 พะเยา", age: 41 },
   { name: "นายวิชัย แสนดี", phone: "089-456-7890", facultyName: "คณะพลังงาน", vanPlate: "นข 2233 พะเยา", age: 47 },
   { name: "นายประเสริฐ จันทรดี", phone: "090-567-8901", facultyName: "คณะวิทยาศาสตร์", vanPlate: "นข 3344 พะเยา", age: 39 },
@@ -73,7 +73,7 @@ const seedBookings: SeedBooking[] = [
   {
     id: "UPV-2569-0067",
     requester: "อ.นันทนา จันทร์ใส",
-    requesterFaculty: "คณะเกษตรศาสตร์",
+    requesterFaculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
     destination: "จังหวัดลำปาง",
     purpose: "ประชุมโครงการ",
     passengers: 8,

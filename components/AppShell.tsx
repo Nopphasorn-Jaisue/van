@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, BarChart3, Clock, ShieldAlert, LayoutDashboard, Wrench, Settings, Phone,
+  Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, BarChart3, Clock, ShieldAlert, LayoutDashboard, Wrench,
   X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
@@ -26,8 +26,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         return [{ id: 1, type: 'success', text: '✅ คำขอจองรถตู้ (UP-2567-0120) ของคุณได้รับการอนุมัติแล้ว', time: '10 นาทีที่แล้ว' }];
       case 'FACULTY_ADMIN':
         return [
-          { id: 1, type: 'info', text: '🆕 มีคำขอใหม่จาก ดร.สมเกียรติ (10 คน)', time: '5 นาทีที่แล้ว' },
-          { id: 2, type: 'duties', text: 'ℹ️ ดูสิทธิ์และหน้าที่ของแอดมินคณะ', time: 'แนะนำ' }
+          { id: 1, type: 'info', text: '🆕 มีคำขอใหม่จาก ดร.สมเกียรติ (10 คน)', time: '5 นาทีที่แล้ว' }
         ];
       case 'EXECUTIVE':
         return [{ id: 1, type: 'urgent', text: '🚨 ด่วน: คำขอเดินทางข้ามจังหวัดพรุ่งนี้ (รออนุมัติ)', time: '15 นาทีที่แล้ว' }];
@@ -69,7 +68,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {userRole === 'FACULTY_ADMIN' && (
+              <button 
+                onClick={() => setShowDutiesModal(true)}
+                className="p-2 text-gray-500 hover:text-[#311171] hover:bg-purple-50 rounded-full transition-colors flex items-center gap-2"
+                title="สิทธิ์และหน้าที่ของแอดมินคณะ"
+              >
+                <Info size={20} />
+                <span className="hidden sm:inline text-sm font-bold">สิทธิ์และหน้าที่</span>
+              </button>
+            )}
+
             {/* 🔔 ปุ่มกระดิ่งแจ้งเตือน */}
             <div className="relative" ref={dropdownRef}>
               <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 text-gray-500 hover:text-purple-700 hover:bg-purple-50 rounded-full transition-colors">
@@ -278,6 +288,8 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: CarFront, label: "จัดการรถประจำคณะ", href: "/faculty-admin/vans" },
         { icon: Wrench, label: "ซ่อมบำรุง & ภาษี", href: "/faculty-admin/maintenance" },
         { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
+        { icon: FileSignature, label: "บันทึกการเดินทางคนขับประจำคณะ", href: "/faculty-admin/driver-records" },
+        { icon: FilePlus, label: "เบิกค่าใช้จ่ายรายทริป", href: "/faculty-admin/trip-expenses" },
         { icon: BarChart3, label: "รายงานและสถิติ", href: "/faculty-admin/reports" },
       ];
     }
@@ -321,7 +333,7 @@ function Sidebar({ userRole }: { userRole: string }) {
     }
   };
 
-  const userFaculty = "คณะเกษตรศาสตร์"; // ตัวอย่างข้อมูลคณะ
+  const userFaculty = "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"; // ตัวอย่างข้อมูลคณะ
 
   return (
     <aside className="w-64 bg-gradient-to-b from-[#2a0c63] via-[#2f0f6f] to-[#240a58] text-white hidden md:flex flex-col h-full shadow-xl z-20 shrink-0">

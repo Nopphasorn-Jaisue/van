@@ -81,6 +81,7 @@ model Van {
   facultyId Int      @map("faculty_id") // 1 คณะต่อหลายคันได้
   faculty   Faculty  @relation(fields: [facultyId], references: [id])
   
+  name      String?  @map("name")
   plate     String   @map("plate") // ทะเบียนรถ เช่น นข 1234 พะเยา
   engine    String?  @map("engine")
   capacity  Int      @default(12)  @map("capacity") // จำนวนที่นั่ง

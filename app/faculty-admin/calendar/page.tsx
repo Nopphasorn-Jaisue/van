@@ -209,7 +209,7 @@ function CalendarContent() {
   const vansList = [
     {
       id: "v1",
-      faculty: "คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ",
+      faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
       vanName: "รถตู้คณะเกษตรฯ 01",
       plate: "ทะเบียน นข 1234 พะเยา",
       driverName: "นายสมชาย ใจดี",

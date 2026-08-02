@@ -49,7 +49,7 @@ function BookingFormContent() {
   const userProfile = {
     name: "ดร.สมเกียรติ เรียนดี",
     position: "อาจารย์ประจำหลักสูตร",
-    faculty: "คณะเกษตรศาสตร์",
+    faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
     email: "somkiat.re@up.ac.th"
   };
 

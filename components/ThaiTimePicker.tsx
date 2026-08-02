@@ -92,14 +92,14 @@ export default function ThaiTimePicker({ value, onChange, className = '', placeh
 
       {/* Popover */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 top-full left-0 w-48 bg-white rounded-xl shadow-xl border border-gray-200 p-4 animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute z-50 mb-1 bottom-full left-0 w-48 bg-white rounded-xl shadow-xl border border-gray-200 p-4 animate-in fade-in zoom-in-95 duration-100">
           
           <div className="flex items-center justify-center gap-3 mb-4">
             
             {/* Hour Block */}
             <div className="flex flex-col items-center gap-1">
               <span className="text-[10px] font-bold text-gray-400 mb-1">ชั่วโมง</span>
-              <button onClick={decrementHour} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold">^</button>
+              <button type="button" onClick={decrementHour} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold">^</button>
               <input 
                 type="text" 
                 value={hour}
@@ -107,7 +107,7 @@ export default function ThaiTimePicker({ value, onChange, className = '', placeh
                 onBlur={() => setHour(formatNumber(hour))}
                 className="w-12 h-10 text-center font-black text-lg text-[#311171] bg-purple-50 border border-purple-100 rounded-lg outline-none focus:ring-2 focus:ring-[#311171]"
               />
-              <button onClick={incrementHour} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold rotate-180">^</button>
+              <button type="button" onClick={incrementHour} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold rotate-180">^</button>
             </div>
             
             <div className="font-black text-gray-300 text-xl mt-4">:</div>
@@ -115,7 +115,7 @@ export default function ThaiTimePicker({ value, onChange, className = '', placeh
             {/* Minute Block */}
             <div className="flex flex-col items-center gap-1">
               <span className="text-[10px] font-bold text-gray-400 mb-1">นาที</span>
-              <button onClick={decrementMinute} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold">^</button>
+              <button type="button" onClick={decrementMinute} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold">^</button>
               <input 
                 type="text" 
                 value={minute}
@@ -123,12 +123,13 @@ export default function ThaiTimePicker({ value, onChange, className = '', placeh
                 onBlur={() => setMinute(formatNumber(minute))}
                 className="w-12 h-10 text-center font-black text-lg text-[#311171] bg-purple-50 border border-purple-100 rounded-lg outline-none focus:ring-2 focus:ring-[#311171]"
               />
-              <button onClick={incrementMinute} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold rotate-180">^</button>
+              <button type="button" onClick={incrementMinute} className="w-10 h-6 bg-gray-50 rounded text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold rotate-180">^</button>
             </div>
             
           </div>
 
           <button 
+            type="button"
             onClick={handleConfirm}
             className="w-full py-2 bg-[#311171] text-white rounded-lg text-xs font-bold hover:bg-[#250d55] transition-colors shadow-sm"
           >

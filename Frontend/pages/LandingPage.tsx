@@ -225,7 +225,7 @@ function getCalendarTitle(viewMode: CalendarViewMode, date: Date | null): string
   return `${monthNames[date.getMonth()]} ${date.getFullYear() + 543}`;
 }
 
-const previewFacultyIds = ['agri', 'ict', 'med', 'law', 'bca', 'sci'];
+const previewFacultyIds = ['agri', 'ict', 'seen', 'pharm', 'med', 'law', 'bca', 'sci'];
 
 export default function LandingPage() {
   const [showManualModal, setShowManualModal] = useState(false);
@@ -272,7 +272,49 @@ export default function LandingPage() {
 
         const data = await response.json();
         const mappedEvents = mapApiEventsToNetwork(data.events || {});
-        setNetworkEvents(mappedEvents.length ? mappedEvents : fallbackEvents);
+        
+        // --- Inject Beta Data for Demonstration ---
+        const betaStart1 = new Date(year, month - 1, 12, 8, 0, 0); // 12th of this month
+        const betaEnd1 = new Date(betaStart1);
+        betaEnd1.setDate(betaEnd1.getDate() + 3); // Spans 12, 13, 14, 15
+        
+        const betaStart2 = new Date(year, month - 1, 18, 9, 0, 0); // 18th
+        const betaEnd2 = new Date(betaStart2);
+        betaEnd2.setHours(betaEnd2.getHours() + 10);
+        
+        const betaEvents: NetworkCalendarEvent[] = [
+          {
+            id: 'beta-multi-day',
+            facultyId: 'ict',
+            title: 'สัมมนาดูงานภาคใต้ (4 วัน)',
+            destination: 'สัมมนาดูงานภาคใต้ (4 วัน)',
+            vanCode: 'Van 12',
+            start: betaStart1.toISOString(),
+            end: betaEnd1.toISOString(),
+            status: 'approved',
+            scope: 'outbound',
+            vansInUse: 1
+          },
+          {
+            id: 'beta-shared',
+            facultyId: 'sci', // เจ้าของรถคือวิทย์
+            title: 'เกษตรฯ ยืมรถไปเชียงราย',
+            destination: 'เกษตรฯ ยืมรถไปเชียงราย',
+            vanCode: 'Van 07',
+            start: betaStart2.toISOString(),
+            end: betaEnd2.toISOString(),
+            status: 'shared', // สถานะ: ยืมร่วมเครือข่าย
+            scope: 'outbound',
+            vansInUse: 1
+          }
+        ];
+        
+        let finalEvents = mappedEvents.length ? mappedEvents : fallbackEvents;
+        
+        // Insert beta events if not already exist (to avoid dupes and show demo)
+        finalEvents = [...finalEvents, ...betaEvents];
+        
+        setNetworkEvents(finalEvents);
       } catch {
         setNetworkEvents(fallbackEvents);
       } finally {
@@ -287,17 +329,28 @@ export default function LandingPage() {
   const calendarDays = buildCalendarDays(currentDate);
   const displayedDays = viewMode === 'week' ? buildWeekDays(currentDate ?? new Date()) : calendarDays;
 
-  const filteredEvents = networkEvents.filter((event) => (
-    selectedFaculty === 'all' || event.facultyId === selectedFaculty
-  ));
+  const validFacultyIds = facultiesList.map(f => f.id);
+  const filteredEvents = networkEvents.filter((event) => {
+    if (!validFacultyIds.includes(event.facultyId)) return false;
+    return selectedFaculty === 'all' || event.facultyId === selectedFaculty;
+  });
 
   const eventMap = filteredEvents.reduce<Record<string, NetworkCalendarEvent[]>>((result, event) => {
-    const key = toIsoDay(new Date(event.start));
-    if (!result[key]) {
-      result[key] = [];
+    const startDate = new Date(event.start);
+    const endDate = new Date(event.end);
+    
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+    
+    // Add event to every day it spans
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const key = toIsoDay(d);
+      if (!result[key]) {
+        result[key] = [];
+      }
+      result[key].push(event);
     }
 
-    result[key].push(event);
     return result;
   }, {});
 
@@ -493,11 +546,12 @@ export default function LandingPage() {
           </div>
 
           <div className="relative z-10 mx-auto max-w-7xl px-4 md:px-6">
-            <div className="flex flex-col gap-2 text-center items-center mb-5">
-              <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-4xl drop-shadow-sm">ปฏิทินรวมการใช้รถตู้รายคณะ</h2>
-            </div>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-5">
+              <h2 className="text-xl font-black tracking-tight text-slate-900 md:text-2xl drop-shadow-sm">
+                ปฏิทินรวมการใช้รถตู้รายคณะ
+              </h2>
 
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() => setSelectedFaculty('all')}
@@ -565,7 +619,8 @@ export default function LandingPage() {
                 className="cursor-pointer rounded-xl border border-white/50 bg-white/80 backdrop-blur-md px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm outline-none transition hover:bg-white focus:border-violet-500 focus:bg-white focus:ring-2 focus:ring-violet-500/20"
               />
             </div>
-          </div>
+              </div>
+            </div>
 
           <div className="mt-5">
             <div className="overflow-hidden rounded-[32px] border border-white/60 bg-white/70 backdrop-blur-xl shadow-[0_20px_60px_rgba(49,17,113,0.15)]">
@@ -629,10 +684,6 @@ export default function LandingPage() {
                 )) : (
                   <span className="text-slate-500">ยังไม่มีคิวเดินรถในเดือนนี้</span>
                 )}
-                <span className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-slate-400 shadow-sm" />
-                  อื่นๆ
-                </span>
               </div>
             </div>
           </div>
@@ -809,6 +860,9 @@ function CalendarMonthCell({
     }
 
     const facultyColor = faculty?.palette.accentRgb ?? 'rgba(148, 163, 184, 0.5)';
+    const borrowerId = inferFacultyId(event.title);
+    const borrowerFaculty = borrowerId !== 'network' ? getFacultyById(borrowerId) : null;
+
     return (
       <button
         key={event.id}
@@ -819,14 +873,21 @@ function CalendarMonthCell({
         className={`w-full text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md rounded-xl border-l-4 px-2 py-1.5 bg-white/80 backdrop-blur-sm border-white shrink-0`}
         style={{ borderLeftColor: facultyColor }}
       >
-        <div className="flex items-center justify-between gap-1">
-          <span className={`font-bold truncate text-[11px] 2xl:text-xs ${faculty?.palette.accent ?? 'text-slate-800'}`}>
-            {faculty?.shortName ?? 'ส่วนกลาง'}
-          </span>
-          <div className="flex items-center gap-1 shrink-0">
-            <span className={`h-1.5 w-1.5 rounded-full ${meta.chip}`} />
-            <span className="text-[10px] 2xl:text-[11px] font-semibold text-slate-500">{meta.label}</span>
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between gap-1">
+            <span className={`font-bold truncate text-[11px] 2xl:text-xs ${faculty?.palette.accent ?? 'text-slate-800'}`}>
+              {faculty?.shortName ?? 'อื่นๆ'}
+            </span>
+            {event.status === 'shared' && borrowerFaculty && (
+              <div className="flex items-center gap-1 shrink-0">
+                <span className={`h-1.5 w-1.5 rounded-full ${meta.chip}`} />
+                <span className="text-[10px] 2xl:text-[11px] font-semibold text-slate-500">
+                  {borrowerFaculty.shortName}
+                </span>
+              </div>
+            )}
           </div>
+          <span className="text-[10px] text-slate-500 truncate mt-0.5">{event.destination}</span>
         </div>
       </button>
     );
@@ -918,12 +979,11 @@ function EventDetailModal({ event, onClose }: { event: NetworkCalendarEvent | nu
     { label: 'เดินทางไป', value: event.destination },
     { label: 'เวลา', value: `${pad(eventStart.getHours())}:${pad(eventStart.getMinutes())} น.` },
     { label: 'วัตถุประสงค์', value: event.title },
-    { label: 'สถานะ', value: statusMeta[event.status].label },
   ];
 
-  if (event.status === 'shared') {
-    detailItems.push({ label: 'รถของคณะ', value: 'ยืมจากเครือข่ายส่วนกลาง' });
-  }
+
+
+
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-200">
@@ -935,7 +995,7 @@ function EventDetailModal({ event, onClose }: { event: NetworkCalendarEvent | nu
             </div>
             <button type="button" onClick={onClose} aria-label="ปิด" className="rounded-full bg-black/10 p-1.5 text-black/50 transition hover:bg-black/20 hover:text-black/80"><X size={16} /></button>
           </div>
-          <h3 className="mt-3 text-xl font-black text-slate-950">{faculty?.name ?? 'ส่วนกลาง'}</h3>
+          <h3 className="mt-3 text-xl font-black text-slate-950">{faculty?.name ?? 'อื่นๆ'}</h3>
           <p className="text-sm font-semibold text-slate-500">
             {eventStart.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
@@ -1002,7 +1062,7 @@ function DayEventsModal({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className={`font-black truncate text-sm ${faculty?.palette.accent ?? 'text-slate-800'}`}>
-                    {faculty?.name ?? 'ส่วนกลาง'}
+                    {faculty?.name ?? 'อื่นๆ'}
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className={`h-2.5 w-2.5 rounded-full ${meta.chip}`} />

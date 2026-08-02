@@ -4,7 +4,7 @@ const MOCK_VANS = [
   { id: "v2", plate: "นข 6543", facultyId: "SEEN", facultyName: "คณะพลังงานฯ", capacity: 12, status: "READY" },
   { id: "v3", plate: "นข 9876", facultyId: "SCI", facultyName: "คณะวิทยาศาสตร์", capacity: 12, status: "READY" },
   { id: "v4", plate: "นข 5678", facultyId: "ICT", facultyName: "คณะ ICT", capacity: 12, status: "READY" },
-  { id: "v5", plate: "นข 1111", facultyId: "AGRI", facultyName: "คณะเกษตรศาสตร์ฯ", capacity: 10, status: "READY" },
+  { id: "v5", plate: "นข 1111", facultyId: "ICT", facultyName: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร", capacity: 10, status: "READY" },
 ];
 
 const MOCK_ALLIANCES = [

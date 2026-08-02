@@ -4,19 +4,22 @@ import { prisma } from "@/lib/prisma";
 export async function handleListVans() {
   try {
     const vans = await prisma.van.findMany({
-      include: { faculty: true },
+      include: { faculty: { include: { drivers: { include: { user: true } } } } },
       orderBy: { id: "asc" },
     });
 
     const mapped = vans.map(v => ({
       id: v.id.toString(),
-      vanName: `รถตู้${v.faculty.nameTh} ${v.id.toString().padStart(2, '0')}`,
+      vanName: v.name || `รถตู้${v.faculty.nameTh} ${v.id.toString().padStart(2, '0')}`,
       plate: v.plate,
       capacity: v.capacity,
       fuelType: v.engine || "ดีเซล",
+      taxExp: v.taxExp ? v.taxExp.toISOString().split('T')[0] : "",
+      insExp: v.insExp ? v.insExp.toISOString().split('T')[0] : "",
       status: v.isActive ? "ready" : "maintenance",
       isShared: v.isShared ?? true,
-      image: v.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80"
+      image: v.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80",
+      driverName: v.faculty.drivers && v.faculty.drivers.length > 0 ? v.faculty.drivers[0].user.name : "ยังไม่ระบุ"
     }));
 
     return NextResponse.json({ vans: mapped });
@@ -34,12 +37,15 @@ export async function handleCreateVan(request: Request) {
     const van = await prisma.van.create({
       data: {
         facultyId: faculty.id,
+        name: body.vanName,
         plate: body.plate,
         capacity: body.capacity || 12,
         engine: body.fuelType || "ดีเซล",
         isActive: body.status === "ready",
         isShared: body.isShared !== undefined ? body.isShared : true,
         image: body.image,
+        taxExp: body.taxExp ? new Date(body.taxExp) : null,
+        insExp: body.insExp ? new Date(body.insExp) : null,
       }
     });
 
@@ -57,12 +63,15 @@ export async function handleUpdateVan(request: Request, id: string) {
     const van = await prisma.van.update({
       where: { id: numericId },
       data: {
+        name: body.vanName,
         plate: body.plate,
         capacity: body.capacity,
         engine: body.fuelType,
         isActive: body.status === "ready",
         isShared: body.isShared !== undefined ? body.isShared : true,
         image: body.image,
+        taxExp: body.taxExp ? new Date(body.taxExp) : null,
+        insExp: body.insExp ? new Date(body.insExp) : null,
       }
     });
 

@@ -57,7 +57,7 @@ const CROSS_FACULTY_USAGE = [
     { borrower: "คณะนิติศาสตร์", lender: "วิศวกรรมศาสตร์", count: 18, percent: 90 },
     { borrower: "คณะวิทยาศาสตร์สุขภาพ", lender: "พยาบาลศาสตร์", count: 15, percent: 75 },
     { borrower: "คณะสถาปัตยกรรมศาสตร์", lender: "วิศวกรรมศาสตร์", count: 11, percent: 60 },
-    { borrower: "คณะเกษตรศาสตร์", lender: "รัฐศาสตร์และสังคมศาสตร์", count: 9, percent: 50 },
+    { borrower: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร", lender: "รัฐศาสตร์และสังคมศาสตร์", count: 9, percent: 50 },
 ];
 
 

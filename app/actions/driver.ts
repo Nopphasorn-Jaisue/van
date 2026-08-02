@@ -115,29 +115,57 @@ export async function getDriverDashboardData(driverId: number) {
 
 export async function getAssignedBookings(driverId: number) {
   try {
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: { faculty: true }
+    });
+
     const bookings = await prisma.booking.findMany({
       where: {
         assignedDriverId: driverId,
-        status: "APPROVED" // Ensure it's approved and assigned
+        status: "APPROVED"
       },
       include: {
-        requester: true,
+        requester: {
+          include: { faculty: true }
+        },
         targetFaculty: true,
-        driverLog: true
+        driverLog: {
+          include: { tripLegs: true }
+        }
       },
       orderBy: {
         departureDate: 'asc'
       }
     });
 
-    return { success: true, bookings };
+    const latestDriverLog = await prisma.driverLog.findFirst({
+      where: { driverId: driverId },
+      orderBy: { createdAt: 'desc' },
+      select: { mileageEnd: true }
+    });
+
+    return { 
+      success: true, 
+      bookings, 
+      driverFacultyName: driver?.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
+      latestMileage: latestDriverLog?.mileageEnd || null
+    };
   } catch (error) {
     console.error("Error fetching bookings:", error);
     return { success: false, error: "Failed to fetch bookings" };
   }
 }
 
-export async function createAdhocBooking(driverId: number) {
+export interface AdhocFormData {
+  destination: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  pickup: string;
+}
+
+export async function createAdhocBooking(driverId: number, data?: AdhocFormData) {
   try {
     const driver = await prisma.driver.findUnique({
       where: { id: driverId },
@@ -149,17 +177,29 @@ export async function createAdhocBooking(driverId: number) {
     }
 
     const newBookingId = `UP-ADHOC-${Date.now()}`;
-    const now = new Date();
+    
+    let departureDate = new Date();
+    let returnDate = new Date();
+    
+    if (data?.date) {
+      const startStr = data.startTime || '00:00';
+      const endStr = data.endTime || '23:59';
+      departureDate = new Date(`${data.date}T${startStr}:00`);
+      returnDate = new Date(`${data.date}T${endStr}:00`);
+      
+      if (isNaN(departureDate.getTime())) departureDate = new Date();
+      if (isNaN(returnDate.getTime())) returnDate = new Date();
+    }
 
     const booking = await prisma.booking.create({
       data: {
         id: newBookingId,
         requesterId: driver.userId,
         targetFacultyId: driver.facultyId,
-        destination: "การใช้รถนอกแผน",
-        objective: "ใช้งานนอกแผน / ภารกิจเร่งด่วน",
-        departureDate: now,
-        returnDate: now,
+        destination: data?.destination || "การใช้รถนอกแผน",
+        objective: data?.pickup ? `จุดรับ: ${data.pickup}` : "ใช้งานนอกแผน / ภารกิจเร่งด่วน",
+        departureDate,
+        returnDate,
         passengersCount: 0,
         budgetSource: "-",
         status: "APPROVED",
@@ -173,6 +213,55 @@ export async function createAdhocBooking(driverId: number) {
   } catch (error) {
     console.error("Error creating ad-hoc booking:", error);
     return { success: false, error: "Failed to create ad-hoc booking" };
+  }
+}
+
+export async function updateAdhocBooking(bookingId: string, data: AdhocFormData) {
+  try {
+    let departureDate = new Date();
+    let returnDate = new Date();
+    
+    if (data?.date) {
+      const startStr = data.startTime || '00:00';
+      const endStr = data.endTime || '23:59';
+      departureDate = new Date(`${data.date}T${startStr}:00`);
+      returnDate = new Date(`${data.date}T${endStr}:00`);
+      
+      if (isNaN(departureDate.getTime())) departureDate = new Date();
+      if (isNaN(returnDate.getTime())) returnDate = new Date();
+    }
+
+    const booking = await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        destination: data.destination || "การใช้รถนอกแผน",
+        objective: data.pickup ? `จุดรับ: ${data.pickup}` : "ใช้งานนอกแผน / ภารกิจเร่งด่วน",
+        departureDate,
+        returnDate,
+      }
+    });
+
+    revalidatePath('/driver/schedule');
+    revalidatePath('/driver/records');
+    
+    return { success: true, booking };
+  } catch (error) {
+    console.error("Error updating ad-hoc booking:", error);
+    return { success: false, error: "Failed to update ad-hoc booking" };
+  }
+}
+
+export async function deleteAdhocBooking(bookingId: string) {
+  try {
+    await prisma.booking.delete({
+      where: { id: bookingId }
+    });
+    revalidatePath('/driver/schedule');
+    revalidatePath('/driver/records');
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting ad-hoc booking:", error);
+    return { success: false, error: "Failed to delete ad-hoc booking" };
   }
 }
 

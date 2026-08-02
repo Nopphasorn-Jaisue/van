@@ -44,7 +44,7 @@ export const facultiesList: FacultyDirectory[] = [
     availableVans: 1,
     homeBase: 'อาคารบริการดิจิทัล',
     focus: 'เครือข่ายและระบบสารสนเทศ',
-    palette: { surface: 'bg-sky-50', border: 'border-sky-200', accent: 'text-sky-700', chip: 'bg-sky-600', muted: 'text-sky-600', accentRgb: '#0284c7' },
+    palette: { surface: 'bg-[#C5AB75]/10', border: 'border-[#CBB380]', accent: 'text-[#C5AB75]', chip: 'bg-[#C5AB75]', muted: 'text-[#CBB380]', accentRgb: '#C5AB75' },
   },
   {
     id: 'seen',
@@ -56,7 +56,7 @@ export const facultiesList: FacultyDirectory[] = [
     availableVans: 1,
     homeBase: 'อาคารพลังงานสะอาด',
     focus: 'ภาคสนามและเซนเซอร์',
-    palette: { surface: 'bg-orange-50', border: 'border-orange-200', accent: 'text-orange-700', chip: 'bg-orange-500', muted: 'text-orange-600', accentRgb: '#f97316' },
+    palette: { surface: 'bg-lime-50', border: 'border-lime-200', accent: 'text-lime-700', chip: 'bg-lime-500', muted: 'text-lime-700', accentRgb: '#84cc16' },
   },
   {
     id: 'sci',
@@ -68,7 +68,7 @@ export const facultiesList: FacultyDirectory[] = [
     availableVans: 1,
     homeBase: 'ศูนย์เครื่องมือวิทย์',
     focus: 'วิจัยและห้องปฏิบัติการ',
-    palette: { surface: 'bg-blue-50', border: 'border-blue-200', accent: 'text-blue-700', chip: 'bg-blue-500', muted: 'text-blue-600', accentRgb: '#3b82f6' },
+    palette: { surface: 'bg-[#FBBC39]/10', border: 'border-[#FBBC39]/30', accent: 'text-[#FBBC39]', chip: 'bg-[#FBBC39]', muted: 'text-[#FBBC39]/80', accentRgb: '#FBBC39' },
   },
   {
     id: 'pharm',
@@ -80,6 +80,6 @@ export const facultiesList: FacultyDirectory[] = [
     availableVans: 1,
     homeBase: 'คลังเวชภัณฑ์กลาง',
     focus: 'ส่งยาและเวชภัณฑ์',
-    palette: { surface: 'bg-lime-50', border: 'border-lime-200', accent: 'text-lime-700', chip: 'bg-lime-500', muted: 'text-lime-700', accentRgb: '#84cc16' },
+    palette: { surface: 'bg-[#51621F]/10', border: 'border-[#51621F]/30', accent: 'text-[#51621F]', chip: 'bg-[#51621F]', muted: 'text-[#51621F]/80', accentRgb: '#51621F' },
   },
 ];

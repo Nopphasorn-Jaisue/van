@@ -9,9 +9,9 @@ import type {
 export const faculties: Faculty[] = [
   {
     faculty_id: "fac-001",
-    faculty_name: "คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ",
+    faculty_name: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
     calendar_type: "GOOGLE",
-    dms_unit_code: "DMS-AGRI",
+    dms_unit_code: "DMS-ICT",
   },
   {
     faculty_id: "fac-002",
@@ -167,7 +167,7 @@ export const calendarEvents: CalendarEvent[] = [
     van_id: "van-001",
     source_system: "GOOGLE",
     external_event_id: "google-event-001",
-    title: "คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ ขอใช้รถไปเชียงราย",
+    title: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร ขอใช้รถไปเชียงราย",
     start_datetime: "2026-06-12T09:00:00",
     end_datetime: "2026-06-12T16:00:00",
     sync_status: "SYNCED",

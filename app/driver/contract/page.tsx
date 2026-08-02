@@ -1,20 +1,30 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { CarFront, Calendar, ShieldCheck, Clock, FileText, AlertCircle } from 'lucide-react';
+import { CarFront, Calendar, ShieldCheck, Clock, FileText, AlertCircle, User } from 'lucide-react';
 
 export default function DriverContract() {
-  // Mock Data
-  const driverData = {
-    name: "นายสมชาย ใจดี",
-    vanAssigned: "รถตู้คณะเกษตร 01",
-    plate: "นข 1234 พะเยา",
-    contractStart: "2022-05-10", // Example date
-  };
-
+  const [driverData, setDriverData] = useState<{
+    name: string;
+    avatar?: string | null;
+    vanAssigned: string;
+    plate: string;
+    contractStart: string;
+  } | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     setMounted(true);
+    fetch('/api/driver/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.driverData) {
+          setDriverData(data.driverData);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   const calculateExpiry = (startDate: string, years: number) => {
@@ -31,6 +41,26 @@ export default function DriverContract() {
     });
   };
 
+  if (!mounted || loading) {
+    return (
+      <AppShell>
+        <div className="w-full h-screen flex items-center justify-center">
+          <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!driverData) {
+    return (
+      <AppShell>
+        <div className="w-full text-center mt-20 text-gray-500">
+          ไม่พบข้อมูลสัญญาของคุณ กรุณาติดต่อผู้ดูแลระบบ
+        </div>
+      </AppShell>
+    );
+  }
+
   const expiryDate = calculateExpiry(driverData.contractStart, 5);
   
   const getDaysRemaining = (expiryDate: Date) => {
@@ -38,8 +68,6 @@ export default function DriverContract() {
     const diffTime = expiryDate.getTime() - today.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
-
-  if (!mounted) return null; // Avoid Next.js hydration mismatch with Date
 
   const daysLeft = getDaysRemaining(expiryDate);
   const isWarning = daysLeft <= 180;
@@ -56,6 +84,24 @@ export default function DriverContract() {
         </div>
 
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+          {/* Driver Profile */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden shadow-sm border border-indigo-100/60">
+              {driverData.avatar ? (
+                <img src={driverData.avatar} alt={driverData.name} className="w-full h-full object-cover" />
+              ) : (
+                <User size={32} />
+              )}
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-500 mb-1">พนักงานขับรถ</h2>
+              <p className="text-xl font-black text-gray-900">{driverData.name}</p>
+            </div>
+          </div>
+
+          <div className="h-px bg-gray-100 w-full mb-6"></div>
+
+          {/* Van Detail */}
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 bg-[#311171]/10 text-[#311171] rounded-2xl flex items-center justify-center shrink-0">
               <CarFront size={32} />

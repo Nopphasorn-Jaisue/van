@@ -8,6 +8,7 @@ interface ThaiDatePickerProps {
   onChange: (val: string) => void;
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }
 
 const THAI_MONTHS = [
@@ -17,7 +18,7 @@ const THAI_MONTHS = [
 
 const THAI_DAYS_SHORT = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-export default function ThaiDatePicker({ value, onChange, className = '', placeholder = 'เลือกวันที่' }: ThaiDatePickerProps) {
+export default function ThaiDatePicker({ value, onChange, className = '', placeholder = 'เลือกวันที่', disabled = false }: ThaiDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   
   const [currentMonth, setCurrentMonth] = useState(0);
@@ -94,8 +95,8 @@ export default function ThaiDatePicker({ value, onChange, className = '', placeh
     <div className={`relative ${className}`} ref={popoverRef}>
       {/* Trigger Button */}
       <div 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-2.5 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full flex items-center justify-between p-2.5 border border-gray-200 rounded-xl transition-colors ${disabled ? 'bg-gray-100 cursor-not-allowed opacity-80' : 'bg-white cursor-pointer hover:bg-gray-50'}`}
       >
         <span className={`text-xs font-bold ${value ? 'text-gray-900' : 'text-gray-400'}`}>
           {displayValue}

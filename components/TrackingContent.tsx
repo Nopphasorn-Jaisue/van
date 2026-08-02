@@ -7,60 +7,90 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+type BookingResponse = {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: string;
+  destination: string;
+  assignedVanPlate?: string | null;
+  assignedDriverName?: string | null;
+  passengers: number;
+};
+
+type MappedBooking = {
+  id: string;
+  destination: string;
+  date: string;
+  time: string;
+  status: string;
+  statusText: string;
+  van: string | null;
+  driver: string | null;
+  driverPhone: string | null;
+  passengers: number;
+};
+
 export function TrackingContent() {
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "approved" | "history" | "cancelled">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const bookings = [
-    {
-      id: "UPVAN-2569-0128",
-      destination: "ศูนย์การเรียนรู้ จ.เชียงราย",
-      date: "20 ก.ค. 2569",
-      time: "08:00 - 17:00",
-      status: "approved",
-      statusText: "อนุมัติแล้ว",
-      van: "นข 1234 พะเยา",
-      driver: "นายสมชาย ใจดี",
-      driverPhone: "081-234-5678",
-      passengers: 10
-    },
-    {
-      id: "UPVAN-2569-0130",
-      destination: "กทม. (กระทรวงศึกษาธิการ)",
-      date: "25 ก.ค. 2569",
-      time: "05:00 - 22:00",
-      status: "pending",
-      statusText: "รออนุมัติ",
-      van: null,
-      driver: null,
-      driverPhone: null,
-      passengers: 4
-    },
-    {
-      id: "UPVAN-2569-0110",
-      destination: "ม.เชียงใหม่",
-      date: "10 ก.ค. 2569",
-      time: "06:00 - 18:00",
-      status: "history",
-      statusText: "เสร็จสิ้น",
-      van: "กข 5678 พะเยา",
-      driver: "นายสมปอง ดีงาม",
-      driverPhone: "089-999-9999",
-      passengers: 8
-    },
-    {
-      id: "UPVAN-2569-0115",
-      destination: "ศาลากลางจังหวัดพะเยา",
-      date: "12 ก.ค. 2569",
-      time: "08:30 - 12:00",
-      status: "cancelled",
-      statusText: "ยกเลิก",
-      van: null,
-      driver: null,
-      driverPhone: null,
-      passengers: 2
+  const [bookings, setBookings] = useState<MappedBooking[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+    async function fetchBookings() {
+      try {
+        setIsLoading(true);
+        const res = await fetch('/api/bookings');
+        if (!res.ok) throw new Error('Failed to fetch');
+        const data = await res.json();
+        
+        const mapped = data.bookings.map((b: BookingResponse) => {
+          const startDate = new Date(b.startAt);
+          const endDate = new Date(b.endAt);
+          const now = new Date();
+          
+          let statusStr = "pending";
+          let statusText = "รออนุมัติ";
+          
+          if (b.status === "APPROVED") {
+            if (endDate < now) {
+              statusStr = "history";
+              statusText = "เสร็จสิ้น";
+            } else {
+              statusStr = "approved";
+              statusText = "อนุมัติแล้ว";
+            }
+          } else if (b.status === "REJECTED") {
+            statusStr = "cancelled";
+            statusText = "ยกเลิก";
+          }
+          
+          return {
+            id: b.id,
+            destination: b.destination,
+            date: startDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }),
+            time: `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')} - ${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`,
+            status: statusStr,
+            statusText: statusText,
+            van: b.assignedVanPlate || null,
+            driver: b.assignedDriverName || null,
+            driverPhone: null,
+            passengers: b.passengers
+          };
+        });
+        
+        setBookings(mapped);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
     }
-  ];
+    
+    fetchBookings();
+  }, []);
 
   const filteredBookings = bookings.filter(b => 
     (activeTab === "all" || b.status === activeTab) &&
@@ -105,7 +135,7 @@ export function TrackingContent() {
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as "all" | "pending" | "approved" | "history" | "cancelled")}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
                   activeTab === tab.id 
                     ? 'bg-[#311171] text-white shadow-md' 
@@ -133,7 +163,14 @@ export function TrackingContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredBookings.map((booking) => (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="py-20 text-center">
+                      <div className="w-8 h-8 border-4 border-[#311171]/20 border-t-[#311171] rounded-full animate-spin mx-auto mb-4"></div>
+                      <p className="text-gray-500 font-medium">กำลังโหลดข้อมูล...</p>
+                    </td>
+                  </tr>
+                ) : filteredBookings.map((booking) => (
                   <tr key={booking.id} className="hover:bg-gray-50/50 transition-colors group cursor-pointer">
                     {/* Status */}
                     <td className="py-4 pl-6 pr-4 align-top">
@@ -212,7 +249,7 @@ export function TrackingContent() {
                   </tr>
                 ))}
                 
-                {filteredBookings.length === 0 && (
+                {!isLoading && filteredBookings.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-20 text-center">
                       <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
