@@ -120,9 +120,9 @@ export default function DriverDashboard() {
               <FileText size={20} className="text-[#311171]" />
               <span className="text-xs font-bold text-gray-700">สมุดรถ</span>
             </Link>
-            <Link href="/driver/expenses" className="bg-white px-3 py-3 rounded-xl border border-purple-100 flex flex-col items-center justify-center gap-2 hover:bg-purple-50/50 transition-colors shadow-sm">
+            <Link href="/driver/report" className="bg-white px-3 py-3 rounded-xl border border-purple-100 flex flex-col items-center justify-center gap-2 hover:bg-purple-50/50 transition-colors shadow-sm">
               <ClipboardList size={20} className="text-[#311171]" />
-              <span className="text-xs font-bold text-gray-700">เบิกค่าใช้จ่าย</span>
+              <span className="text-xs font-bold text-gray-700">รายงาน (แบบ 4)</span>
             </Link>
           </div>
         </div>

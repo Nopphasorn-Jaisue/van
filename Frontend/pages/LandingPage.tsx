@@ -68,7 +68,7 @@ const monthNames = [
 const weekDays = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
 const statusMeta: Record<NetworkCalendarEventStatus, { label: string; chip: string }> = {
-  approved: { label: 'พร้อมเดินทาง', chip: 'bg-emerald-500' },
+  approved: { label: 'จองแล้ว (อนุมัติแล้ว)', chip: 'bg-emerald-500' },
   pending: { label: 'รออนุมัติ', chip: 'bg-amber-500' },
   shared: { label: 'ยืมร่วมเครือข่าย', chip: 'bg-sky-500' },
   'on-trip': { label: 'กำลังเดินทาง', chip: 'bg-orange-500' },
@@ -606,21 +606,8 @@ export default function LandingPage() {
                 </>
               )}
             </div>
-
-            <div className="relative flex items-center">
-              <input 
-                type="date" 
-                value={currentDate ? `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}` : ''}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setCurrentDate(new Date(e.target.value));
-                  }
-                }}
-                className="cursor-pointer rounded-xl border border-white/50 bg-white/80 backdrop-blur-md px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm outline-none transition hover:bg-white focus:border-violet-500 focus:bg-white focus:ring-2 focus:ring-violet-500/20"
-              />
-            </div>
-              </div>
-            </div>
+          </div>
+        </div>
 
           <div className="mt-5">
             <div className="overflow-hidden rounded-[32px] border border-white/60 bg-white/70 backdrop-blur-xl shadow-[0_20px_60px_rgba(49,17,113,0.15)]">

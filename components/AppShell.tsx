@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, BarChart3, Clock, ShieldAlert, LayoutDashboard, Wrench,
-  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus
+  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus, FileSpreadsheet
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 
@@ -154,7 +154,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               { icon: LayoutDashboard, label: "แดชบอร์ด", href: "/driver/dashboard" },
               { icon: CalendarDays, label: "ตารางงาน", href: "/driver/schedule" },
               { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-              { icon: FilePlus, label: "เบิกค่าใช้จ่าย", href: "/driver/expenses" },
+              { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/driver/report" },
               { icon: FileText, label: "รถและสัญญา", href: "/driver/contract" },
             ].map((item, idx) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -302,7 +302,7 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: LayoutDashboard, label: "แดชบอร์ดคนขับ", href: "/driver/dashboard" },
         { icon: CalendarDays, label: "ตารางงานของฉัน", href: "/driver/schedule" },
         { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-        { icon: FilePlus, label: "เบิกค่าใช้จ่าย", href: "/driver/expenses" },
+        { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/driver/report" },
         { icon: FileText, label: "ข้อมูลรถและสัญญา", href: "/driver/contract" },
       ];
     }
