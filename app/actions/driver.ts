@@ -72,22 +72,22 @@ export async function getDriverDashboardData(driverId: number) {
     });
 
     // Find today's trip
-    const todaysTrip = bookings.find(b => 
+    const todaysTrip = bookings.find((b: any) => 
       new Date(b.departureDate) >= today && new Date(b.departureDate) < tomorrow
     );
 
     // Find upcoming trips
-    const upcomingTrips = bookings.filter(b => 
+    const upcomingTrips = bookings.filter((b: any) => 
       new Date(b.departureDate) >= tomorrow
     );
 
     // Calculate stats for current month
-    const thisMonthBookings = bookings.filter(b => 
+    const thisMonthBookings = bookings.filter((b: any) => 
       new Date(b.departureDate) >= firstDayOfMonth && b.driverLog
     );
     
     const totalTrips = thisMonthBookings.length;
-    const totalDistance = thisMonthBookings.reduce((sum, b) => 
+    const totalDistance = thisMonthBookings.reduce((sum: number, b: any) => 
       sum + (b.driverLog?.totalDistance || 0), 0
     );
 
@@ -352,7 +352,7 @@ export async function submitTripExpenses(driverLogId: number, expenses: ExpenseD
       }))
     });
 
-    revalidatePath('/driver/expenses');
+    revalidatePath('/driver/report');
     
     return { success: true };
   } catch (error) {
