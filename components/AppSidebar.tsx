@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import UpLogo from "@/components/UpLogo";
 
 // ==========================================
@@ -31,9 +30,10 @@ const ALL_MENU_ITEMS = [
 
 export default function AppSidebar() {
   const pathname = usePathname();
-  // 🌟 ปรับแก้: กำหนด Role เป็น 'FACULTY_ADMIN' ถาวรเพื่อการทดสอบ
-  // และลบ useEffect ที่ดึงข้อมูล Role ซึ่งเป็นสาเหตุของการกระพริบ
-  const [role, setRole] = useState("FACULTY_ADMIN");
+  let role = "FACULTY_ADMIN";
+  if (pathname?.startsWith("/super-admin")) role = "SUPER_ADMIN";
+  else if (pathname?.startsWith("/driver")) role = "DRIVER";
+  else if (pathname?.startsWith("/executive")) role = "EXECUTIVE";
 
   // ==========================================
   // 🌟 ปรับปรุง Logic การกรองเมนูให้รัดกุม 100%

@@ -42,7 +42,7 @@ const seedDrivers: SeedDriver[] = [
   { name: "นายอนุชา คำมี", phone: "086-345-6789", facultyName: "คณะ ICT", vanPlate: "นข 1122 พะเยา", age: 41 },
   { name: "นายวิชัย แสนดี", phone: "089-456-7890", facultyName: "คณะพลังงาน", vanPlate: "นข 2233 พะเยา", age: 47 },
   { name: "นายประเสริฐ จันทรดี", phone: "090-567-8901", facultyName: "คณะวิทยาศาสตร์", vanPlate: "นข 3344 พะเยา", age: 39 },
-  { name: "นายชูชาติ สุขใจ", phone: "093-678-9012", facultyName: "คณะวิศวกรรมศาสตร์", vanPlate: "นข 4455 พะเยา", age: 42 },
+  { name: "นายชูชาติ สุขใจ", phone: "093-678-9012", facultyName: "คณะเภสัชฯ", vanPlate: "นข 4455 พะเยา", age: 42 },
   { name: "นายธนวัฒน์ วันดี", phone: "094-789-0123", facultyName: "คณะนิติศาสตร์", vanPlate: "นข 5566 พะเยา", age: 37 },
 ];
 
@@ -61,7 +61,7 @@ const seedBookings: SeedBooking[] = [
   {
     id: "UPV-2569-0066",
     requester: "นายภานุวัฒน์ ศรีดี",
-    requesterFaculty: "คณะวิศวกรรมศาสตร์",
+    requesterFaculty: "คณะเภสัชฯ",
     destination: "อำเภอเมืองเชียงราย",
     purpose: "ลงพื้นที่วิจัย",
     passengers: 15,
@@ -198,6 +198,7 @@ async function ensureSeedData() {
         returnDate: new Date(booking.endAt),
         passengersCount: booking.passengers,
         budgetSource: "งบประมาณคณะ",
+        tripType: "ในจังหวัดพะเยา",
         status: booking.status,
         assignedDriverId,
       },
@@ -229,6 +230,8 @@ async function toBookingDto(row: BookingWithRelations) {
     startAt: toThaiDate(row.departureDate),
     endAt: toThaiDate(row.returnDate),
     submittedAt: toThaiDate(row.createdAt),
+    budgetSource: row.budgetSource,
+    tripType: row.tripType as ("ในจังหวัดพะเยา" | "ต่างจังหวัด") | undefined,
     status: mapStatus(row.status),
     rejectReason: row.rejectReason || undefined,
     assignedDriverId: row.assignedDriver ? makeDriverCode(row.assignedDriver.id) : undefined,
@@ -305,7 +308,8 @@ export async function createBooking(payload: CreateBookingPayload) {
       departureDate: new Date(payload.startAt),
       returnDate: new Date(payload.endAt),
       passengersCount: payload.passengers,
-      budgetSource: "งบประมาณคณะ",
+      budgetSource: payload.budgetSource || "งบส่วนกลางของคณะ",
+      tripType: payload.tripType || "ในจังหวัดพะเยา",
       status: "WAITING_ADMIN",
     },
     include: {

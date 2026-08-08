@@ -81,5 +81,5 @@ export const facultiesList: FacultyDirectory[] = [
     homeBase: 'คลังเวชภัณฑ์กลาง',
     focus: 'ส่งยาและเวชภัณฑ์',
     palette: { surface: 'bg-[#51621F]/10', border: 'border-[#51621F]/30', accent: 'text-[#51621F]', chip: 'bg-[#51621F]', muted: 'text-[#51621F]/80', accentRgb: '#51621F' },
-  },
+  }
 ];

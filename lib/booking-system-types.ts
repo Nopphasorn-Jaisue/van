@@ -43,6 +43,8 @@ export type SystemBooking = {
   assignedDriverName?: string;
   assignedVanId?: string;
   assignedVanPlate?: string;
+  tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
+  budgetSource?: string;
 };
 
 export type SystemDriverLog = {
@@ -64,4 +66,6 @@ export type CreateBookingPayload = {
   passengers: number;
   startAt: string;
   endAt: string;
+  tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
+  budgetSource?: string;
 };

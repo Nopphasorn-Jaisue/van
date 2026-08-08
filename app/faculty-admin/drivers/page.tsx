@@ -2,15 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
-  Users, Mail, Phone, Shield, Search, Plus, Edit, 
-  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, BadgeCheck, Camera
+  Users, Mail, Phone, Search, Plus, Edit, 
+  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, Camera
 } from 'lucide-react';
 
-interface DeanInfo {
-  name: string;
-  email: string;
-  termStart: string;
-}
 
 interface ApiDriver {
   id: string;
@@ -39,13 +34,6 @@ export default function DriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Mock Data: คณบดี (Dean) - Not stored in DB for now
-  const deanInfo: DeanInfo = {
-    name: "รศ.ดร.ตัวอย่าง คณบดี",
-    email: "dean.agri@up.ac.th",
-    termStart: "2024-01-15"
-  };
-
   const loadDrivers = async () => {
     try {
       const res = await fetch('/api/drivers');
@@ -111,21 +99,15 @@ export default function DriversPage() {
     return start;
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
   const getDaysRemaining = (expiryDate: Date) => {
     const today = new Date();
     const diffTime = expiryDate.getTime() - today.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const deanExpiryDate = calculateExpiry(deanInfo.termStart, 4);
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
 
   const openAddModal = () => {
     setEditingId(null);
@@ -282,32 +264,6 @@ export default function DriversPage() {
         <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-10">
           
           {/* ----- Dean Section (Read Only) ----- */}
-          <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm mb-8 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4">
-              <div className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-bold border border-blue-100">
-                <Shield size={14} /> ข้อมูลถูกจัดการโดยผู้ดูแลระบบส่วนกลาง
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-4">
-              <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center shrink-0">
-                <BadgeCheck size={32} />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-500 mb-1">ข้อมูลคณบดีประจำคณะ (วาระ 4 ปี)</h3>
-                <h2 className="text-xl font-black text-gray-900 mb-1">{deanInfo.name}</h2>
-                <div className="flex items-center gap-4 text-sm text-gray-600 mt-3">
-                  <div className="flex items-center gap-1.5">
-                    <Mail size={16} className="text-gray-400" /> {deanInfo.email}
-                  </div>
-                  <div className="flex items-center gap-1.5 bg-orange-50 px-2.5 py-1 rounded-md border border-orange-100 text-orange-700 font-medium">
-                    <Calendar size={16} /> หมดวาระ: {formatDate(deanExpiryDate)} (เหลือ {getDaysRemaining(deanExpiryDate)} วัน)
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* ----- Toolbar ----- */}
           <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
             <div className="relative w-full sm:w-72">

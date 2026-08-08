@@ -9,32 +9,32 @@ import type {
 export const faculties: Faculty[] = [
   {
     faculty_id: "fac-001",
-    faculty_name: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+    faculty_name: "คณะเภสัชฯ",
     calendar_type: "GOOGLE",
-    dms_unit_code: "DMS-ICT",
+    dms_unit_code: "DMS-PHA",
   },
   {
     faculty_id: "fac-002",
-    faculty_name: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-    calendar_type: "GOOGLE",
-    dms_unit_code: "DMS-ICT",
-  },
-  {
-    faculty_id: "fac-003",
-    faculty_name: "คณะพลังงานและสิ่งแวดล้อม",
-    calendar_type: "MICROSOFT",
-    dms_unit_code: "DMS-SEEN",
-  },
-  {
-    faculty_id: "fac-004",
     faculty_name: "คณะวิทยาศาสตร์",
     calendar_type: "CUSTOM_API",
     dms_unit_code: "DMS-SCI",
   },
+  {
+    faculty_id: "fac-003",
+    faculty_name: "คณะ ICT",
+    calendar_type: "GOOGLE",
+    dms_unit_code: "DMS-ICT",
+  },
+  {
+    faculty_id: "fac-004",
+    faculty_name: "คณะเกษตรฯ",
+    calendar_type: "CUSTOM_API",
+    dms_unit_code: "DMS-AGR",
+  },
     {
     faculty_id: "fac-005",
-    faculty_name: "คณะวิศวกรรมศาสตร์",
-    calendar_type: "CUSTOM_API",
+    faculty_name: "คณะพลังงานฯ",
+    calendar_type: "MICROSOFT",
     dms_unit_code: "DMS-ENG",
   },
 ];

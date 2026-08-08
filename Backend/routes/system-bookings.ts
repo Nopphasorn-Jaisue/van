@@ -26,6 +26,8 @@ export async function handleCreateSystemBooking(request: Request) {
       passengers: Number(body.passengers || 1),
       startAt: body.startAt,
       endAt: body.endAt,
+      tripType: body.tripType,
+      budgetSource: body.budgetSource,
     });
 
     return NextResponse.json({ success: true, booking }, { status: 201 });

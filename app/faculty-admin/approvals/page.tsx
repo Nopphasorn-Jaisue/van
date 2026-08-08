@@ -528,7 +528,15 @@ export default function ApprovalsPage() {
               </div>
 
               {/* Sidebar Actions */}
-              <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-3 gap-2">
+              <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-4 gap-2">
+                <a
+                  href={`/faculty-admin/approvals/${selectedRequest.id}/print`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-2.5 px-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <FileText size={14} /> พิมพ์ใบขอ
+                </a>
                 <button 
                   onClick={() => confirmAction(selectedRequest.id, "ปฏิเสธ")}
                   className="py-2.5 px-2 bg-white hover:bg-red-50 border border-red-200 text-red-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"

@@ -140,6 +140,7 @@ model Booking {
   returnDate      DateTime      @map("return_date")
   passengersCount Int           @map("passengers_count")
   budgetSource    String        @map("budget_source")
+  tripType        String?       @map("trip_type")
   
   // ตัวควบคุม State Machine
   status          BookingStatus @default(WAITING_ADMIN)

@@ -165,44 +165,93 @@ export default function DriverSchedule() {
     setSelectedDate(new Date().getDate());
     async function loadData() {
       setIsLoading(true);
-      // สมมติว่าคนขับที่เข้าสู่ระบบคือ driverId = 1 (สมชาย)
-      const res = await getAssignedBookings(1); 
-      if (res.success && res.bookings) {
-        const mapped: Trip[] = res.bookings.map((b: BookingData) => {
-          let actualData = undefined;
-          if (b.driverLog) {
-            const legs = b.driverLog.tripLegs || [];
-            const lastLeg = legs.length > 0 ? legs[legs.length - 1] : null;
-            actualData = {
-              totalDistance: b.driverLog.totalDistance,
-              legs: legs,
-              endLocation: lastLeg ? lastLeg.destination : b.destination,
-              endTime: lastLeg ? lastLeg.returnTime : "",
-              lastMileage: lastLeg ? lastLeg.endMileage : null,
-              startMileage: legs.length > 0 ? legs[0].startMileage : null,
-            };
+      try {
+        const calRes = await fetch('/api/calendar-events');
+        let calTrips: Trip[] = [];
+        if (calRes.ok) {
+          const text = await calRes.text();
+          if (text && text.trim().length > 0) {
+            const calData = JSON.parse(text);
+            if (calData && calData.rawEvents && Array.isArray(calData.rawEvents)) {
+              type RawCalendarEventItem = {
+                id?: string | number;
+                date?: string | Date;
+                destination?: string;
+                purpose?: string;
+                time?: string;
+                passengers?: number;
+                requester?: string;
+                bookingFaculty?: string;
+                vanId?: string;
+                status?: string;
+              };
+              calTrips = calData.rawEvents.map((e: RawCalendarEventItem) => {
+                const eventDate = e.date ? new Date(e.date) : new Date();
+                const displayDate = !isNaN(eventDate.getTime())
+                  ? eventDate.toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+                  : 'ไม่ระบุวันที่';
+                
+                return {
+                  id: e.id,
+                  date: displayDate,
+                  destination: e.destination || e.purpose || 'ไม่ระบุสถานที่',
+                  time: e.time || '08:30 - 16:30 น.',
+                  passengers: e.passengers || 8,
+                  requester: e.requester || 'ผู้ขอใช้บริการ',
+                  phone: '054-466666',
+                  pickup: e.bookingFaculty || 'มหาวิทยาลัยพะเยา',
+                  van: e.vanId ? (e.vanId.toUpperCase()) : 'รถตู้ประจำคณะ',
+                  project: e.purpose || 'ภารกิจเดินรถตู้',
+                  status: e.status === 'completed' ? 'COMPLETED' : 'ASSIGNED'
+                };
+              });
+            }
           }
+        }
 
-          return {
-            id: b.id,
-            date: new Date(b.departureDate).toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }),
-            destination: b.destination,
-            time: `${new Date(b.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
-            passengers: b.passengersCount,
-            requester: b.requester?.name || "-",
-            phone: "-", 
-            pickup: b.requester?.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
-            van: "รถตู้ที่รับผิดชอบ",
-            project: b.objective,
-            status: b.driverLog ? "COMPLETED" : "ASSIGNED",
-            actualData
-          };
-        });
+        const res = await getAssignedBookings(1); 
+        let mapped: Trip[] = [];
+        if (res.success && res.bookings) {
+          mapped = res.bookings.map((b: BookingData) => {
+            let actualData = undefined;
+            if (b.driverLog) {
+              const legs = b.driverLog.tripLegs || [];
+              const lastLeg = legs.length > 0 ? legs[legs.length - 1] : null;
+              actualData = {
+                totalDistance: b.driverLog.totalDistance,
+                legs: legs,
+                endLocation: lastLeg ? lastLeg.destination : b.destination,
+                endTime: lastLeg ? lastLeg.returnTime : "",
+                lastMileage: lastLeg ? lastLeg.endMileage : null,
+                startMileage: legs.length > 0 ? legs[0].startMileage : null,
+              };
+            }
 
-        setUpcomingTrips(mapped.filter((b: Trip) => b.status === "ASSIGNED"));
-        setPastTrips(mapped.filter((b: Trip) => b.status === "COMPLETED"));
+            return {
+              id: b.id,
+              date: new Date(b.departureDate).toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }),
+              destination: b.destination,
+              time: `${new Date(b.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
+              passengers: b.passengersCount,
+              requester: b.requester?.name || "-",
+              phone: "-", 
+              pickup: b.requester?.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
+              van: "รถตู้ที่รับผิดชอบ",
+              project: b.objective,
+              status: b.driverLog ? "COMPLETED" : "ASSIGNED",
+              actualData
+            };
+          });
+        }
+
+        const combined = [...calTrips, ...mapped];
+        setUpcomingTrips(combined.filter((b: Trip) => b.status === "ASSIGNED"));
+        setPastTrips(combined.filter((b: Trip) => b.status === "COMPLETED"));
+      } catch (err) {
+        console.warn("Failed to load driver schedule:", err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     }
     loadData();
   }, []);
@@ -230,7 +279,14 @@ export default function DriverSchedule() {
             <h1 className="text-2xl font-black text-gray-900">ตารางงานของฉัน</h1>
             <p className="text-gray-500 text-sm mt-0.5">ตรวจสอบภารกิจการเดินทางล่วงหน้า</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button 
+              onClick={() => window.open('https://calendar.google.com', '_blank')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-sm text-white rounded-xl text-xs font-bold hover:from-blue-700 hover:to-indigo-700 transition-all"
+            >
+              <CalendarIcon size={14} />
+              Google Calendar
+            </button>
             <button 
               onClick={handleOpenAdhoc}
               className="flex items-center gap-1.5 px-3 py-2 bg-[#311171] shadow-sm border border-[#311171] text-white rounded-xl text-xs font-bold hover:bg-[#270e59] transition-colors"

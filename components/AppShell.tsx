@@ -3,8 +3,8 @@ import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, BarChart3, Clock, ShieldAlert, LayoutDashboard, Wrench,
-  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus
+  Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, BarChart3, Clock,LayoutDashboard, Wrench,
+  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus,
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 
@@ -13,6 +13,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // 🌟 ปรับแก้: กำหนดสิทธิ์ชั่วคราวโดยอิงจาก URL เพื่อความสะดวกในการทดสอบ
   let userRole = 'FACULTY_ADMIN';
   if (pathname?.startsWith('/driver')) userRole = 'DRIVER';
+  else if (pathname?.startsWith('/super-admin')) userRole = 'SUPER_ADMIN';
+  else if (pathname?.startsWith('/executive')) userRole = 'EXECUTIVE';
   else userRole = 'FACULTY_ADMIN'; 
   const [displayName] = useState('ผู้ใช้งานระบบ');
   const [showNotifications, setShowNotifications] = useState(false);
@@ -122,13 +124,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            <div className="hidden lg:flex items-center gap-2 rounded-full bg-gray-50 border border-gray-200 px-3 py-1.5">
-              <div className="h-7 w-7 rounded-full bg-[#311171] text-white grid place-items-center text-xs font-black">UP</div>
-              <div className="text-xs">
-                <p className="font-bold text-gray-900 leading-tight">{displayName}</p>
-                <p className="text-gray-500 leading-tight">{userRole}</p>
-              </div>
-            </div>
+
 
             <button 
               onClick={() => {
@@ -296,6 +292,15 @@ function Sidebar({ userRole }: { userRole: string }) {
 
 
 
+    // 2. เมนูสำหรับคณบดี / ผู้บริหาร (EXECUTIVE)
+    if (role === "EXECUTIVE") {
+      return [
+        { icon: LayoutDashboard, label: "แดชบอร์ดคณบดี", href: "/executive/approvals" },
+        { icon: FileSignature, label: "การอนุมัติคำขอ", href: "/executive/approvals" },
+        { icon: BarChart3, label: "รายงานผู้บริหาร", href: "/reports" },
+      ];
+    }
+
     // 3. เมนูสำหรับพนักงานขับรถ (DRIVER)
     if (role === "DRIVER") {
       return [
@@ -307,12 +312,14 @@ function Sidebar({ userRole }: { userRole: string }) {
       ];
     }
 
-    // 4. เมนูสำหรับ Super Admin (เป็นตัวอย่าง)
+    // 4. เมนูสำหรับ Super Admin (แอดมินระบบส่วนกลาง)
     if (role === "SUPER_ADMIN") {
       return [
-        { icon: ShieldAlert, label: "ภาพรวมระบบ", href: "/super-admin" },
-        { icon: LayoutDashboard, label: "แดชบอร์ดคณะ (ตัวอย่าง)", href: "/faculty-admin/dashboard" },
-        { icon: Users, label: "จัดการผู้ใช้ทั้งหมด", href: "/super-admin/users" },
+        { icon: LayoutDashboard, label: "แดชบอร์ดส่วนกลาง", href: "/super-admin/dashboard" },
+        { icon: Users, label: "จัดการผู้ใช้งานระบบ", href: "/super-admin/users" },
+        { icon: Bus, label: "จัดการรถตู้ทั้งหมด", href: "/super-admin/vans" },
+        { icon: CarFront, label: "จัดการคนขับ", href: "/super-admin/drivers" },
+        { icon: FileSignature, label: "ประวัติการใช้งาน", href: "/super-admin/logs" },
       ];
     }
 
@@ -333,7 +340,10 @@ function Sidebar({ userRole }: { userRole: string }) {
     }
   };
 
-  const userFaculty = "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"; // ตัวอย่างข้อมูลคณะ
+  const userFaculty = userRole === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
+                      userRole === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
+                      userRole === 'DRIVER' ? 'ทีมพนักงานขับรถประจำคณะ' :
+                      'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
 
   return (
     <aside className="w-64 bg-gradient-to-b from-[#2a0c63] via-[#2f0f6f] to-[#240a58] text-white hidden md:flex flex-col h-full shadow-xl z-20 shrink-0">

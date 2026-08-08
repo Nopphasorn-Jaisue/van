@@ -11,6 +11,13 @@ import Link from 'next/link';
 import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ThaiTimePicker from '@/components/ThaiTimePicker';
 
+interface AvailableVan {
+  id: string;
+  vanName: string;
+  plate: string;
+  facultyName?: string;
+}
+
 // Component that uses useSearchParams must be wrapped in Suspense
 function BookingFormContent() {
   const searchParams = useSearchParams();
@@ -30,9 +37,10 @@ function BookingFormContent() {
     purpose: "",
     passengers: "",
     budgetSource: "",
+    tripType: "ในจังหวัดพะเยา",
   });
 
-  const [availableVans, setAvailableVans] = useState<any[]>([]);
+  const [availableVans, setAvailableVans] = useState<AvailableVan[]>([]);
 
   useEffect(() => {
     fetch('/api/vans')
@@ -162,42 +170,116 @@ function BookingFormContent() {
           </div>
 
           <div className="space-y-3">
+            {/* Option: Own Faculty Van vs Borrow Cross-Faculty Van */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">เลือกรถตู้ (ตัวเลือก) <span className="text-gray-400 font-normal">ระบบแสดงเฉพาะคิวที่ว่าง</span></label>
-              <select 
-                value={form.vanId}
-                onChange={e => setForm({...form, vanId: e.target.value})}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium"
-              >
-                <option value="">-- ให้ส่วนกลาง/แอดมิน จัดสรรให้ --</option>
-                {availableVans.map(van => {
-                  const isReady = van.isShared !== false; // Only disable if explicitly false
-                  const textStatus = isReady ? '(ว่าง)' : '(ไม่พร้อมใช้งาน)';
-                  const textStyle = isReady ? "text-green-600 font-bold" : "text-gray-400 bg-gray-50";
+              <label className="block text-xs font-bold text-gray-700 mb-1">ประเภทการใช้รถตู้</label>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, vanId: "", budgetSource: "งบประมาณคณะ" })}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    form.vanId === "" || form.vanId === "v-ict"
+                      ? "bg-[#311171] text-white border-[#311171] shadow-xs"
+                      : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  <span>รถตู้ประจำคณะตนเอง</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, vanId: "borrow" })}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    form.vanId === "borrow" || (form.vanId && form.vanId !== "v-ict")
+                      ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                      : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  <span>ยืมรถตู้ต่างคณะ</span>
+                </button>
+              </div>
 
-                  return (
-                    <option 
-                      key={van.id} 
-                      value={van.id} 
-                      disabled={!isReady}
-                      className={textStyle}
-                    >
-                      {van.vanName} ({van.plate}) {textStatus}
-                    </option>
-                  );
-                })}
-              </select>
+              {form.vanId === "borrow" || (form.vanId && form.vanId !== "" && form.vanId !== "v-ict") ? (
+                <div className="space-y-3 p-3.5 bg-red-50/80 rounded-xl border border-red-200 animate-in fade-in">
+                  <div className="flex items-start gap-2 text-red-600 text-xs font-bold leading-relaxed">
+                    <span className="text-sm mt-0.5">⚠️</span>
+                    <span>
+                      หน่วยงานอื่นไม่อนุญาตให้จองใช้รถตู้เกิน 3 วัน<br/>
+                      เดินทาง จองล่วงหน้าได้ไม่เกิน 10 วันจากวัน<br/>
+                      ปัจจุบัน และไม่อนุมัติจองรถข้ามเดือน
+                    </span>
+                  </div>
+                  <label className="block text-xs font-bold text-gray-700 mt-2 mb-1">เลือกคณะเจ้าของรถตู้ที่ต้องการยืม:</label>
+                  <select 
+                    value={form.vanId === "borrow" ? "" : form.vanId}
+                    onChange={e => setForm({...form, vanId: e.target.value})}
+                    className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500 outline-none text-xs font-bold text-gray-800"
+                  >
+                    <option value="">-- เลือกคณะและรถตู้ที่ต้องการยืม --</option>
+                    {availableVans.map(van => (
+                      <option key={van.id} value={van.id}>
+                        {van.vanName} ({van.plate}) - คณะ: {van.facultyName || 'ส่วนกลาง'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">เลือกรถตู้ประจำคณะ <span className="text-gray-400 font-normal">(ระบบเลือกให้สอดคล้องกับคิวว่าง)</span></label>
+                  <select 
+                    value={form.vanId}
+                    onChange={e => setForm({...form, vanId: e.target.value})}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-xs font-medium"
+                  >
+                    <option value="">-- รถตู้ประจำคณะ (จัดสรรอัตโนมัติ) --</option>
+                    {availableVans.map(van => (
+                      <option key={van.id} value={van.id}>
+                        {van.vanName} ({van.plate})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">สถานที่ปลายทาง <span className="text-red-500">*</span></label>
-              <input 
-                type="text" 
-                required
-                value={form.destination}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">เขตพื้นที่เดินทาง</label>
+                <div className="flex items-center gap-4 py-2">
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="tripType" 
+                      value="ในจังหวัดพะเยา" 
+                      checked={form.tripType === "ในจังหวัดพะเยา"}
+                      onChange={(e) => setForm({...form, tripType: e.target.value})}
+                      className="w-4 h-4 text-[#311171] focus:ring-[#311171] border-gray-300"
+                    />
+                    ในจังหวัดพะเยา
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="tripType" 
+                      value="ต่างจังหวัด" 
+                      checked={form.tripType === "ต่างจังหวัด"}
+                      onChange={(e) => setForm({...form, tripType: e.target.value})}
+                      className="w-4 h-4 text-[#311171] focus:ring-[#311171] border-gray-300"
+                    />
+                    ต่างจังหวัด
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">สถานที่ปลายทาง <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  required
+                  value={form.destination}
                 onChange={e => setForm({...form, destination: e.target.value})}
                 placeholder="เช่น ศูนย์ประชุมนานาชาติ" 
                 className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium"
               />
+            </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -276,10 +358,9 @@ function BookingFormContent() {
                 className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium appearance-none"
               >
                 <option value="">เลือกแหล่งงบประมาณ...</option>
-                <option value="งบประมาณคณะ">งบประมาณคณะ</option>
-                <option value="งบประมาณภาควิชา">งบประมาณภาควิชา</option>
-                <option value="งบประมาณโครงการวิจัย">งบประมาณโครงการวิจัย</option>
-                <option value="งบส่วนตัว">งบส่วนตัว (ไม่เบิกจ่าย)</option>
+                <option value="งบส่วนกลางของคณะ">งบส่วนกลางของคณะ</option>
+                <option value="งบประมาณโครงการ">งบประมาณโครงการ</option>
+                <option value="งบประมาณอื่นๆ">งบประมาณอื่นๆ</option>
               </select>
             </div>
           </div>
