@@ -17,14 +17,25 @@ export async function GET(request: NextRequest) {
       const email = data.user.email;
 
       if (email) {
+        const avatarUrl = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || null;
+
         // ค้นหาข้อมูลผู้ใช้ในฐานข้อมูล Prisma
         let user = await prisma.user.findUnique({
           where: { email },
           include: { driverProfile: true },
         });
 
-        // หากยังไม่มีข้อมูลผู้ใช้ในฐานข้อมูล (เข้าใช้งานครั้งแรก) ให้สร้างผู้ใช้ใหม่ตามประเภทสิทธิ์ที่เลือก
-        if (!user) {
+        if (user) {
+          // อัปเดต avatar หากเปลี่ยนไป
+          if (avatarUrl && user.avatar !== avatarUrl) {
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { avatar: avatarUrl },
+              include: { driverProfile: true },
+            });
+          }
+        } else {
+          // หากยังไม่มีข้อมูลผู้ใช้ในฐานข้อมูล (เข้าใช้งานครั้งแรก) ให้สร้างผู้ใช้ใหม่ตามประเภทสิทธิ์ที่เลือก
           const defaultFaculty = await prisma.faculty.findFirst();
           if (defaultFaculty) {
             const assignedRole = roleIntent === "DRIVER" ? "DRIVER" : "FACULTY_ADMIN";
@@ -33,6 +44,7 @@ export async function GET(request: NextRequest) {
               data: {
                 email,
                 name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || email.split("@")[0],
+                avatar: avatarUrl,
                 facultyId: defaultFaculty.id,
                 role: assignedRole,
               },
@@ -43,7 +55,7 @@ export async function GET(request: NextRequest) {
             if (assignedRole === "DRIVER") {
               await prisma.driver.create({
                 data: {
-                  userId: user.id,
+                  userId: user!.id,
                   facultyId: defaultFaculty.id,
                   phone: "-",
                   age: 30,

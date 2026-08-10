@@ -1,12 +1,16 @@
 "use client";
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, BarChart3, Clock, LayoutDashboard, Wrench, ShieldAlert,
+  Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, User, BarChart3, Clock, LayoutDashboard, Wrench,
   X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus, FileSpreadsheet
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
+import { getNotifications, markNotificationAsRead } from '@/app/actions/notifications';
+import { formatDistanceToNow } from 'date-fns';
+import { th } from 'date-fns/locale';
+import { Role } from '@prisma/client';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -21,29 +25,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [showDutiesModal, setShowDutiesModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ฟังก์ชัน: ดึงข้อมูลแจ้งเตือนตามสิทธิ์การใช้งาน
-  const getNotificationsByRole = (role: string) => {
-    switch (role) {
-      case 'USER':
-        return [{ id: 1, type: 'success', text: '✅ คำขอจองรถตู้ (UP-2567-0120) ของคุณได้รับการอนุมัติแล้ว', time: '10 นาทีที่แล้ว' }];
-      case 'FACULTY_ADMIN':
-        return [
-          { id: 1, type: 'info', text: '🆕 มีคำขอใหม่จาก ดร.สมเกียรติ (10 คน)', time: '5 นาทีที่แล้ว' }
-        ];
-      case 'EXECUTIVE':
-        return [{ id: 1, type: 'urgent', text: '🚨 ด่วน: คำขอเดินทางข้ามจังหวัดพรุ่งนี้ (รออนุมัติ)', time: '15 นาทีที่แล้ว' }];
-      case 'SUPER_ADMIN':
-        return [
-          { id: 1, type: 'alert', text: '🔧 แจ้งเตือน: รถตู้ นข 1234 ถึงกำหนดเข้าเช็คระยะ', time: 'เมื่อวานนี้' },
-          { id: 2, type: 'info', text: '📊 สรุป: สัปดาห์นี้มีการเรียกใช้งานระบบคิวกองอาคารฯ 45 ครั้ง', time: '2 วันที่แล้ว' }
-        ];
-      default:
-        return [];
-    }
+  type NotificationItem = {
+    id: number;
+    message: string;
+    type: string;
+    isRead: boolean;
+    createdAt: Date;
   };
 
-  const notifications = getNotificationsByRole(userRole);
-  const unreadCount = notifications.length;
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      // Fetch based on current role (since user isn't logged in proper yet)
+      const data = await getNotifications(userRole as Role);
+      setNotifications(data);
+    };
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 15000);
+    return () => clearInterval(interval);
+  }, [userRole]);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleMarkAsRead = async (id: number) => {
+    await markNotificationAsRead(id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  };
 
   return (
     <div className="flex h-screen bg-[#f3f4f7] overflow-hidden">
@@ -108,12 +116,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             setShowDutiesModal(true);
                             setShowNotifications(false);
                           }
+                          if (!note.isRead) handleMarkAsRead(note.id);
                         }}
-                        className="p-4 hover:bg-purple-50/50 bg-white cursor-pointer transition-colors"
+                        className={`p-4 hover:bg-purple-50/50 cursor-pointer transition-colors ${note.isRead ? 'bg-white opacity-60' : 'bg-[#f4effc]'}`}
                       >
-                        <p className="text-sm font-bold text-gray-800 leading-snug">{note.text}</p>
+                        <p className="text-sm font-bold text-gray-800 leading-snug">{note.message}</p>
                         <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
-                          <Clock size={12} /> {note.time}
+                          <Clock size={12} /> {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true, locale: th })}
                         </p>
                       </li>
                     )) : (
@@ -287,6 +296,7 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: FileSignature, label: "บันทึกการเดินทางคนขับประจำคณะ", href: "/faculty-admin/driver-records" },
         { icon: FilePlus, label: "เบิกค่าใช้จ่ายรายทริป", href: "/faculty-admin/trip-expenses" },
         { icon: BarChart3, label: "รายงานและสถิติ", href: "/faculty-admin/reports" },
+        { icon: User, label: "บัญชีผู้ใช้", href: "/faculty-admin/profile" },
       ];
     }
 
@@ -312,7 +322,6 @@ function Sidebar({ userRole }: { userRole: string }) {
       ];
     }
 
-    // 4. เมนูสำหรับ Super Admin (แอดมินระบบส่วนกลาง)
     if (role === "SUPER_ADMIN") {
       return [
         { icon: LayoutDashboard, label: "แดชบอร์ดส่วนกลาง", href: "/super-admin/dashboard" },
@@ -320,6 +329,7 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: Bus, label: "จัดการรถตู้ทั้งหมด", href: "/super-admin/vans" },
         { icon: CarFront, label: "จัดการคนขับ", href: "/super-admin/drivers" },
         { icon: FileSignature, label: "ประวัติการใช้งาน", href: "/super-admin/logs" },
+        { icon: User, label: "บัญชีผู้ใช้", href: "/super-admin/profile" },
       ];
     }
 

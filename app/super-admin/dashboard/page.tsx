@@ -18,6 +18,8 @@ interface MaintenanceAlert {
   urgency: string;
 }
 
+import { getDashboardStats } from '@/app/actions/superadmin';
+
 export default function SuperAdminDashboard() {
   const router = useRouter();
 
@@ -43,17 +45,14 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const res = await fetch('/api/super-admin/dashboard');
-        if (res.ok) {
-          const data = await res.json();
-          setStats({
-            totalVans: data.totalVans || 0,
-            totalFaculties: data.totalFaculties || 0,
-            activeMissions: data.activeMissions || 0,
-            utilizationPercent: data.utilizationPercent || 0
-          });
-          setMaintenanceAlerts(data.maintenanceAlerts || []);
-        }
+        const data = await getDashboardStats();
+        setStats({
+          totalVans: data.totalVans || 0,
+          totalFaculties: data.totalFaculties || 0,
+          activeMissions: data.activeMissions || 0,
+          utilizationPercent: data.utilizationPercent || 0
+        });
+        setMaintenanceAlerts(data.maintenanceAlerts || []);
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
       } finally {
@@ -120,66 +119,70 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* ----- Top KPI Stat Cards (3 Columns) ----- */}
+      {/* ----- Top KPI Stat Cards (3 Columns - Design matched to Picture 2) ----- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
         
         {/* Card 1 */}
         <div 
           onClick={() => router.push('/super-admin/vans')}
-          className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm border-t-[5px] border-t-purple-600 hover:shadow-md transition-all cursor-pointer group flex items-center justify-between"
+          className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#311171]/20 hover:shadow-md transition-all cursor-pointer"
         >
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-purple-100 flex items-center justify-center text-purple-700 rounded-[20px] group-hover:scale-105 transition-transform">
-              <CarFront size={28} strokeWidth={2} />
+            <div className="w-14 h-14 rounded-full bg-[#311171] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#311171]/30">
+              <CarFront size={28} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-bold mb-0.5">รถทั้งหมดในระบบ</p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[28px] font-black text-gray-900 leading-none">{isLoading ? '-' : stats.totalVans}</span>
-                <span className="text-[11px] font-bold text-gray-400">คัน ({isLoading ? '-' : stats.totalFaculties} คณะ)</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">รถทั้งหมดในระบบ</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{isLoading ? '-' : stats.totalVans} คัน</span>
               </div>
+              <p className="text-xs font-bold text-purple-600 mt-0.5">({isLoading ? '-' : stats.totalFaculties} คณะ)</p>
             </div>
           </div>
-          <ChevronRight size={20} className="text-gray-300 group-hover:text-purple-600 transition-colors" />
+          <ChevronRight size={20} className="text-gray-300 group-hover:text-[#311171] transition-colors" />
         </div>
 
         {/* Card 2 */}
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm border-t-[5px] border-t-emerald-500 flex items-center justify-between">
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 hover:shadow-md transition-all cursor-pointer">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-emerald-100/80 flex items-center justify-center text-emerald-600 rounded-[20px]">
-              <MapPin size={28} strokeWidth={2} />
+            <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-emerald-500/30">
+              <MapPin size={28} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-bold mb-0.5">กำลังปฏิบัติภารกิจวันนี้</p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[28px] font-black text-gray-900 leading-none">{isLoading ? '-' : stats.activeMissions}</span>
-                <span className="text-[11px] font-bold text-gray-400">คัน ({isLoading ? '-' : stats.utilizationPercent}% Utilization)</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">กำลังปฏิบัติภารกิจวันนี้</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{isLoading ? '-' : stats.activeMissions} คัน</span>
               </div>
+              <p className="text-xs font-bold text-emerald-600 mt-0.5">({isLoading ? '-' : stats.utilizationPercent}% Utilization)</p>
             </div>
           </div>
-          <ChevronRight size={20} className="text-gray-300" />
+          <ChevronRight size={20} className="text-gray-300 group-hover:text-emerald-500 transition-colors" />
         </div>
 
         {/* Card 3 */}
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm border-t-[5px] border-t-rose-500 flex items-center justify-between">
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-rose-200 hover:shadow-md transition-all cursor-pointer">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-rose-100/80 flex items-center justify-center text-rose-600 rounded-[20px]">
-              <AlertCircle size={28} strokeWidth={2} />
+            <div className="w-14 h-14 rounded-full bg-rose-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-rose-500/30">
+              <AlertCircle size={28} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-bold mb-0.5">แจ้งเตือน พ.ร.บ. / ซ่อมบำรุง</p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[28px] font-black text-gray-900 leading-none">{maintenanceAlerts.length}</span>
-                <span className="text-[11px] font-bold text-gray-400">คัน (ต้องดำเนินการ)</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">แจ้งเตือน พ.ร.บ. / ซ่อมบำรุง</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{maintenanceAlerts.length} คัน</span>
               </div>
+              {maintenanceAlerts.length > 0 ? (
+                <p className="text-xs font-bold text-rose-600 mt-0.5">ต้องดำเนินการ</p>
+              ) : (
+                <p className="text-xs font-bold text-gray-400 mt-0.5">ไม่มีรายการค้าง</p>
+              )}
             </div>
           </div>
-          <ChevronRight size={20} className="text-gray-300" />
+          <ChevronRight size={20} className="text-gray-300 group-hover:text-rose-500 transition-colors" />
         </div>
 
       </div>
 
-      {/* ----- Main Full-Width Section: แจ้งเตือนต่อ พ.ร.บ. / ซ่อมบำรุง ----- */}
+      {/* ----- Main Full-Width Section: แจ้งเตือนปัญหาต่างๆ ----- */}
       <div className="bg-transparent rounded-3xl overflow-hidden flex flex-col flex-1">
         
         {/* Section Header */}
@@ -189,7 +192,7 @@ export default function SuperAdminDashboard() {
               <Wrench size={22} strokeWidth={2.5} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-gray-900">แจ้งเตือนต่อ พ.ร.บ. / ซ่อมบำรุง</h2>
+              <h2 className="text-lg font-black text-gray-900">แจ้งเตือนปัญหาต่างๆ</h2>
               <p className="text-[13px] text-gray-500 font-medium mt-0.5">ระบบดึงข้อมูลวันต่อภาษีและเช็คระยะของรถทุกคณะโดยอัตโนมัติ</p>
             </div>
           </div>

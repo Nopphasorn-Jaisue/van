@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Users, Mail, Phone, Search, Plus, Edit, 
-  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, Camera
+  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, Camera, UserX
 } from 'lucide-react';
+import { getPendingAvailabilityRequests, updateAvailabilityApproval } from '@/app/actions/driver-availability';
 
 
 interface ApiDriver {
@@ -14,6 +15,7 @@ interface ApiDriver {
   phone: string;
   vanPlate?: string;
   contractStart?: string;
+  licenseExpiry?: string;
   isActive?: boolean;
   avatar?: string;
 }
@@ -25,6 +27,7 @@ interface Driver {
   phone: string;
   vanAssigned: string;
   contractStart: string;
+  licenseExpiry: string;
   isLocked: boolean;
   avatar: string;
 }
@@ -34,6 +37,8 @@ export default function DriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+
   const loadDrivers = async () => {
     try {
       const res = await fetch('/api/drivers');
@@ -45,6 +50,7 @@ export default function DriversPage() {
         phone: d.phone,
         vanAssigned: d.vanPlate || 'ยังไม่ผูกทะเบียน',
         contractStart: d.contractStart || '2024-01-01',
+        licenseExpiry: d.licenseExpiry || '2025-01-01',
         isLocked: !d.isActive,
         avatar: d.avatar || `https://i.pravatar.cc/150?u=${d.id}`
       }));
@@ -56,10 +62,30 @@ export default function DriversPage() {
     }
   };
 
+  const loadPendingRequests = async () => {
+    try {
+      const reqs = await getPendingAvailabilityRequests();
+      setPendingRequests(reqs);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     loadDrivers();
+    loadPendingRequests();
   }, []);
+
+  const handleApprove = async (id: number, approval: 'APPROVED' | 'REJECTED') => {
+    try {
+      await updateAvailabilityApproval(id, approval, 1); // Mock Admin User ID = 1
+      loadPendingRequests();
+      alert(`ทำรายการสำเร็จ (${approval})`);
+    } catch (err) {
+      alert("เกิดข้อผิดพลาด");
+    }
+  };
 
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -72,6 +98,7 @@ export default function DriversPage() {
     phone: "",
     vanAssigned: "",
     contractStart: "",
+    licenseExpiry: "",
     isLocked: false,
     avatar: ""
   });
@@ -117,6 +144,7 @@ export default function DriversPage() {
       phone: "",
       vanAssigned: "",
       contractStart: new Date().toISOString().split('T')[0],
+      licenseExpiry: new Date().toISOString().split('T')[0],
       isLocked: false,
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80"
     });
@@ -131,6 +159,7 @@ export default function DriversPage() {
       phone: driver.phone,
       vanAssigned: driver.vanAssigned,
       contractStart: driver.contractStart,
+      licenseExpiry: driver.licenseExpiry,
       isLocked: driver.isLocked,
       avatar: driver.avatar || ""
     });
@@ -242,7 +271,43 @@ export default function DriversPage() {
 
   return (
     <AppShell>
-      <div className="max-w-[1400px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0">
+      <div className="w-full space-y-6 animate-in fade-in pb-6 flex flex-col h-full">
+
+
+        {/* Pending Requests Section */}
+        {pendingRequests.length > 0 && (
+          <div className="px-6 flex-shrink-0">
+            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5 shadow-sm">
+              <h3 className="font-bold text-amber-800 flex items-center gap-2 mb-3">
+                <AlertCircle size={20} />
+                คำขอเปลี่ยนสถานะ/ลางานรอดำเนินการ ({pendingRequests.length})
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {pendingRequests.map(req => (
+                  <div key={req.id} className="bg-white p-4 rounded-xl border border-amber-100 shadow-sm">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-[#311171]">
+                        {req.driver.user.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">{req.driver.user.name}</p>
+                        <p className="text-xs text-gray-500">วันที่: {new Date(req.date).toLocaleDateString('th-TH')}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs font-bold text-red-600 mb-1">
+                      ขอสถานะ: {req.status === 'SICK_LEAVE' ? 'ลาป่วย' : req.status === 'PERSONAL_LEAVE' ? 'ลากิจ' : req.status === 'SUBSTITUTE' ? 'ปฏิบัติงานแทน' : req.status}
+                    </p>
+                    <p className="text-xs text-gray-600 mb-4 bg-gray-50 p-2 rounded-lg">{req.reason || '-'}</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleApprove(req.id, 'APPROVED')} className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors">อนุมัติ</button>
+                      <button onClick={() => handleApprove(req.id, 'REJECTED')} className="flex-1 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-colors">ปฏิเสธ</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* ----- Header ----- */}
         <div className="mb-8 shrink-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -345,7 +410,8 @@ export default function DriversPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div><span className="text-gray-500">รถที่รับผิดชอบ:</span> <span className="font-bold text-gray-800">{driver.vanAssigned}</span></div>
-                        <div className="text-right"><span className="text-gray-500">หมดอายุ:</span> <span className={`font-bold ${isExpired ? 'text-red-600' : isWarning ? 'text-orange-600' : 'text-gray-800'}`}>{formatDate(expiryDate)}</span></div>
+                        <div className="text-right"><span className="text-gray-500">หมดอายุสัญญา:</span> <span className={`font-bold ${isExpired ? 'text-red-600' : isWarning ? 'text-orange-600' : 'text-gray-800'}`}>{formatDate(expiryDate)}</span></div>
+                        <div className="col-span-2 text-right mt-1"><span className="text-gray-500">ใบขับขี่หมดอายุ:</span> <span className="font-bold text-gray-800">{formatDate(new Date(driver.licenseExpiry))}</span></div>
                       </div>
                     </div>
 
@@ -492,7 +558,7 @@ export default function DriversPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">ชื่อ - นามสกุล</label>
                   <input 
@@ -510,6 +576,27 @@ export default function DriversPage() {
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     placeholder="เช่น 081-234-5678"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">วันที่เริ่มสัญญา</label>
+                  <input 
+                    type="date" 
+                    value={formData.contractStart ? formData.contractStart.split('T')[0] : ''}
+                    onChange={(e) => setFormData({...formData, contractStart: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">วันหมดอายุใบขับขี่</label>
+                  <input 
+                    type="date" 
+                    value={formData.licenseExpiry ? formData.licenseExpiry.split('T')[0] : ''}
+                    onChange={(e) => setFormData({...formData, licenseExpiry: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
                   />
                 </div>

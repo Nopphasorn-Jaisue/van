@@ -1,9 +1,11 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { Clock, Users, Phone, AlertTriangle, CheckCircle, Gauge, X, FileText, ClipboardList, TrendingUp, CalendarDays, Loader2 } from 'lucide-react';
+import { Clock, Users, Phone, AlertTriangle, CheckCircle, Gauge, X, FileText, CalendarDays, Loader2, ChevronRight, CarFront, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import { getDriverDashboardData } from '@/app/actions/driver';
+import { requestAvailabilityChange } from '@/app/actions/driver-availability';
+import { AvailabilityStatus } from '@prisma/client';
 
 type Trip = {
   id: string;
@@ -16,10 +18,15 @@ type Trip = {
 };
 
 export default function DriverDashboard() {
-  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
-  const [emergencyType, setEmergencyType] = useState('sick');
-  const [emergencyDetail, setEmergencyDetail] = useState('');
-  const [isSubmittingEmergency, setIsSubmittingEmergency] = useState(false);
+  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+  const [availabilityDate, setAvailabilityDate] = useState('');
+
+  useEffect(() => {
+    setAvailabilityDate(new Date().toISOString().split('T')[0]);
+  }, []);
+  const [availabilityType, setAvailabilityType] = useState<AvailabilityStatus>('SICK_LEAVE');
+  const [availabilityDetail, setAvailabilityDetail] = useState('');
+  const [isSubmittingAvailability, setIsSubmittingAvailability] = useState(false);
   
   const [dashboardData, setDashboardData] = useState<{
     driver?: { name: string; faculty: string; vanPlate: string };
@@ -46,20 +53,34 @@ export default function DriverDashboard() {
     fetchData();
   }, []);
 
-  const handleEmergencySubmit = (e: React.FormEvent) => {
+  const handleAvailabilitySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emergencyDetail) {
-      alert("กรุณาระบุรายละเอียดเพิ่มเติม");
+    if (availabilityType !== 'READY' && !availabilityDetail) {
+      alert("กรุณาระบุรายละเอียดเพิ่มเติม/เหตุผล");
       return;
     }
-    setIsSubmittingEmergency(true);
-    // Mock API call
-    setTimeout(() => {
-      setIsSubmittingEmergency(false);
-      setShowEmergencyModal(false);
-      setEmergencyDetail('');
-      alert("ส่งข้อมูลการแจ้งปัญหาเรียบร้อยแล้ว แอดมินจะติดต่อกลับโดยเร็วที่สุด");
-    }, 1000);
+    setIsSubmittingAvailability(true);
+    
+    try {
+      const res = await requestAvailabilityChange(
+        1, // Mock driverId
+        new Date(availabilityDate),
+        availabilityType,
+        availabilityDetail
+      );
+      if (res.success) {
+        alert("ส่งข้อมูลเปลี่ยนสถานะเรียบร้อยแล้ว");
+        setShowAvailabilityModal(false);
+        setAvailabilityDetail('');
+      } else {
+        alert("เกิดข้อผิดพลาด: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+    } finally {
+      setIsSubmittingAvailability(false);
+    }
   };
 
   const formatTime = (dateString: string | Date) => {
@@ -109,22 +130,81 @@ export default function DriverDashboard() {
         </div>
 
 
-        {/* Quick Menu */}
-        <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-[#311171] font-black text-sm">
-            <Gauge size={18} />
-            เมนูด่วน
+        {/* KPI Cards (4 กล่องสไตล์ Faculty Admin แบบ 3D มิติ) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+          {/* Card 1 - จำนวนทริปเดือนนี้ */}
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#311171]/20 hover:shadow-md transition-all">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-[#311171] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#311171]/30">
+                <CarFront size={28} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-600 mb-0.5">ทริปทั้งหมดเดือนนี้</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-gray-900">{stats?.totalTrips || 0} ทริป</span>
+                </div>
+                <p className="text-xs font-bold text-purple-600 mt-0.5">สถิติสะสมในระบบ</p>
+              </div>
+            </div>
+            <ChevronRight size={20} className="text-gray-300 group-hover:text-[#311171] transition-colors" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/driver/records" className="bg-white px-3 py-3 rounded-xl border border-purple-100 flex flex-col items-center justify-center gap-2 hover:bg-purple-50/50 transition-colors shadow-sm">
-              <FileText size={20} className="text-[#311171]" />
-              <span className="text-xs font-bold text-gray-700">สมุดรถ</span>
-            </Link>
-            <Link href="/driver/report" className="bg-white px-3 py-3 rounded-xl border border-purple-100 flex flex-col items-center justify-center gap-2 hover:bg-purple-50/50 transition-colors shadow-sm">
-              <ClipboardList size={20} className="text-[#311171]" />
-              <span className="text-xs font-bold text-gray-700">รายงาน (แบบ 4)</span>
-            </Link>
+
+          {/* Card 2 - ระยะทางรวม */}
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-green-200 hover:shadow-md transition-all">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-green-200">
+                <Gauge size={28} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-600 mb-0.5">ระยะทางขับขี่รวม</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-gray-900">{stats?.totalDistance || 0} กม.</span>
+                </div>
+                <p className="text-xs font-bold text-green-600 mt-0.5">คำนวณจากสมุดบันทึก</p>
+              </div>
+            </div>
+            <ChevronRight size={20} className="text-gray-300 group-hover:text-green-500 transition-colors" />
           </div>
+
+          {/* Card 3 - สมุดบันทึกรถ */}
+          <Link 
+            href="/driver/records"
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#C39B22]/30 hover:shadow-md transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-[#C39B22] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#C39B22]/30">
+                <FileText size={28} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-600 mb-0.5">สมุดบันทึกรถ</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-black text-gray-900">บันทึกเดินทาง</span>
+                </div>
+                <p className="text-xs font-bold text-amber-600 mt-0.5">เปิดบันทึกเข้า-ออก</p>
+              </div>
+            </div>
+            <ChevronRight size={20} className="text-gray-300 group-hover:text-[#C39B22] transition-colors" />
+          </Link>
+
+          {/* Card 4 - รายงาน (แบบ 4) */}
+          <Link 
+            href="/driver/report"
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-blue-200 hover:shadow-md transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-blue-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-blue-200">
+                <FileSpreadsheet size={28} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-600 mb-0.5">รายงานประจำเดือน</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-black text-gray-900">แบบฟอร์ม 4</span>
+                </div>
+                <p className="text-xs font-bold text-blue-600 mt-0.5">ดูสถิติและส่งออก CSV</p>
+              </div>
+            </div>
+            <ChevronRight size={20} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
+          </Link>
         </div>
 
         {/* Today's Trip Card */}
@@ -187,10 +267,10 @@ export default function DriverDashboard() {
                 </Link>
 
                 <button 
-                  onClick={() => setShowEmergencyModal(true)}
+                  onClick={() => setShowAvailabilityModal(true)}
                   className="w-full py-3.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
                 >
-                  <AlertTriangle size={18} /> แจ้งปัญหาฉุกเฉิน / ลาพัก
+                  <AlertTriangle size={18} /> แจ้งเปลี่ยนสถานะความพร้อม / ลางาน
                 </button>
               </div>
             </div>
@@ -204,31 +284,13 @@ export default function DriverDashboard() {
             <p className="text-sm font-bold text-gray-500 mb-6">คุณว่างในวันนี้ พักผ่อนให้เต็มที่ครับ</p>
             
             <button 
-              onClick={() => setShowEmergencyModal(true)}
+              onClick={() => setShowAvailabilityModal(true)}
               className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
             >
               <AlertTriangle size={18} /> แจ้งปัญหาฉุกเฉิน / ลาพัก
             </button>
           </div>
         )}
-
-        {/* Monthly Quick Stats */}
-        <div>
-          <h3 className="text-sm font-black text-gray-900 mb-3 flex items-center gap-2">
-            <TrendingUp size={16} className="text-purple-600" /> สถิติเดือนนี้
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-2xl p-3 border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
-              <p className="text-xs font-bold text-gray-500 mb-1">จำนวนทริป</p>
-              <p className="text-lg font-black text-[#311171]">{stats?.totalTrips || 0}</p>
-            </div>
-            <div className="bg-white rounded-2xl p-3 border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
-              <p className="text-xs font-bold text-gray-500 mb-1">ระยะทางรวม</p>
-              <p className="text-lg font-black text-[#311171]">{stats?.totalDistance || 0}</p>
-              <p className="text-[10px] text-gray-400">กม.</p>
-            </div>
-          </div>
-        </div>
 
         {/* Upcoming Trips */}
         {upcomingTrips && upcomingTrips.length > 0 && (
@@ -255,69 +317,86 @@ export default function DriverDashboard() {
           </div>
         )}
 
-        {/* Emergency Modal */}
-        {showEmergencyModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95">
-              <div className="bg-red-500 p-4 text-white flex justify-between items-center">
-                <h3 className="font-black flex items-center gap-2">
-                  <AlertTriangle size={18} /> แจ้งปัญหาฉุกเฉิน / ลาพัก
-                </h3>
+        {/* Availability Modal */}
+        {showAvailabilityModal && (
+          <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex justify-center items-end sm:items-center sm:p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full sm:w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-xl animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-4 duration-300">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-gray-900 text-lg">เปลี่ยนสถานะความพร้อม</h3>
+                    <p className="text-sm font-bold text-gray-500">แจ้งลางาน หรือ แจ้งความพร้อม</p>
+                  </div>
+                </div>
                 <button 
-                  onClick={() => setShowEmergencyModal(false)} 
-                  className="p-1 hover:bg-white/20 rounded-full transition-colors"
+                  onClick={() => setShowAvailabilityModal(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
                 >
-                  <X size={20} />
+                  <X size={16} strokeWidth={3} />
                 </button>
               </div>
-              <form onSubmit={handleEmergencySubmit} className="p-5 space-y-4">
-                
+
+              <form onSubmit={handleAvailabilitySubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-2">ประเภทการแจ้ง</label>
+                  <label className="block text-xs font-bold text-gray-500 mb-2">วันที่ต้องการแจ้ง</label>
+                  <input
+                    type="date"
+                    value={availabilityDate}
+                    onChange={(e) => setAvailabilityDate(e.target.value)}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-sm text-gray-900 outline-none focus:border-red-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-2">ระบุสถานะ</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setEmergencyType('sick')}
+                      onClick={() => setAvailabilityType('READY')}
                       className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
-                        emergencyType === 'sick' 
-                          ? 'bg-red-50 border-red-200 text-red-600' 
+                        availabilityType === 'READY' 
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
                           : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      ป่วยฉุกเฉิน
+                      พร้อมปฏิบัติงาน
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEmergencyType('leave')}
+                      onClick={() => setAvailabilityType('SUBSTITUTE')}
                       className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
-                        emergencyType === 'leave' 
-                          ? 'bg-red-50 border-red-200 text-red-600' 
+                        availabilityType === 'SUBSTITUTE' 
+                          ? 'bg-amber-50 border-amber-200 text-amber-700' 
                           : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      ลากิจเร่งด่วน
+                      ปฏิบัติงานแทน
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEmergencyType('accident')}
+                      onClick={() => setAvailabilityType('SICK_LEAVE')}
                       className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
-                        emergencyType === 'accident' 
+                        availabilityType === 'SICK_LEAVE' 
                           ? 'bg-red-50 border-red-200 text-red-600' 
                           : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      อุบัติเหตุ
+                      ลาป่วย
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEmergencyType('broken')}
+                      onClick={() => setAvailabilityType('PERSONAL_LEAVE')}
                       className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
-                        emergencyType === 'broken' 
+                        availabilityType === 'PERSONAL_LEAVE' 
                           ? 'bg-red-50 border-red-200 text-red-600' 
                           : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      รถเสีย/ซ่อม
+                      ลากิจ
                     </button>
                   </div>
                 </div>
@@ -325,21 +404,21 @@ export default function DriverDashboard() {
                 <div>
                   <label className="block text-xs font-bold text-gray-500 mb-2">รายละเอียดเพิ่มเติม</label>
                   <textarea
-                    value={emergencyDetail}
-                    onChange={(e) => setEmergencyDetail(e.target.value)}
-                    placeholder="ระบุรายละเอียดอาการป่วย, สาเหตุที่ลา, หรือรายละเอียดรถเสีย..."
+                    value={availabilityDetail}
+                    onChange={(e) => setAvailabilityDetail(e.target.value)}
+                    placeholder="ระบุเหตุผล เช่น ไปหาหมอ, ธุระส่วนตัว..."
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-medium text-sm text-gray-900 resize-none h-24"
-                    required
+                    required={availabilityType !== 'READY'}
                   />
                 </div>
 
                 <div className="pt-2">
                   <button 
                     type="submit"
-                    disabled={isSubmittingEmergency}
+                    disabled={isSubmittingAvailability}
                     className="w-full py-3.5 bg-red-500 hover:bg-red-600 text-white font-black rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {isSubmittingEmergency ? (
+                    {isSubmittingAvailability ? (
                       <span className="animate-pulse">กำลังส่งข้อมูล...</span>
                     ) : (
                       <>ยืนยันการแจ้งปัญหา</>

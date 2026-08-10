@@ -9,7 +9,7 @@ export async function handleListMaintenance() {
     });
 
     const vans = await prisma.van.findMany({
-      select: { id: true, plate: true, taxExp: true, insExp: true, nextCheckMileage: true }
+      select: { id: true, plate: true, nextCheckMileage: true }
     });
 
     const now = new Date();
@@ -53,40 +53,13 @@ export async function handleListMaintenance() {
       };
     });
 
-    const upcomingDueItems = [];
-    let itemId = 1;
-
-    for (const v of vans) {
-      if (v.taxExp) {
-        const diffTime = v.taxExp.getTime() - now.getTime();
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (daysLeft <= 30) {
-          upcomingDueItems.push({
-            id: itemId++,
-            title: `ภาษีรถ ${v.plate}`,
-            dueDate: `ครบกำหนด ${v.taxExp.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}`,
-            daysLeft: `${daysLeft} วัน`,
-            iconType: 'tax',
-            iconBg: 'bg-emerald-100/70 text-emerald-600'
-          });
-        }
-      }
-      
-      if (v.insExp) {
-        const diffTime = v.insExp.getTime() - now.getTime();
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (daysLeft <= 45) {
-          upcomingDueItems.push({
-            id: itemId++,
-            title: `ประกันรถ ${v.plate}`,
-            dueDate: `ครบกำหนด ${v.insExp.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}`,
-            daysLeft: `${daysLeft} วัน`,
-            iconType: 'insurance',
-            iconBg: 'bg-purple-100/70 text-purple-600'
-          });
-        }
-      }
-    }
+    const upcomingDueItems: Array<{
+      id: number;
+      title: string;
+      dueDate: string;
+      daysLeft: string;
+      iconType: string;
+    }> = [];
 
     const mappedVans = vans.map(v => ({ id: v.id.toString(), plate: v.plate }));
 
@@ -122,16 +95,7 @@ export async function handleCreateMaintenance(request: Request) {
       }
     });
 
-    // Optionally update Van taxExp / insExp by 1 year if type is TAX or INSURANCE
-    if (body.type === 'TAX') {
-      const nextYear = new Date(date);
-      nextYear.setFullYear(nextYear.getFullYear() + 1);
-      await prisma.van.update({ where: { id: parseInt(body.vanId) }, data: { taxExp: nextYear } });
-    } else if (body.type === 'INSURANCE') {
-      const nextYear = new Date(date);
-      nextYear.setFullYear(nextYear.getFullYear() + 1);
-      await prisma.van.update({ where: { id: parseInt(body.vanId) }, data: { insExp: nextYear } });
-    }
+
 
     return NextResponse.json({ success: true, record });
   } catch (error) {

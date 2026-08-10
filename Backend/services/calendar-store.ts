@@ -7,6 +7,7 @@ export { facultyVansList };
 
 export type CalendarEventRecord = {
   id: string;
+  gcalId?: string;
   vanId: string;
   facultyId: string;
   bookingFaculty: string;

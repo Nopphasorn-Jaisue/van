@@ -85,7 +85,7 @@ export default function SuperAdminFaculties() {
   const activePercent = totalFaculties > 0 ? ((activeFaculties / totalFaculties) * 100).toFixed(0) : "0";
 
   const totalVans = faculties.reduce((acc, curr) => acc + curr.totalVans, 0);
-  const totalSubDrivers = faculties.reduce((acc, curr) => acc + curr.subDrivers, 0);
+  const totalDrivers = faculties.reduce((acc, curr) => acc + curr.mainDrivers + (curr.subDrivers || 0), 0);
 
   return (
     <div 
@@ -122,78 +122,71 @@ export default function SuperAdminFaculties() {
       </div>
 
 
-      {/* Top 4 Stat Cards */}
+      {/* Top 4 Stat Cards (Image 2 Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" onClick={(e) => e.stopPropagation()}>
         
         {/* Card 1 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="p-3 bg-purple-100/80 text-[#311171] rounded-2xl">
-            <Building2 size={24} />
-          </div>
-          <div>
-            <p className="text-[11px] text-gray-500 font-medium">คณะทั้งหมด</p>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-2xl font-black text-gray-900">{totalFaculties}</span>
-              <span className="text-xs font-medium text-gray-500">คณะ</span>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#311171]/20 hover:shadow-md transition-all">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-[#311171] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#311171]/30">
+              <Building2 size={26} strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">คณะทั้งหมด</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{totalFaculties} คณะ</span>
+              </div>
+              <p className="text-xs font-bold text-purple-600 mt-0.5">ในระบบทั้งหมด</p>
             </div>
           </div>
         </div>
 
         {/* Card 2 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 bg-purple-100/80 text-[#311171] rounded-2xl">
-              <Users size={24} />
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 hover:shadow-md transition-all">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-emerald-500/30">
+              <Users size={26} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-medium">คณะที่ใช้งานอยู่</p>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-2xl font-black text-gray-900">{activeFaculties}</span>
-                <span className="text-xs font-medium text-gray-500">คณะ</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">คณะที่ใช้งานอยู่</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{activeFaculties} คณะ</span>
               </div>
+              <p className="text-xs font-bold text-emerald-600 mt-0.5">Active {activePercent}%</p>
             </div>
           </div>
-          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active {activePercent}%
-          </span>
         </div>
 
         {/* Card 3 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 bg-purple-100/80 text-[#311171] rounded-2xl">
-              <Bus size={24} />
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-blue-200 hover:shadow-md transition-all">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-blue-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-blue-200">
+              <Bus size={26} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-medium">รถประจำคณะ</p>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-2xl font-black text-gray-900">{totalVans}</span>
-                <span className="text-xs font-medium text-gray-500">คัน</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">รถประจำคณะ</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{totalVans} คัน</span>
               </div>
+              <p className="text-xs font-bold text-blue-600 mt-0.5">ทั้งหมด {totalVans} คัน</p>
             </div>
           </div>
-          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ทั้งหมด {totalVans} คัน
-          </span>
         </div>
 
         {/* Card 4 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 bg-purple-100/80 text-[#311171] rounded-2xl">
-              <UserCheck size={24} />
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#C39B22]/30 hover:shadow-md transition-all">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-[#C39B22] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#C39B22]/30">
+              <UserCheck size={26} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-medium">คนขับสำรองทั้งหมด</p>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-2xl font-black text-gray-900">{totalSubDrivers}</span>
-                <span className="text-xs font-medium text-gray-500">คน</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">พนักงานขับรถทั้งหมด</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{totalDrivers} คน</span>
               </div>
+              <p className="text-xs font-bold text-amber-600 mt-0.5">ทั้งหมด {totalDrivers} คน</p>
             </div>
           </div>
-          <span className="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-sky-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span> ทั้งหมด {totalSubDrivers} คน
-          </span>
         </div>
 
       </div>
@@ -217,8 +210,7 @@ export default function SuperAdminFaculties() {
                     <th className="py-3 px-3">ชื่อย่อ</th>
                     <th className="py-3 px-3">ผู้ดูแลคณะ</th>
                     <th className="py-3 px-3 text-center">รถประจำคณะ</th>
-                    <th className="py-3 px-3 text-center">คนขับประจำ</th>
-                    <th className="py-3 px-3 text-center">คนขับสำรอง</th>
+                    <th className="py-3 px-3 text-center">พนักงานขับรถ</th>
                     <th className="py-3 px-3">ติดต่อ</th>
                     <th className="py-3 px-3 text-center">สถานะ</th>
                     <th className="py-3 px-3 text-center">จัดการ</th>
@@ -249,7 +241,6 @@ export default function SuperAdminFaculties() {
                         <td className="py-3 px-3 text-gray-700 whitespace-nowrap">{f.adminName}</td>
                         <td className="py-3 px-3 text-center font-bold text-gray-900">{f.totalVans} คัน</td>
                         <td className="py-3 px-3 text-center font-bold text-gray-900">{f.mainDrivers} คน</td>
-                        <td className="py-3 px-3 text-center font-bold text-gray-900">{f.subDrivers} คน</td>
                         <td className="py-3 px-3 font-mono text-gray-600 text-[11px] whitespace-nowrap">{f.phone}</td>
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">

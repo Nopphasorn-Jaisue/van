@@ -1,20 +1,48 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  FileSignature, Search, Filter, History, User, AlertCircle, Settings
+  FileSignature, Search, Filter, History, User, AlertCircle, Settings, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { getAuditLogs } from '@/app/actions/audit';
+import { formatDistanceToNow } from 'date-fns';
+import { th } from 'date-fns/locale';
+
+type AuditLogItem = {
+  id: number;
+  action: string;
+  target: string | null;
+  type: string;
+  createdAt: Date;
+  user: { name: string; role: string } | null;
+};
 
 export default function SuperAdminLogs() {
   const [search, setSearch] = useState("");
+  const [logs, setLogs] = useState<AuditLogItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const mockLogs = [
-    { id: 1, action: "ลบผู้ใช้งานระบบ", user: "นายกฤษฎา วงศ์ไชย (Super Admin)", target: "นายสมชาย (Faculty Admin)", time: "10 นาทีที่แล้ว", type: "danger" },
-    { id: 2, action: "เพิ่มสิทธิ์การเข้าถึง", user: "นายกฤษฎา วงศ์ไชย (Super Admin)", target: "นางสาวจิราภรณ์ (Faculty Admin)", time: "1 ชั่วโมงที่แล้ว", type: "warning" },
-    { id: 3, action: "อนุมัติคำขอใช้รถตู้", user: "นางสาวจิราภรณ์ (Faculty Admin)", target: "คำขอ UP-6705-001", time: "2 ชั่วโมงที่แล้ว", type: "success" },
-    { id: 4, action: "เข้าสู่ระบบ", user: "นายพงศ์พัฒนา (User)", target: "ระบบจองรถตู้", time: "เมื่อวานนี้ 15:30", type: "info" },
-    { id: 5, action: "เปลี่ยนรหัสผ่าน", user: "นางสาวอัญชนา (Executive)", target: "บัญชีส่วนตัว", time: "25 พ.ค. 2567 09:00", type: "info" },
-  ];
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      setLoading(true);
+      const data = await getAuditLogs(search);
+      setLogs(data);
+      setLoading(false);
+    };
+    
+    const timer = setTimeout(() => {
+      fetchLogs();
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const totalItems = logs.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const paginatedLogs = logs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="w-full space-y-6 animate-in fade-in pb-6 h-full flex flex-col">
@@ -63,7 +91,15 @@ export default function SuperAdminLogs() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-[13px] font-medium">
-              {mockLogs.map((log) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className="py-10 text-center text-gray-500 font-bold">กำลังโหลดข้อมูล...</td>
+                </tr>
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-10 text-center text-gray-500 font-bold">ไม่พบประวัติการใช้งาน</td>
+                </tr>
+              ) : paginatedLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-gray-50/40 transition-colors">
                   <td className="py-4 px-6 align-middle">
                     <div className="flex items-center gap-3">
@@ -82,29 +118,65 @@ export default function SuperAdminLogs() {
                     </div>
                   </td>
                   <td className="py-4 px-6 align-middle text-gray-600">
-                    {log.user}
+                    {log.user ? `${log.user.name} (${log.user.role})` : '-'}
                   </td>
                   <td className="py-4 px-6 align-middle text-gray-600">
-                    {log.target}
+                    {log.target || '-'}
                   </td>
                   <td className="py-4 px-6 align-middle text-right text-gray-400 font-bold">
-                    {log.time}
+                    {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true, locale: th })}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        
-        {/* Pagination mock */}
-        <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
-          <span className="text-xs font-bold text-gray-500">แสดง 1 ถึง 5 จาก 1,240 รายการ</span>
-          <div className="flex gap-1">
-            <button className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-400 cursor-not-allowed">ก่อนหน้า</button>
-            <button className="px-3 py-1.5 bg-[#311171] text-white rounded-lg text-xs font-bold shadow-sm">1</button>
-            <button className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50">2</button>
-            <button className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50">3</button>
-            <button className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50">ถัดไป</button>
+        {/* Pagination Footer */}
+        <div className="p-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500 font-medium">
+          <div>แสดง {totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, totalItems)} จาก {totalItems} รายการ</div>
+          <div className="flex items-center gap-2">
+            <span>แสดงต่อหน้า:</span>
+            <select 
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold outline-none"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+            <div className="flex items-center gap-1">
+              <button 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="p-1 rounded-lg border border-gray-200 disabled:opacity-50"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <button 
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-2.5 py-0.5 rounded-lg font-bold ${
+                    currentPage === i + 1 
+                      ? "bg-[#311171] text-white" 
+                      : "border border-gray-200"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button 
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="p-1 rounded-lg border border-gray-200 disabled:opacity-50"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
 

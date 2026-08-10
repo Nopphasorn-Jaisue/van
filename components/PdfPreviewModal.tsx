@@ -3,14 +3,28 @@ import React from 'react';
 interface PdfPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
-  formData: any;
+  formData: {
+    startDate?: string;
+    endDate?: string;
+    vanType?: string;
+    vanId?: string;
+    bookingFaculty?: string;
+    destination?: string;
+    purpose?: string;
+    passengers?: number;
+    requester?: string;
+    department?: string;
+    dropoff?: string;
+    budgetType?: string;
+    [key: string]: unknown;
+  };
 }
 
 export default function PdfPreviewModal({ isOpen, onClose, formData }: PdfPreviewModalProps) {
   if (!isOpen) return null;
 
   // ฟังก์ชันแปลงรูปแบบวันที่ให้สวยงาม (จำลอง)
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
     if (!dateString) return { date: "....", time: "...." };
     const d = new Date(dateString);
     return {

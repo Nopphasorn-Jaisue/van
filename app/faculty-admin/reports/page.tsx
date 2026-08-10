@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { CalendarDays, MapPin, Clock, Download, FileSpreadsheet, ArrowUpRight, ArrowDownRight, Users, Car, Fuel, AlertCircle, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { CalendarDays, MapPin, Clock, ArrowUpRight, ArrowDownRight, Users, Car, Fuel, AlertCircle, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
 
 type RecentTrip = {
   id: string;
@@ -151,16 +151,7 @@ export default function Page() {
               </select>
             </div>
             
-            <div className="flex items-center gap-2 ml-auto md:ml-2">
-              <button className="flex items-center gap-2 bg-indigo-900 hover:bg-indigo-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm">
-                <Download className="w-4 h-4" />
-                PDF
-              </button>
-              <button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm">
-                <FileSpreadsheet className="w-4 h-4" />
-                Excel
-              </button>
-            </div>
+
           </div>
         </div>
 

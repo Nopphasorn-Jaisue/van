@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { getVans } from "@/app/actions/superadmin";
 import { 
-  Bus, CheckCircle2, Wrench, AlertTriangle, RefreshCw,
+  Bus, CheckCircle2, Wrench, RefreshCw,
   Search, Eye, Edit, ChevronLeft, ChevronRight, X
   } from "lucide-react";
 
@@ -16,13 +16,12 @@ interface VanItem {
   seats: number;
   driver: string;
   driverAvatar: string;
-  taxDate: string;
-  taxDays: number;
-  insuranceDate: string;
-  insuranceDays: number;
   status: "READY" | "MAINTENANCE" | "DISABLED";
   nextInspection: string;
   nextService: string;
+  image?: string | null;
+  taxExp?: string | null;
+  insExp?: string | null;
 }
 
 export default function SuperAdminVans() {
@@ -31,6 +30,9 @@ export default function SuperAdminVans() {
   const [facultyFilter, setFacultyFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Modals state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -48,14 +50,13 @@ export default function SuperAdminVans() {
           ...v,
           brandModel: v.brand,
           seats: v.capacity,
-          driverAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-          taxDate: "-",
-          taxDays: 999,
-          insuranceDate: "-",
-          insuranceDays: 999,
+          driverAvatar: v.driverAvatar,
           status: v.status as "READY" | "MAINTENANCE" | "DISABLED",
           nextInspection: v.nextMaintenance,
-          nextService: "-"
+          nextService: "-",
+          image: v.image,
+          taxExp: v.taxExp,
+          insExp: v.insExp
         })));
       } catch (error) {
         console.error("Failed to load vans", error);
@@ -79,6 +80,10 @@ export default function SuperAdminVans() {
     return matchesSearch && matchesFaculty && matchesStatus;
   });
 
+  const totalItems = filteredVans.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const paginatedVans = filteredVans.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const getStatusBadge = (status: VanItem["status"]) => {
     switch (status) {
       case "READY":
@@ -93,11 +98,8 @@ export default function SuperAdminVans() {
   const totalVans = vans.length;
   const readyVans = vans.filter(v => v.status === "READY").length;
   const maintenanceVans = vans.filter(v => v.status === "MAINTENANCE").length;
-  const expiredVans = vans.filter(v => v.status === "DISABLED").length;
-
   const readyPercent = totalVans > 0 ? ((readyVans / totalVans) * 100).toFixed(0) : "0";
   const maintenancePercent = totalVans > 0 ? ((maintenanceVans / totalVans) * 100).toFixed(0) : "0";
-  const expiredPercent = totalVans > 0 ? ((expiredVans / totalVans) * 100).toFixed(0) : "0";
 
   return (
     <div 
@@ -113,75 +115,55 @@ export default function SuperAdminVans() {
         </div>
       )}
 
-      {/* Top 4 Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" onClick={(e) => e.stopPropagation()}>
+      {/* Top 3 Stat Cards (Style Image 2) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" onClick={(e) => e.stopPropagation()}>
         
         {/* Card 1 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-100/80 text-[#311171] rounded-2xl">
-              <Bus size={22} />
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#311171]/20 hover:shadow-md transition-all">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-[#311171] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#311171]/30">
+              <Bus size={26} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-medium">รถตู้ทั้งหมด</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black text-gray-900">{totalVans}</span>
-                <span className="text-xs font-medium text-gray-500">คัน</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">รถตู้ทั้งหมด</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{totalVans} คัน</span>
               </div>
+              <p className="text-xs font-bold text-purple-600 mt-0.5">100% ของทั้งหมด</p>
             </div>
           </div>
-          <p className="text-[10px] text-gray-400 font-medium pl-1">100% ของทั้งหมด</p>
         </div>
 
         {/* Card 2 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-100/80 text-emerald-600 rounded-2xl">
-              <CheckCircle2 size={22} />
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 hover:shadow-md transition-all">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-emerald-500/30">
+              <CheckCircle2 size={26} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-medium">พร้อมใช้งาน</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black text-gray-900">{readyVans}</span>
-                <span className="text-xs font-medium text-gray-500">คัน</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">พร้อมใช้งาน</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{readyVans} คัน</span>
               </div>
+              <p className="text-xs font-bold text-emerald-600 mt-0.5">{readyPercent}% ของทั้งหมด</p>
             </div>
           </div>
-          <p className="text-[10px] font-bold text-emerald-600 pl-1">{readyPercent}% ของทั้งหมด</p>
         </div>
 
         {/* Card 3 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-amber-100/80 text-amber-600 rounded-2xl">
-              <Wrench size={22} />
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-amber-200 hover:shadow-md transition-all">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-[#C39B22] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#C39B22]/30">
+              <Wrench size={26} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[11px] text-gray-500 font-medium">ซ่อมบำรุง</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black text-gray-900">{maintenanceVans}</span>
-                <span className="text-xs font-medium text-gray-500">คัน</span>
+              <p className="text-sm font-bold text-gray-600 mb-0.5">ซ่อมบำรุง</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-gray-900">{maintenanceVans} คัน</span>
               </div>
+              <p className="text-xs font-bold text-amber-600 mt-0.5">{maintenancePercent}% ของทั้งหมด</p>
             </div>
           </div>
-          <p className="text-[10px] font-bold text-amber-600 pl-1">{maintenancePercent}% ของทั้งหมด</p>
-        </div>
-
-        {/* Card 4 */}
-        <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-rose-100/80 text-rose-600 rounded-2xl">
-              <AlertTriangle size={22} />
-            </div>
-            <div>
-              <p className="text-[11px] text-gray-500 font-medium">ภาษีใกล้หมดอายุ</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black text-gray-900">{expiredVans}</span>
-                <span className="text-xs font-medium text-gray-500">คัน</span>
-              </div>
-            </div>
-          </div>
-          <p className="text-[10px] font-bold text-rose-600 pl-1">{expiredPercent}% ของทั้งหมด</p>
         </div>
 
       </div>
@@ -263,14 +245,12 @@ export default function SuperAdminVans() {
 
                     <th className="py-3 px-3 text-center">ที่นั่ง</th>
                     <th className="py-3 px-3">คนขับประจำ</th>
-                    <th className="py-3 px-3">ภาษี</th>
-                    <th className="py-3 px-3">ประกัน</th>
                     <th className="py-3 px-3 text-center">สถานะ</th>
                     <th className="py-3 px-3 text-center">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs font-medium">
-                  {filteredVans.map((v) => {
+                  {paginatedVans.map((v) => {
                     const isSelected = v.id === selectedVanId;
                     return (
                       <tr 
@@ -290,17 +270,11 @@ export default function SuperAdminVans() {
                         <td className="py-3 px-3 text-center font-bold text-gray-900">{v.seats}</td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <img src={v.driverAvatar} alt={v.driver} className="w-6 h-6 rounded-full object-cover border border-gray-200" />
+                            {v.driver !== "ไม่มีคนขับประจำ" && (
+                              <img src={v.driverAvatar} alt={v.driver} className="w-6 h-6 rounded-full object-cover border border-gray-200" />
+                            )}
                             <span className="text-gray-800 text-[11px] font-bold">{v.driver}</span>
                           </div>
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <p className="text-[11px] font-bold text-gray-800">{v.taxDate}</p>
-                          <p className="text-[10px] text-emerald-600 font-bold">อีก {v.taxDays} วัน</p>
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <p className="text-[11px] font-bold text-gray-800">{v.insuranceDate}</p>
-                          <p className="text-[10px] text-emerald-600 font-bold">อีก {v.insuranceDays} วัน</p>
                         </td>
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           {getStatusBadge(v.status)}
@@ -321,20 +295,48 @@ export default function SuperAdminVans() {
 
             {/* Pagination Footer */}
             <div className="p-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500 font-medium">
-              <div>แสดง 1 - {filteredVans.length} จาก 42 รายการ</div>
+              <div>แสดง {totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, totalItems)} จาก {totalItems} รายการ</div>
               <div className="flex items-center gap-2">
-                <select className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold outline-none">
-                  <option>10 รายการต่อหน้า</option>
-                  <option>20 รายการต่อหน้า</option>
+                <select 
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold outline-none"
+                >
+                  <option value={10}>10 รายการต่อหน้า</option>
+                  <option value={20}>20 รายการต่อหน้า</option>
+                  <option value={50}>50 รายการต่อหน้า</option>
                 </select>
                 <div className="flex items-center gap-1">
-                  <button className="p-1 rounded-lg border border-gray-200"><ChevronLeft size={14} /></button>
-                  <button className="px-2.5 py-0.5 bg-[#311171] text-white rounded-lg font-bold">1</button>
-                  <button className="px-2.5 py-0.5 border border-gray-200 rounded-lg font-bold">2</button>
-                  <button className="px-2.5 py-0.5 border border-gray-200 rounded-lg font-bold">3</button>
-                  <button className="px-2.5 py-0.5 border border-gray-200 rounded-lg font-bold">4</button>
-                  <button className="px-2.5 py-0.5 border border-gray-200 rounded-lg font-bold">5</button>
-                  <button className="p-1 rounded-lg border border-gray-200"><ChevronRight size={14} /></button>
+                  <button 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className="p-1 rounded-lg border border-gray-200 disabled:opacity-50"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  {Array.from({ length: totalPages }).map((_, i) => (
+                    <button 
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={`px-2.5 py-0.5 rounded-lg font-bold ${
+                        currentPage === i + 1 
+                          ? "bg-[#311171] text-white" 
+                          : "border border-gray-200"
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button 
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    className="p-1 rounded-lg border border-gray-200 disabled:opacity-50"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
                 </div>
               </div>
             </div>
@@ -358,8 +360,8 @@ export default function SuperAdminVans() {
             <div className="text-center space-y-2">
               <div className="w-full h-32 bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden relative border border-gray-200">
                 <img 
-                  src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=400" 
-                  alt="Van Visual" 
+                  src={selectedVan.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=400"} 
+                  alt={selectedVan.plate} 
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -373,16 +375,18 @@ export default function SuperAdminVans() {
 
             {/* Inspection grids */}
             <div className="grid grid-cols-2 gap-2 text-center text-xs pt-1">
-              <div className="p-2.5 bg-gray-50 rounded-2xl border border-gray-100">
-                <p className="text-[10px] text-gray-400 font-medium">ตรวจสภาพครั้งถัดไป</p>
-                <p className="font-bold text-gray-900 mt-0.5">{selectedVan.nextInspection}</p>
-                <p className="text-[10px] text-sky-600 font-bold mt-0.5">อีก 87 วัน</p>
+              <div className="p-2.5 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col justify-center">
+                <p className="text-[10px] text-gray-400 font-medium">วันหมดอายุภาษี</p>
+                <p className="font-bold text-gray-900 mt-0.5">
+                  {selectedVan.taxExp ? new Date(selectedVan.taxExp).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'ไม่ระบุ'}
+                </p>
               </div>
 
-              <div className="p-2.5 bg-gray-50 rounded-2xl border border-gray-100">
-                <p className="text-[10px] text-gray-400 font-medium">ซ่อมบำรุงครั้งถัดไป</p>
-                <p className="font-bold text-gray-900 mt-0.5">{selectedVan.nextService}</p>
-                <p className="text-[10px] text-sky-600 font-bold mt-0.5">อีก 30 วัน</p>
+              <div className="p-2.5 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col justify-center">
+                <p className="text-[10px] text-gray-400 font-medium">วันหมดอายุประกัน</p>
+                <p className="font-bold text-gray-900 mt-0.5">
+                  {selectedVan.insExp ? new Date(selectedVan.insExp).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'ไม่ระบุ'}
+                </p>
               </div>
             </div>
 

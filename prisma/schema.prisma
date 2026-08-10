@@ -23,6 +23,19 @@ enum Role {
   DRIVER
 }
 
+enum AvailabilityStatus {
+  READY
+  SUBSTITUTE
+  SICK_LEAVE
+  PERSONAL_LEAVE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum MaintenanceType {
   MAINTENANCE
   TAX
@@ -66,12 +79,15 @@ model User {
   
   name      String
   email     String   @unique // รองรับระบบ Microsoft 365 SSO ของมหาวิทยาลัย
+  avatar    String?  @db.Text
   role      Role     @default(USER)
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
   driverProfile Driver?   // ถ้า Role เป็น DRIVER จะมีข้อมูลเชื่อมไปตารางคนขับ (1:1)
   bookings      Booking[] @relation("Requester")
+  auditLogs     AuditLog[]
+  notifications Notification[]
 
   @@map("users")
 }
@@ -91,6 +107,7 @@ model Van {
   image            String?   @db.Text
   taxExp           DateTime? @map("tax_exp")
   insExp           DateTime? @map("ins_exp")
+
   nextCheckMileage Int?      @map("next_check_mileage")
 
   // Relations
@@ -115,6 +132,7 @@ model Driver {
   avatar    String?    @db.Text
   
   contractStart DateTime?  @map("contract_start")
+
   
   assignedVanId Int?       @map("assigned_van_id")
   assignedVan   Van?       @relation(fields: [assignedVanId], references: [id], onDelete: SetNull)
@@ -122,8 +140,24 @@ model Driver {
   // Relations
   bookings  Booking[]  // ประวัติการถูกจัดสรรคิวรถยนต์
   logs      DriverLog[] // ประวัติบันทึกฟอร์ม 4 จริงหลังวิ่งงานเสร็จ
+  availabilities DriverAvailability[] // ปฏิทินความพร้อมใช้งาน
 
   @@map("drivers")
+}
+
+model DriverAvailability {
+  id        Int      @id @default(autoincrement())
+  driverId  Int      @map("driver_id")
+  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  
+  date      DateTime @db.Date // วันที่มีผล
+  status    AvailabilityStatus
+  approval  ApprovalStatus @default(PENDING) // ถ้าเป็นการลา ต้องรออนุมัติ
+  reason    String?  @db.Text
+  
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("driver_availabilities")
 }
 
 model Booking {
@@ -253,4 +287,29 @@ model MaintenanceRecord {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("maintenance_records")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  userId    Int?     @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  target    String?
+  type      String   // 'info' | 'success' | 'warning' | 'danger'
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  role      Role?    // null means specific user, otherwise broadcast to role
+  userId    Int?     @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // 'info' | 'success' | 'alert' | 'urgent'
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
 }

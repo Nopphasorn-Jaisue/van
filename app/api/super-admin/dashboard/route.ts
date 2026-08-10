@@ -52,64 +52,14 @@ export async function GET() {
     const next30Days = new Date();
     next30Days.setDate(now.getDate() + 30);
 
-    // Get all vans to evaluate their tax and insurance
-    const vans = await prisma.van.findMany({
-      where: { isActive: true },
-      include: { faculty: true }
-    });
-
-    const maintenanceAlerts = [];
-
-    for (const van of vans) {
-      // Check Tax Expiry
-      if (van.taxExp) {
-        if (van.taxExp < now) {
-          maintenanceAlerts.push({
-            plate: van.plate,
-            faculty: van.faculty.nameTh,
-            type: "TAX",
-            issue: "ภาษีและ พ.ร.บ. หมดอายุแล้ว",
-            dueDate: `เลยกำหนด`,
-            urgency: "critical"
-          });
-        } else if (van.taxExp <= next30Days) {
-          const daysLeft = Math.ceil((van.taxExp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          maintenanceAlerts.push({
-            plate: van.plate,
-            faculty: van.faculty.nameTh,
-            type: "TAX",
-            issue: "ภาษีและ พ.ร.บ. กำลังจะหมดอายุ",
-            dueDate: `ในอีก ${daysLeft} วัน`,
-            urgency: "high"
-          });
-        }
-      }
-
-      // Check Insurance Expiry
-      if (van.insExp) {
-        if (van.insExp < now) {
-          maintenanceAlerts.push({
-            plate: van.plate,
-            faculty: van.faculty.nameTh,
-            type: "INSURANCE",
-            issue: "ประกันภัยรถยนต์ หมดอายุแล้ว",
-            dueDate: `เลยกำหนด`,
-            urgency: "critical"
-          });
-        } else if (van.insExp <= next30Days) {
-          const daysLeft = Math.ceil((van.insExp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          maintenanceAlerts.push({
-            plate: van.plate,
-            faculty: van.faculty.nameTh,
-            type: "INSURANCE",
-            issue: "ประกันภัยรถยนต์ กำลังจะหมดอายุ",
-            dueDate: `ในอีก ${daysLeft} วัน`,
-            urgency: "high"
-          });
-        }
-      }
-    }
-
+    const maintenanceAlerts: Array<{
+      plate: string;
+      faculty: string;
+      type: string;
+      issue: string;
+      dueDate: string;
+      urgency: string;
+    }> = [];
     // Sort alerts: critical first, then by days left
     maintenanceAlerts.sort((a, b) => {
       if (a.urgency === 'critical' && b.urgency !== 'critical') return -1;

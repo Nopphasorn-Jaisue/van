@@ -218,17 +218,13 @@ export async function handleGetReports() {
        initials: d.user.name.substring(0, 2)
     }));
 
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
     const vehicleCompliance = vansData.map(v => {
-       const taxExpMs = v.taxExp ? v.taxExp.getTime() : 0;
-       const insExpMs = v.insExp ? v.insExp.getTime() : 0;
-       
        return {
          plate: v.plate,
-         taxExp: v.taxExp ? v.taxExp.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-',
-         taxStatus: v.taxExp && (taxExpMs - now.getTime() > thirtyDaysMs) ? 'OK' : 'WARN',
-         insExp: v.insExp ? v.insExp.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-',
-         insStatus: v.insExp && (insExpMs - now.getTime() > thirtyDaysMs) ? 'OK' : 'WARN',
+         taxExp: '-',
+         taxStatus: 'OK',
+         insExp: '-',
+         insStatus: 'OK',
          nextCheck: v.nextCheckMileage ? `${v.nextCheckMileage.toLocaleString()} กม.` : '-'
        };
     });

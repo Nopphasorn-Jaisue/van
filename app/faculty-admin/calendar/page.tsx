@@ -674,7 +674,7 @@ function CalendarContent() {
                   ))}
                 </div>
                 
-                <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-y-auto">
+                <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-y-auto p-1">
                   {getCalendarDays(baseDate).map((cell) => {
                     const dayBookings = filteredBookings.filter(b => isSameDate(b.date, cell.dateObj));
                     const isTodayCell = isSameDate(todayDate, cell.dateObj);
@@ -696,7 +696,7 @@ function CalendarContent() {
                           !cell.isCurrent 
                             ? 'bg-gray-50/60 text-gray-400' 
                             : 'bg-white text-gray-800'
-                        } ${isTodayCell ? 'ring-2 ring-[#311171]' : 'border border-gray-100 hover:border-gray-200'}`}
+                        } ${isTodayCell ? 'border-2 border-[#311171]' : 'border border-gray-100 hover:border-gray-200'}`}
                       >
                         {/* Day Number Header with Hover Plus Button */}
                         <div className="flex justify-between items-center mb-0.5">

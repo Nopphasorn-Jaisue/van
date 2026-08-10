@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
-  Download, Calendar, ChevronLeft, ChevronRight, FileSpreadsheet,
-  Search, Filter, CheckCircle2, User, MapPin, Gauge
+  Download, ChevronLeft, ChevronRight, FileSpreadsheet, Search, Loader2
 } from 'lucide-react';
 import { getAssignedBookings, getDriverDashboardData } from '@/app/actions/driver';
 
@@ -24,109 +23,86 @@ interface ReportRow {
   remark: string;
 }
 
+interface DriverLogItem {
+  mileageStart?: number | string | null;
+  mileageEnd?: number | string | null;
+  totalDistance?: number | null;
+  fuelRemark?: string | null;
+}
+
+interface BookingItem {
+  id: string | number;
+  departureDate: string | Date;
+  returnDate: string | Date;
+  destination: string;
+  requester?: {
+    name?: string | null;
+  } | null;
+  driverLog?: DriverLogItem | null;
+}
+
 export default function DriverReportPage() {
   const [selectedMonth, setSelectedMonth] = useState("มิถุนายน");
   const [selectedYear, setSelectedYear] = useState("2569");
-  const [driverName, setDriverName] = useState("นายสมชาย ใจดี");
+  const [driverName, setDriverName] = useState("พนักงานขับรถ");
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Sample data matching attached mockup image
-  const defaultSampleData: ReportRow[] = [
-    {
-      id: "LOG-1",
-      seq: 1,
-      deptDate: "10 มิ.ย. 69",
-      deptTime: "08:00",
-      user: "นางสาวนฤมล จันทร์สว่าง",
-      destination: "ศูนย์ประชุม จ.เชียงใหม่",
-      startMileage: "329,668",
-      returnDate: "10 มิ.ย. 69",
-      returnTime: "17:00",
-      endMileage: "329,670",
-      totalDistance: 2,
-      driverName: "",
-      remark: "-"
-    },
-    {
-      id: "LOG-2",
-      seq: 2,
-      deptDate: "09 มิ.ย. 69",
-      deptTime: "09:00",
-      user: "คณะเทคโนโลยีสารสนเทศฯ",
-      destination: "ศาลากลางจังหวัดพะเยา",
-      startMileage: "329,620",
-      returnDate: "09 มิ.ย. 69",
-      returnTime: "15:30",
-      endMileage: "329,668",
-      totalDistance: 48,
-      driverName: "",
-      remark: "-"
-    },
-    {
-      id: "LOG-3",
-      seq: 3,
-      deptDate: "05 มิ.ย. 69",
-      deptTime: "07:30",
-      user: "ฝ่ายวิชาการ",
-      destination: "มหาวิทยาลัยเชียงใหม่",
-      startMileage: "329,450",
-      returnDate: "05 มิ.ย. 69",
-      returnTime: "18:00",
-      endMileage: "329,620",
-      totalDistance: 170,
-      driverName: "",
-      remark: "-"
-    }
-  ];
-
   useEffect(() => {
     async function loadData() {
+      setIsLoading(true);
       try {
+        let currentDriver = "พนักงานขับรถ";
         const dashRes = await getDriverDashboardData(1);
         if (dashRes.success && dashRes.data?.driver?.name) {
-          setDriverName(dashRes.data.driver.name);
+          currentDriver = dashRes.data.driver.name;
+          setDriverName(currentDriver);
         }
 
         const bookingsRes = await getAssignedBookings(1);
-        if (bookingsRes.success && bookingsRes.bookings) {
-          const loggedBookings = bookingsRes.bookings.filter((b: any) => b.driverLog);
+        if (bookingsRes.success && Array.isArray(bookingsRes.bookings)) {
+          const loggedBookings = (bookingsRes.bookings as BookingItem[]).filter(
+            (b): b is BookingItem & { driverLog: DriverLogItem } => Boolean(b.driverLog)
+          );
           
           if (loggedBookings.length > 0) {
-            const mapped: ReportRow[] = loggedBookings.map((b: any, index: number) => {
+            const mapped: ReportRow[] = loggedBookings.map((b, index) => {
               const log = b.driverLog;
-              const deptD = new Date(b.departureDate);
-              const retD = new Date(b.returnDate);
+              const deptD = b.departureDate ? new Date(b.departureDate) : null;
+              const retD = b.returnDate ? new Date(b.returnDate) : null;
+
+              const isValidDept = deptD && !isNaN(deptD.getTime());
+              const isValidRet = retD && !isNaN(retD.getTime());
 
               return {
                 id: b.id,
                 seq: index + 1,
-                deptDate: deptD.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }),
-                deptTime: deptD.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+                deptDate: isValidDept ? deptD.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : "-",
+                deptTime: isValidDept ? deptD.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : "-",
                 user: b.requester?.name || "ผู้ขอใช้บริการ",
-                destination: b.destination,
-                startMileage: log?.mileageStart ? log.mileageStart.toLocaleString() : "-",
-                returnDate: retD.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }),
-                returnTime: retD.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-                endMileage: log?.mileageEnd ? log.mileageEnd.toLocaleString() : "-",
+                destination: b.destination || "-",
+                startMileage: log?.mileageStart != null ? log.mileageStart.toLocaleString() : "-",
+                returnDate: isValidRet ? retD.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : "-",
+                returnTime: isValidRet ? retD.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : "-",
+                endMileage: log?.mileageEnd != null ? log.mileageEnd.toLocaleString() : "-",
                 totalDistance: log?.totalDistance || 0,
-                driverName: "",
+                driverName: currentDriver,
                 remark: log?.fuelRemark || "-"
               };
             });
 
-            // Combine fetched logged data with sample data to show full table
-            setReportRows([...mapped, ...defaultSampleData]);
+            // Use only fetched data from database
+            setReportRows(mapped);
           } else {
-            setReportRows(defaultSampleData);
+            setReportRows([]);
           }
         } else {
-          setReportRows(defaultSampleData);
+          setReportRows([]);
         }
       } catch (err) {
         console.error("Error loading report data:", err);
-        setReportRows(defaultSampleData);
+        setReportRows([]);
       } finally {
         setIsLoading(false);
       }
@@ -169,9 +145,9 @@ export default function DriverReportPage() {
   };
 
   const filteredRows = reportRows.filter(r => 
-    r.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.destination.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.driverName.toLowerCase().includes(searchQuery.toLowerCase())
+    (r.user?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    (r.destination?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    (r.driverName?.toLowerCase() || "").includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -311,7 +287,16 @@ export default function DriverReportPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
-                {filteredRows.length > 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={12} className="py-12 text-center text-purple-700 font-bold">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 size={20} className="animate-spin text-[#311171]" />
+                        <span>กำลังโหลดข้อมูลการเดินทาง...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredRows.length > 0 ? (
                   filteredRows.map((row) => (
                     <tr key={row.id} className="hover:bg-purple-50/30 transition-colors divide-x divide-gray-100">
                       <td className="py-3.5 px-3 text-center font-bold text-gray-500">
@@ -378,7 +363,8 @@ export default function DriverReportPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 items-end text-center">
             {/* Left Signature: Driver */}
             <div className="space-y-2 flex flex-col items-center">
-              <div className="w-48 border-b border-gray-300 pt-6"></div>
+              <p className="text-xs font-bold text-gray-800">{driverName}</p>
+              <div className="w-48 border-b border-gray-300 pt-2"></div>
               <p className="text-xs font-bold text-gray-500 pt-1">
                 พนักงานขับรถ (ผู้บันทึก)
               </p>

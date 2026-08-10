@@ -3,11 +3,13 @@ import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Plus, Edit, Trash2, 
-  Users, Fuel, Wrench, Share2, Lock, Check, Search, X, Image as ImageIcon, Calendar
+  Users, Fuel, Wrench, Share2, Lock, Check, Search, X, Image as ImageIcon, Calendar, CheckCircle2
 } from 'lucide-react';
 
 const ThaiDatePicker = ({ value, onChange }: { value: string, onChange: (val: string) => void }) => {
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const dateOnly = value ? value.split('T')[0] : "";
 
   const formatThaiDate = (dateStr: string) => {
     if (!dateStr) return "";
@@ -30,13 +32,13 @@ const ThaiDatePicker = ({ value, onChange }: { value: string, onChange: (val: st
       <input
         ref={inputRef}
         type="date"
-        value={value}
+        value={dateOnly}
         onChange={(e) => onChange(e.target.value)}
         className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
       />
       <div className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm bg-white flex items-center justify-between hover:border-[#311171] transition-colors">
-        <span className={value ? "text-gray-900 font-bold" : "text-gray-400"}>
-          {value ? formatThaiDate(value) : "วว/ดด/ปปปป (พ.ศ.)"}
+        <span className={dateOnly ? "text-gray-900 font-bold" : "text-gray-400"}>
+          {dateOnly ? formatThaiDate(dateOnly) : "วว/ดด/ปปปป (พ.ศ.)"}
         </span>
         <Calendar size={16} className="text-gray-500" />
       </div>
@@ -61,6 +63,12 @@ export default function VansPage() {
   const [vans, setVans] = useState<Van[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
   
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -124,23 +132,36 @@ export default function VansPage() {
 
   const saveVan = async () => {
     try {
+      let res;
       if (editingId) {
-        await fetch(`/api/vans/${editingId}`, {
+        res = await fetch(`/api/vans/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
         });
       } else {
-        await fetch('/api/vans', {
+        res = await fetch('/api/vans', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
         });
       }
-      setIsModalOpen(false);
-      loadVans();
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.success) {
+        showToast('บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+        setIsModalOpen(false);
+        loadVans();
+      } else {
+        showToast('เกิดข้อผิดพลาด: ' + (data.error || 'Unknown error'), 'error');
+      }
     } catch (err) {
       console.error("Failed to save van", err);
+      showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ หรือขนาดรูปภาพอาจใหญ่เกินไป', 'error');
     }
   };
 
@@ -261,6 +282,21 @@ export default function VansPage() {
                       <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
                         <Fuel size={14} className="text-gray-400" />
                         <span className="font-bold">{van.fuelType}</span>
+                      </div>
+                      
+                      <div className="col-span-2 text-xs p-2 rounded-lg border border-gray-100 bg-orange-50/50">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-gray-500">วันหมดอายุภาษี:</span>
+                          <span className="font-bold text-gray-800">
+                            {van.taxExp ? new Date(van.taxExp).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'ไม่ระบุ'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">วันหมดอายุประกัน:</span>
+                          <span className="font-bold text-gray-800">
+                            {van.insExp ? new Date(van.insExp).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'ไม่ระบุ'}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -482,6 +518,22 @@ export default function VansPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl shadow-lg z-[200] flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 duration-300 ${
+          toastMessage.type === 'success' 
+            ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
+            : 'bg-red-50 text-red-600 border border-red-200'
+        }`}>
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 size={20} className="text-emerald-500" />
+          ) : (
+            <X size={20} className="text-red-500" />
+          )}
+          <span className="text-sm font-bold">{toastMessage.msg}</span>
         </div>
       )}
     </AppShell>

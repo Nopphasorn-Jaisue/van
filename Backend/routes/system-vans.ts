@@ -14,12 +14,13 @@ export async function handleListVans() {
       plate: v.plate,
       capacity: v.capacity,
       fuelType: v.engine || "ดีเซล",
-      taxExp: v.taxExp ? v.taxExp.toISOString().split('T')[0] : "",
-      insExp: v.insExp ? v.insExp.toISOString().split('T')[0] : "",
+
       status: v.isActive ? "ready" : "maintenance",
       isShared: v.isShared ?? true,
       image: v.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80",
-      driverName: v.faculty.drivers && v.faculty.drivers.length > 0 ? v.faculty.drivers[0].user.name : "ยังไม่ระบุ"
+      driverName: v.faculty.drivers && v.faculty.drivers.length > 0 ? v.faculty.drivers[0].user.name : "ยังไม่ระบุ",
+      taxExp: v.taxExp ? v.taxExp.toISOString() : null,
+      insExp: v.insExp ? v.insExp.toISOString() : null
     }));
 
     return NextResponse.json({ vans: mapped });

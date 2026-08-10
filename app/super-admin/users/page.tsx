@@ -3,13 +3,13 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  Search, Edit, Shield, Car, Users, X, CheckCircle2, Save,
-  MoreVertical, ChevronLeft, ChevronRight, Crown, Briefcase
+  Search, Edit, Shield, Users, X, CheckCircle2,
+  ChevronLeft, ChevronRight, Trash2, Save, Briefcase, Crown
 } from "lucide-react";
 
 interface UserItem {
   id: number;
-  avatar: string;
+  avatar: string | null;
   name: string;
   faculty: string;
   role: "SUPER_ADMIN" | "FACULTY_ADMIN" | "EXECUTIVE" | "DRIVER" | "USER";
@@ -28,6 +28,7 @@ export default function SuperAdminUsers() {
   // Modals state
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [userToDelete, setUserToDelete] = useState<{ id: number; name: string } | null>(null);
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [showRoleSummaryModal, setShowRoleSummaryModal] = useState(false);
 
@@ -35,27 +36,33 @@ export default function SuperAdminUsers() {
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Default fallback user items
+  const initialUsers: UserItem[] = [];
+
   // User data state
-  const [usersData, setUsersData] = useState<UserItem[]>([]);
+  const [usersData, setUsersData] = useState<UserItem[]>(initialUsers);
   const [isLoading, setIsLoading] = useState(true);
   const [customFaculties, setCustomFaculties] = useState<string[]>([]);
   const [isAddFacultyOpen, setIsAddFacultyOpen] = useState(false);
   const [newFacultyName, setNewFacultyName] = useState("");
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await fetch('/api/super-admin/users');
-        if (res.ok) {
-          const data = await res.json();
-          setUsersData(data.users || []);
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/super-admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.users) {
+          setUsersData(data.users);
         }
-      } catch (err) {
-        console.error('Failed to fetch users:', err);
-      } finally {
-        setIsLoading(false);
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchUsers();
   }, []);
 
@@ -71,34 +78,79 @@ export default function SuperAdminUsers() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleAddUserSubmit = (e: React.FormEvent) => {
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.name || !newUser.email) return;
-    const userToAdd: UserItem = {
-      id: Date.now(),
-      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150",
-      ...newUser,
-      status: "ACTIVE",
-      lastLogin: "เพิ่งเข้าสู่ระบบ"
-    };
-    setUsersData(prev => [userToAdd, ...prev]);
-    setIsAddUserOpen(false);
-    setNewUser({ name: "", email: "", role: "USER", faculty: "คณะเภสัชฯ" });
-    showToast(`เพิ่มผู้ใช้งาน ${userToAdd.name} เรียบร้อยแล้ว`);
+
+    try {
+      const res = await fetch('/api/super-admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+      
+      if (res.ok) {
+        setIsAddUserOpen(false);
+        setNewUser({ name: "", email: "", role: "USER", faculty: "คณะเภสัชฯ" });
+        showToast(`เพิ่มผู้ใช้งาน ${newUser.name} เรียบร้อยแล้ว`);
+        fetchUsers();
+      } else {
+        showToast(`เกิดข้อผิดพลาดในการเพิ่มผู้ใช้งาน`);
+      }
+    } catch (err) {
+      console.warn("POST user error:", err);
+      showToast(`เกิดข้อผิดพลาด: ระบบเชื่อมต่อขัดข้อง`);
+    }
   };
 
-  const handleUpdateUserSubmit = (e: React.FormEvent) => {
+  const handleUpdateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    setUsersData(prev => prev.map(u => u.id === editingUser.id ? editingUser : u));
-    setEditingUser(null);
-    showToast(`อัปเดตข้อมูลของ ${editingUser.name} เรียบร้อยแล้ว`);
+    
+    try {
+      const res = await fetch('/api/super-admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingUser),
+      });
+
+      if (res.ok) {
+        setEditingUser(null);
+        showToast(`อัปเดตข้อมูลของ ${editingUser.name} เรียบร้อยแล้ว`);
+        fetchUsers();
+      } else {
+        showToast(`เกิดข้อผิดพลาดในการอัปเดตข้อมูล`);
+      }
+    } catch (err) {
+      console.warn("PUT user error:", err);
+      showToast(`เกิดข้อผิดพลาด: ระบบเชื่อมต่อขัดข้อง`);
+    }
   };
 
   const handleDeleteUser = (id: number, name: string) => {
-    if (confirm(`คุณต้องการลบผู้ใช้ ${name} ออกจากระบบหรือไม่?`)) {
-      setUsersData(prev => prev.filter(u => u.id !== id));
-      showToast(`ลบผู้ใช้ ${name} เรียบร้อยแล้ว`);
+    setUserToDelete({ id, name });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    const { id, name } = userToDelete;
+
+    try {
+      const res = await fetch(`/api/super-admin/users?id=${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        setUserToDelete(null);
+        showToast(`ลบผู้ใช้งาน ${name} เรียบร้อยแล้ว`);
+        fetchUsers();
+      } else {
+        const errData = await res.json().catch(() => null);
+        showToast(errData?.error || `เกิดข้อผิดพลาดในการลบข้อมูล`);
+      }
+    } catch (err) {
+      console.warn("DELETE user error:", err);
+      showToast(`เกิดข้อผิดพลาด: ระบบเชื่อมต่อขัดข้อง`);
     }
   };
 
@@ -230,7 +282,6 @@ export default function SuperAdminUsers() {
                   <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
-                  <option value="DRIVER">พนักงานขับรถ</option>
                 </select>
               </div>
 
@@ -277,11 +328,13 @@ export default function SuperAdminUsers() {
                     <tr key={user.id} className="hover:bg-purple-50/30 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <img 
-                            src={user.avatar} 
-                            alt={user.name} 
-                            className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" 
-                          />
+                          {user.avatar ? (
+                            <img src={user.avatar} alt={user.name} className="w-7 h-7 rounded-full object-cover border border-gray-200 shadow-sm" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center shadow-sm">
+                              <Users size={14} className="text-gray-400" />
+                            </div>
+                          )}
                           <span className="font-bold text-gray-900 whitespace-nowrap">{user.name}</span>
                         </div>
                       </td>
@@ -304,7 +357,7 @@ export default function SuperAdminUsers() {
                             className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                             title="ลบ"
                           >
-                            <MoreVertical size={14} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
@@ -398,25 +451,6 @@ export default function SuperAdminUsers() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-gray-700">คณะ / สังกัด:</label>
-                  <button type="button" onClick={() => setIsAddFacultyOpen(true)} className="text-[10px] text-[#311171] hover:bg-purple-50 px-2 py-0.5 rounded-lg font-bold transition-colors">+ เพิ่มคณะใหม่</button>
-                </div>
-                <select
-                  value={newUser.faculty}
-                  onChange={(e) => setNewUser({...newUser, faculty: e.target.value})}
-                  className="w-full p-3 bg-white border border-gray-200 rounded-2xl text-xs focus:ring-2 focus:ring-[#311171]/20 outline-none"
-                >
-                  <option value="คณะเภสัชฯ">คณะเภสัชฯ</option>
-                  <option value="คณะวิทยาศาสตร์">คณะวิทยาศาสตร์</option>
-                  <option value="คณะ ICT">คณะ ICT</option>
-                  <option value="คณะเกษตรฯ">คณะเกษตรฯ</option>
-                  <option value="คณะพลังงานฯ">คณะพลังงานฯ</option>
-                  {customFaculties.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
-              </div>
-
-              <div>
                 <label className="text-xs font-bold text-gray-700 block mb-1">สิทธิ์การใช้งาน (Role):</label>
                 <select
                   value={newUser.role}
@@ -425,10 +459,35 @@ export default function SuperAdminUsers() {
                 >
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
-                  <option value="DRIVER">พนักงานขับรถ</option>
                   <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
                 </select>
               </div>
+
+              {newUser.role !== "SUPER_ADMIN" && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-gray-700">คณะ / สังกัด:</label>
+                    <button type="button" onClick={() => setIsAddFacultyOpen(true)} className="text-[10px] text-[#311171] hover:bg-purple-50 px-2 py-0.5 rounded-lg font-bold transition-colors">+ เพิ่มคณะใหม่</button>
+                  </div>
+                  <select
+                    value={newUser.faculty}
+                    onChange={(e) => setNewUser({...newUser, faculty: e.target.value})}
+                    className="w-full p-3 bg-white border border-gray-200 rounded-2xl text-xs focus:ring-2 focus:ring-[#311171]/20 outline-none"
+                  >
+                    <option value="คณะเทคโนโลยีสารสนเทศและการสื่อสาร">คณะเทคโนโลยีสารสนเทศและการสื่อสาร</option>
+                    <option value="คณะเภสัชฯ">คณะเภสัชฯ</option>
+                    <option value="คณะวิทยาศาสตร์">คณะวิทยาศาสตร์</option>
+                    <option value="คณะเกษตรฯ">คณะเกษตรฯ</option>
+                    <option value="คณะพลังงานฯ">คณะพลังงานฯ</option>
+                    {![
+                      "คณะเทคโนโลยีสารสนเทศและการสื่อสาร", "คณะเภสัชฯ", "คณะวิทยาศาสตร์", "คณะเกษตรฯ", "คณะพลังงานฯ"
+                    ].includes(newUser.faculty) && !customFaculties.includes(newUser.faculty) && newUser.faculty && (
+                      <option value={newUser.faculty}>{newUser.faculty}</option>
+                    )}
+                    {customFaculties.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -468,7 +527,6 @@ export default function SuperAdminUsers() {
               {[
                 { role: "FACULTY_ADMIN", label: "ผู้ดูแลระดับคณะ", icon: Shield, color: "bg-sky-100 text-sky-600" },
                 { role: "EXECUTIVE", label: "ผู้บริหาร", icon: Briefcase, color: "bg-amber-100 text-amber-600" },
-                { role: "DRIVER", label: "พนักงานขับรถ", icon: Car, color: "bg-emerald-100 text-emerald-600" },
                 { role: "SUPER_ADMIN", label: "ผู้ดูแลระบบสูงสุด", icon: Crown, color: "bg-purple-100 text-purple-600" },
               ].map((item) => {
                 const Icon = item.icon;
@@ -591,22 +649,14 @@ export default function SuperAdminUsers() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-gray-700">คณะ / สังกัด:</label>
-                  <button type="button" onClick={() => setIsAddFacultyOpen(true)} className="text-[10px] text-[#311171] hover:bg-purple-50 px-2 py-0.5 rounded-lg font-bold transition-colors">+ เพิ่มคณะใหม่</button>
-                </div>
-                <select
-                  value={editingUser.faculty}
-                  onChange={(e) => setEditingUser({...editingUser, faculty: e.target.value})}
+                <label className="text-xs font-bold text-gray-700 block mb-1">อีเมล (Email):</label>
+                <input 
+                  type="email"
+                  required
+                  value={editingUser.email}
+                  onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
                   className="w-full p-3 bg-white border border-gray-200 rounded-2xl text-xs focus:ring-2 focus:ring-[#311171]/20 outline-none"
-                >
-                  <option value="คณะเภสัชฯ">คณะเภสัชฯ</option>
-                  <option value="คณะวิทยาศาสตร์">คณะวิทยาศาสตร์</option>
-                  <option value="คณะ ICT">คณะ ICT</option>
-                  <option value="คณะเกษตรฯ">คณะเกษตรฯ</option>
-                  <option value="คณะพลังงานฯ">คณะพลังงานฯ</option>
-                  {customFaculties.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
+                />
               </div>
 
               <div>
@@ -618,10 +668,35 @@ export default function SuperAdminUsers() {
                 >
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
-                  <option value="DRIVER">พนักงานขับรถ</option>
                   <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
                 </select>
               </div>
+
+              {editingUser.role !== "SUPER_ADMIN" && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-gray-700">คณะ / สังกัด:</label>
+                    <button type="button" onClick={() => setIsAddFacultyOpen(true)} className="text-[10px] text-[#311171] hover:bg-purple-50 px-2 py-0.5 rounded-lg font-bold transition-colors">+ เพิ่มคณะใหม่</button>
+                  </div>
+                  <select
+                    value={editingUser.faculty}
+                    onChange={(e) => setEditingUser({...editingUser, faculty: e.target.value})}
+                    className="w-full p-3 bg-white border border-gray-200 rounded-2xl text-xs focus:ring-2 focus:ring-[#311171]/20 outline-none"
+                  >
+                    <option value="คณะเทคโนโลยีสารสนเทศและการสื่อสาร">คณะเทคโนโลยีสารสนเทศและการสื่อสาร</option>
+                    <option value="คณะเภสัชฯ">คณะเภสัชฯ</option>
+                    <option value="คณะวิทยาศาสตร์">คณะวิทยาศาสตร์</option>
+                    <option value="คณะเกษตรฯ">คณะเกษตรฯ</option>
+                    <option value="คณะพลังงานฯ">คณะพลังงานฯ</option>
+                    {![
+                      "คณะเทคโนโลยีสารสนเทศและการสื่อสาร", "คณะเภสัชฯ", "คณะวิทยาศาสตร์", "คณะเกษตรฯ", "คณะพลังงานฯ"
+                    ].includes(editingUser.faculty) && !customFaculties.includes(editingUser.faculty) && editingUser.faculty && (
+                      <option value={editingUser.faculty}>{editingUser.faculty}</option>
+                    )}
+                    {customFaculties.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-bold text-gray-700 block mb-1">สถานะผู้ใช้:</label>
@@ -692,6 +767,41 @@ export default function SuperAdminUsers() {
                 className="flex-1 px-4 py-2.5 bg-[#311171] hover:bg-[#230b54] text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-purple-900/20"
               >
                 เพิ่มคณะ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Delete Confirmation Modal (NO Emojis, Clean & Modern) */}
+      {userToDelete && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500 mx-auto">
+              <Trash2 size={26} strokeWidth={2.5} />
+            </div>
+            
+            <div className="text-center space-y-1.5">
+              <h3 className="text-lg font-black text-gray-900">ยืนยันการลบผู้ใช้งาน</h3>
+              <p className="text-xs text-gray-500 font-medium leading-relaxed">
+                คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้งาน <span className="text-rose-600 font-bold">&quot;{userToDelete.name}&quot;</span> ออกจากระบบ? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteUser}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-colors shadow-sm"
+              >
+                ยืนยันการลบ
               </button>
             </div>
           </div>
