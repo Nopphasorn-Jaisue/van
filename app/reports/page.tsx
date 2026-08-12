@@ -4,39 +4,17 @@ import React, { useState, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 
-// Data structures for Reports
-interface FacultyTripStats {
-  internal: number;
-  external: number;
-  inProvince: number;
-  outProvince: number;
+import { FacultyTripStats, DriverWorkload, FleetStatus, WeeklyDensity, CrossFacultyUsage } from '@/app/actions/reports';
+
+export interface ReportsData {
+  role: string;
+  facultyTripStats: FacultyTripStats;
+  driverWorkload: DriverWorkload[];
+  fleetStatus: FleetStatus[];
+  weeklyDensity: WeeklyDensity[];
+  crossFacultyUsage: CrossFacultyUsage[];
 }
-interface DriverWorkload {
-  id: string;
-  name: string;
-  hours_this_week: number;
-  max_safe_hours: number;
-  trips: number;
-  status: string;
-}
-interface FleetStatus {
-  faculty: string;
-  total_vans: number;
-  active: number;
-  maintenance: number;
-  usage_rate: string;
-}
-interface WeeklyDensity {
-  day: string;
-  trips: number;
-  percent: number;
-}
-interface CrossFacultyUsage {
-  borrower: string;
-  lender: string;
-  count: number;
-  percent: number;
-}
+
 
 import { getDashboardReports } from '@/app/actions/reports';
 
@@ -45,7 +23,7 @@ import { getDashboardReports } from '@/app/actions/reports';
 // ==========================================
 export default function ReportsPage() {
   const [role, setRole] = useState("FACULTY_ADMIN");
-  const [reportData, setReportData] = useState<any>(null);
+  const [reportData, setReportData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -70,7 +48,7 @@ export default function ReportsPage() {
   return (
     <AppShell>
       {/* สลับ Component ตาม Role อัตโนมัติ */}
-      {role === "SUPER_ADMIN" ? <SuperAdminView data={reportData} /> : <FacultyAdminView data={reportData} />}
+      {role === "SUPER_ADMIN" ? <SuperAdminView data={reportData as ReportsData} /> : <FacultyAdminView data={reportData as ReportsData} />}
     </AppShell>
   );
 }
@@ -78,7 +56,7 @@ export default function ReportsPage() {
 // ==========================================
 // 📊 VIEW A: หน้า Report สำหรับผู้ดูแลรถตู้คณะ
 // ==========================================
-function FacultyAdminView({ data }: { data: any }) {
+function FacultyAdminView({ data }: { data: ReportsData }) {
   const { facultyTripStats, driverWorkload } = data;
   const totalTrips = (facultyTripStats?.internal || 0) + (facultyTripStats?.external || 0);
 
@@ -180,7 +158,7 @@ function FacultyAdminView({ data }: { data: any }) {
 // ==========================================
 // 📊 VIEW B: หน้า Report สำหรับผู้บริหารส่วนกลาง
 // ==========================================
-function SuperAdminView({ data }: { data: any }) {
+function SuperAdminView({ data }: { data: ReportsData }) {
   const { fleetStatus, weeklyDensity, crossFacultyUsage, facultyTripStats } = data;
   return (
     <div className="animate-in fade-in duration-500">
@@ -191,10 +169,10 @@ function SuperAdminView({ data }: { data: any }) {
 
       {/* --- Section 1: KPI Cards ระดับมหาวิทยาลัย --- */}
       <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard title="คนในคณะจอง" value={facultyTripStats?.internal || 0} suffix="ครั้ง" color="blue" />
-        <StatCard title="นอกคณะยืมรถ" value={facultyTripStats?.external || 0} suffix="ครั้ง" color="purple" />
-        <StatCard title="วิ่งในจังหวัด" value={facultyTripStats?.inProvince || 0} suffix="เที่ยว" color="green" />
-        <StatCard title="วิ่งต่างจังหวัด" value={facultyTripStats?.outProvince || 0} suffix="เที่ยว" color="orange" />
+        <GlobalStatCard title="คนในคณะจอง" value={String(facultyTripStats?.internal || 0)} unit="ครั้ง" tone="blue" subtitle="" />
+        <GlobalStatCard title="นอกคณะยืมรถ" value={String(facultyTripStats?.external || 0)} unit="ครั้ง" tone="purple" subtitle="" />
+        <GlobalStatCard title="วิ่งในจังหวัด" value={String(facultyTripStats?.inProvince || 0)} unit="เที่ยว" tone="green" subtitle="" />
+        <GlobalStatCard title="วิ่งต่างจังหวัด" value={String(facultyTripStats?.outProvince || 0)} unit="เที่ยว" tone="yellow" subtitle="" />
       </div>
 
       {/* --- Section 2: กราฟวิเคราะห์ (Charts) --- */}
@@ -227,7 +205,7 @@ function SuperAdminView({ data }: { data: any }) {
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="mb-6">
             <h2 className="text-lg font-bold text-gray-900">คณะที่ขอยืมรถข้ามสายมากที่สุด (Top 4)</h2>
-            <p className="text-sm text-gray-500">แสดงข้อมูล "ผู้ยืม" ➔ "ผู้ให้ยืม (เจ้าของรถ)"</p>
+            <p className="text-sm text-gray-500">{'แสดงข้อมูล "ผู้ยืม" ➔ "ผู้ให้ยืม (เจ้าของรถ)"'}</p>
           </div>
 
           <div className="space-y-4">

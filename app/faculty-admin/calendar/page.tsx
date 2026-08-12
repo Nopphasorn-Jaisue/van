@@ -724,8 +724,8 @@ function CalendarContent() {
 
             {/* Calendar Grid View */}
             {isLoading ? (
-              <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#311171]"></div>
+              <div className="flex-1 flex items-center justify-center h-96">
+                <div className="text-lg font-black text-[#311171] tracking-wider animate-pulse">กำลังโหลดปฏิทิน...</div>
               </div>
             ) : viewMode === "week" ? (
               /* Week View */

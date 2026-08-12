@@ -3,7 +3,48 @@
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from './auth';
 
-export async function getDashboardReports() {
+export interface FacultyTripStats {
+  internal: number;
+  external: number;
+  inProvince: number;
+  outProvince: number;
+}
+export interface DriverWorkload {
+  id: string;
+  name: string;
+  hours_this_week: number;
+  max_safe_hours: number;
+  trips: number;
+  status: string;
+}
+export interface FleetStatus {
+  faculty: string;
+  total_vans: number;
+  active: number;
+  maintenance: number;
+  usage_rate: string;
+}
+export interface WeeklyDensity {
+  day: string;
+  trips: number;
+  percent: number;
+}
+export interface CrossFacultyUsage {
+  borrower: string;
+  lender: string;
+  count: number;
+  percent: number;
+}
+export interface ReportsData {
+  role: string;
+  facultyTripStats: FacultyTripStats;
+  driverWorkload: DriverWorkload[];
+  fleetStatus: FleetStatus[];
+  weeklyDensity: WeeklyDensity[];
+  crossFacultyUsage: CrossFacultyUsage[];
+}
+
+export async function getDashboardReports(): Promise<{ success: boolean; data?: ReportsData; error?: string }> {
   const user = await getAuthUser();
   if (!user) return { success: false, error: 'Unauthorized' };
 
@@ -11,11 +52,11 @@ export async function getDashboardReports() {
   const facultyId = user.facultyId;
 
   try {
-    let facultyTripStats = { internal: 0, external: 0, inProvince: 0, outProvince: 0 };
-    let driverWorkload: any[] = [];
-    let fleetStatus: any[] = [];
-    let weeklyDensity: any[] = [];
-    let crossFacultyUsage: any[] = [];
+    let facultyTripStats: FacultyTripStats = { internal: 0, external: 0, inProvince: 0, outProvince: 0 };
+    let driverWorkload: DriverWorkload[] = [];
+    let fleetStatus: FleetStatus[] = [];
+    let weeklyDensity: WeeklyDensity[] = [];
+    let crossFacultyUsage: CrossFacultyUsage[] = [];
 
     if (role === 'SUPER_ADMIN') {
       // 1. Fleet Status (Super Admin)
@@ -55,19 +96,14 @@ export async function getDashboardReports() {
       }));
 
       // 3. Cross Faculty Usage (Super Admin)
-      const crossBookings = await prisma.booking.findMany({
-        where: {
-          NOT: {
-            requester: {
-              facultyId: { equals: prisma.booking.fields.targetFacultyId }
-            }
-          }
-        },
+      const allBookings = await prisma.booking.findMany({
         include: {
           requester: { include: { faculty: true } },
           targetFaculty: true
         }
       });
+      
+      const crossBookings = allBookings.filter(b => b.requester.facultyId !== b.targetFacultyId);
       
       const crossMap = new Map();
       crossBookings.forEach(b => {
@@ -85,6 +121,8 @@ export async function getDashboardReports() {
       })).sort((a, b) => b.count - a.count).slice(0, 5);
 
     } else if (role === 'FACULTY_ADMIN') {
+      if (!facultyId) return { success: false, error: 'Faculty ID not found' };
+      
       // 1. Faculty Trip Stats
       const bookings = await prisma.booking.findMany({
         where: { targetFacultyId: facultyId },

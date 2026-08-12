@@ -200,25 +200,7 @@ export default function DriverDashboard() {
             <ChevronRight size={20} className="text-gray-300 group-hover:text-[#C39B22] transition-colors" />
           </Link>
 
-          {/* Card 4 - รายงาน (แบบ 4) */}
-          <Link 
-            href="/driver/report"
-            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-blue-200 hover:shadow-md transition-all cursor-pointer"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-blue-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-blue-200">
-                <FileSpreadsheet size={28} strokeWidth={2.5} />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-gray-600 mb-0.5">รายงานประจำเดือน</p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-black text-gray-900">แบบฟอร์ม 4</span>
-                </div>
-                <p className="text-xs font-bold text-blue-600 mt-0.5">ดูสถิติและส่งออก CSV</p>
-              </div>
-            </div>
-            <ChevronRight size={20} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
-          </Link>
+
         </div>
 
         {/* Today's Trip Card */}

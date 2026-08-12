@@ -339,16 +339,28 @@ export default function SuperAdminUsers() {
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <button
-                            onClick={() => setEditingUser(user)}
-                            className="p-1.5 text-gray-400 hover:text-[#311171] hover:bg-purple-50 rounded-lg transition-colors"
-                            title="แก้ไข"
+                            onClick={() => {
+                              if (user.role === 'DRIVER') {
+                                showToast('คนขับรถตู้ สามารถแก้ไขและลบได้โดยแอดมินคณะเท่านั้น');
+                                return;
+                              }
+                              setEditingUser(user);
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors ${user.role === 'DRIVER' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-[#311171] hover:bg-purple-50'}`}
+                            title={user.role === 'DRIVER' ? 'แก้ไขโดยแอดมินคณะเท่านั้น' : 'แก้ไข'}
                           >
                             <Edit size={14} />
                           </button>
                           <button
-                            onClick={() => handleDeleteUser(user.id, user.name)}
-                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="ลบ"
+                            onClick={() => {
+                              if (user.role === 'DRIVER') {
+                                showToast('คนขับรถตู้ สามารถแก้ไขและลบได้โดยแอดมินคณะเท่านั้น');
+                                return;
+                              }
+                              handleDeleteUser(user.id, user.name);
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors ${user.role === 'DRIVER' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-rose-600 hover:bg-rose-50'}`}
+                            title={user.role === 'DRIVER' ? 'ลบโดยแอดมินคณะเท่านั้น' : 'ลบ'}
                           >
                             <Trash2 size={14} />
                           </button>

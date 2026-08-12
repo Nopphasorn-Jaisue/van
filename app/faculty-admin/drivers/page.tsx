@@ -32,12 +32,14 @@ interface Driver {
   avatar: string;
 }
 
+
+
 export default function DriversPage() {
   const [mounted, setMounted] = useState(false);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<Awaited<ReturnType<typeof getPendingAvailabilityRequests>>>([]);
 
   const [adminId, setAdminId] = useState<number | null>(null);
 
@@ -45,7 +47,7 @@ export default function DriversPage() {
     try {
       const res = await fetch('/api/drivers');
       const data = await res.json();
-      const mapped = (data.drivers || []).map((d: any) => ({
+      const mapped = (data.drivers || []).map((d: { id: number, user?: { name: string, email: string }, phone: string, vanPlate?: string, contractStart?: string, licenseExpiry?: string, isActive: boolean, avatar?: string }) => ({
         id: d.id.toString(),
         name: d.user?.name || 'ไม่มีชื่อ',
         email: d.user?.email || 'ไม่มีอีเมล',

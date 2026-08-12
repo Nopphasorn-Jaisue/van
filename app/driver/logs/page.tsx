@@ -9,9 +9,24 @@ import type { SystemDriverLog } from "@/lib/booking-system-types";
 type DriverDashboardResponse = {
   success: boolean;
   dashboard?: {
-    logs: SystemDriverLog[];
+    logs: SystemDriverLogWithLegs[];
   };
 };
+
+type LogLeg = {
+  returnDate: string;
+  deptTime: string;
+  passenger: string;
+  destination: string;
+  startMileage: number;
+  returnTime: string;
+  endMileage: number;
+  distance: number;
+  driver: string;
+  remark: string;
+};
+
+type SystemDriverLogWithLegs = SystemDriverLog & { legs: LogLeg[] };
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("th-TH", {
@@ -22,7 +37,7 @@ function formatDate(value: string) {
 
 export default function DriverLogsPage() {
   const [driverId, setDriverId] = useState<string>("");
-  const [logs, setLogs] = useState<SystemDriverLog[]>([]);
+  const [logs, setLogs] = useState<SystemDriverLogWithLegs[]>([]);
 
   const loadLogs = async (id: string) => {
     try {
@@ -117,9 +132,9 @@ export default function DriverLogsPage() {
                     </td>
                   </tr>
                 ) : (
-                  logs.map((log: any, idx) => (
+                  logs.map((log, idx) => (
                     <React.Fragment key={log.id}>
-                      {log.legs.length > 0 ? log.legs.map((leg: any, legIdx: number) => (
+                      {log.legs.length > 0 ? log.legs.map((leg, legIdx: number) => (
                         <tr key={`${log.id}-leg-${legIdx}`} className="hover:bg-slate-50 border-b border-slate-400">
                           {legIdx === 0 && (
                             <td rowSpan={log.legs.length} className="border border-slate-900 p-2 text-center font-bold align-top bg-slate-50">

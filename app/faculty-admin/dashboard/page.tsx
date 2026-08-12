@@ -5,7 +5,6 @@ import {
   CarFront, User, FileText, CalendarDays, 
   ChevronLeft, ChevronRight, ExternalLink} from 'lucide-react';
 import AppShell from '@/components/AppShell';
-import DashboardLoader from '@/components/DashboardLoader';
 import { useRouter } from 'next/navigation';
 
 type RequestItem = {
@@ -165,14 +164,6 @@ export default function FacultyAdminDashboard() {
 
   const todayEventsCount = getEventsForDay(selectedDay || 19).length;
 
-  if (isLoading) {
-    return (
-      <AppShell>
-        <DashboardLoader />
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell>
       <div className="max-w-[1400px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0">
@@ -197,9 +188,9 @@ export default function FacultyAdminDashboard() {
               <div>
                 <p className="text-sm font-bold text-gray-600 mb-0.5">รถประจำคณะ</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-gray-900">{vansCount} คัน</span>
+                  <span className="text-2xl font-black text-gray-900">{isLoading ? '-' : vansCount} คัน</span>
                 </div>
-                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมใช้งาน {readyVansCount} คัน</p>
+                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมใช้งาน {isLoading ? '-' : readyVansCount} คัน</p>
               </div>
             </div>
             <ChevronRight size={20} className="text-gray-300 group-hover:text-[#311171] transition-colors" />
@@ -217,9 +208,9 @@ export default function FacultyAdminDashboard() {
               <div>
                 <p className="text-sm font-bold text-gray-600 mb-0.5">คนขับประจำ</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-gray-900">{driversCount} คน</span>
+                  <span className="text-2xl font-black text-gray-900">{isLoading ? '-' : driversCount} คน</span>
                 </div>
-                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมปฏิบัติหน้าที่ {activeDriversCount} คน</p>
+                <p className="text-xs font-bold text-green-600 mt-0.5">พร้อมปฏิบัติหน้าที่ {isLoading ? '-' : activeDriversCount} คน</p>
               </div>
             </div>
             <ChevronRight size={20} className="text-gray-300 group-hover:text-green-500 transition-colors" />
@@ -237,7 +228,7 @@ export default function FacultyAdminDashboard() {
               <div>
                 <p className="text-sm font-bold text-gray-600 mb-0.5">คำขอรออนุมัติ</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-gray-900">{requests.length} รายการ</span>
+                  <span className="text-2xl font-black text-gray-900">{isLoading ? '-' : requests.length} รายการ</span>
                 </div>
                 {requests.length > 0 ? (
                   <p className="text-xs font-bold text-[#A07A15] mt-0.5">ต้องดำเนินการ</p>
@@ -261,7 +252,7 @@ export default function FacultyAdminDashboard() {
               <div>
                 <p className="text-sm font-bold text-gray-600 mb-0.5">วันนี้มีภารกิจ</p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-gray-900">{todayEventsCount} รายการ</span>
+                  <span className="text-2xl font-black text-gray-900">{isLoading ? '-' : todayEventsCount} รายการ</span>
                 </div>
                 {todayEventsCount > 0 ? (
                   <p className="text-xs font-bold text-blue-600 mt-0.5">เดินทางตามแผน</p>
@@ -303,7 +294,13 @@ export default function FacultyAdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {requests.length > 0 ? requests.map((req) => (
+                      {isLoading ? (
+                        <tr>
+                          <td colSpan={6} className="p-12 text-center text-gray-400 text-sm font-bold">
+                            กำลังโหลดข้อมูล...
+                          </td>
+                        </tr>
+                      ) : requests.length > 0 ? requests.map((req) => (
                         <tr 
                           key={req.id} 
                           onClick={() => router.push('/faculty-admin/approvals')}
@@ -342,7 +339,7 @@ export default function FacultyAdminDashboard() {
                   </table>
                 </div>
                 <div className="p-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
-                  <p>แสดง {requests.length > 0 ? 1 : 0} - {requests.length} จาก {requests.length} รายการ</p>
+                  <p>แสดง {isLoading ? 0 : (requests.length > 0 ? 1 : 0)} - {isLoading ? 0 : requests.length} จาก {isLoading ? 0 : requests.length} รายการ</p>
                   <Link href="/faculty-admin/approvals" className="font-bold text-[#311171] border border-gray-200 rounded-lg px-4 py-1.5 hover:bg-gray-50 transition-colors">
                     ดูทั้งหมด
                   </Link>

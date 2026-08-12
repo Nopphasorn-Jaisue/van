@@ -99,8 +99,8 @@ export async function getDriverDashboardData(driverId: number) {
           faculty: driver.faculty.nameTh,
           vanPlate: driver.faculty.vans?.[0]?.plate || "ยังไม่ระบุรถตู้"
         },
-        todaysTrip: todaysTrip || null,
-        upcomingTrips: upcomingTrips,
+        todaysTrip: JSON.parse(JSON.stringify(todaysTrip || null)),
+        upcomingTrips: JSON.parse(JSON.stringify(upcomingTrips)),
         stats: {
           totalTrips,
           totalDistance
@@ -147,7 +147,7 @@ export async function getAssignedBookings(driverId: number) {
 
     return { 
       success: true, 
-      bookings, 
+      bookings: JSON.parse(JSON.stringify(bookings)), 
       driverFacultyName: driver?.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
       latestMileage: latestDriverLog?.mileageEnd || null
     };
@@ -209,7 +209,7 @@ export async function createAdhocBooking(driverId: number, data?: AdhocFormData)
 
     revalidatePath('/driver/records');
     
-    return { success: true, booking };
+    return { success: true, booking: JSON.parse(JSON.stringify(booking)) };
   } catch (error) {
     console.error("Error creating ad-hoc booking:", error);
     return { success: false, error: "Failed to create ad-hoc booking" };
@@ -244,7 +244,7 @@ export async function updateAdhocBooking(bookingId: string, data: AdhocFormData)
     revalidatePath('/driver/schedule');
     revalidatePath('/driver/records');
     
-    return { success: true, booking };
+    return { success: true, booking: JSON.parse(JSON.stringify(booking)) };
   } catch (error) {
     console.error("Error updating ad-hoc booking:", error);
     return { success: false, error: "Failed to update ad-hoc booking" };
@@ -386,7 +386,7 @@ export async function getAllFacultyBookingsWithLogs() {
         departureDate: 'desc'
       }
     });
-    return { success: true, bookings };
+    return { success: true, bookings: JSON.parse(JSON.stringify(bookings)) };
   } catch (error) {
     console.error("Error fetching all bookings:", error);
     return { success: false, error: "Failed to fetch bookings" };
@@ -408,7 +408,7 @@ export async function submitRepairNotification(driverId: number, vanId: number, 
 
     if (!driver) return { success: false, error: "Driver not found" };
 
-    const record = await prisma.maintenanceRecord.create({
+    await prisma.maintenanceRecord.create({
       data: {
         vanId,
         type: "MAINTENANCE",
@@ -431,7 +431,7 @@ export async function submitRepairNotification(driverId: number, vanId: number, 
     }
 
     revalidatePath("/driver/inspection");
-    return { success: true, record };
+    return { success: true };
   } catch (error) {
     console.error("Error submitting repair notification:", error);
     return { success: false, error: "Failed to submit repair notification" };

@@ -83,7 +83,9 @@ export async function GET() {
         contractStart: driver.contractStart ? driver.contractStart.toISOString() : new Date().toISOString(),
       }
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, message: "INTERNAL_SERVER_ERROR", error: error?.message || String(error), stack: error?.stack }, { status: 500 });
+  } catch (error: unknown) {
+    const errMessage = error instanceof Error ? error.message : String(error);
+    const errStack = error instanceof Error ? error.stack : undefined;
+    return NextResponse.json({ success: false, message: "INTERNAL_SERVER_ERROR", error: errMessage, stack: errStack }, { status: 500 });
   }
 }

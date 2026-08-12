@@ -39,8 +39,12 @@ export async function GET() {
         id: driver.id,
         name: user.name,
         email: user.email,
+        avatar: driver.avatar,
+        contractStart: driver.contractStart,
         assignedVanId: driver.assignedVanId,
-        vanPlate: assignedVan ? assignedVan.plate : null,
+        vanAssigned: assignedVan?.name || 'ไม่ระบุ',
+        plate: assignedVan?.plate || '-',
+        vanPlate: assignedVan?.plate || null, // Keeping for backward compatibility
       }
     });
 

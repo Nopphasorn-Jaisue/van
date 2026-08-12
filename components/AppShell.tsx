@@ -16,15 +16,10 @@ import { getAuthUser, clearSession } from '@/app/actions/auth';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState<string>(() => {
-    if (pathname?.startsWith('/driver')) return 'DRIVER';
-    if (pathname?.startsWith('/super-admin')) return 'SUPER_ADMIN';
-    if (pathname?.startsWith('/executive')) return 'EXECUTIVE';
-    if (pathname?.startsWith('/faculty-admin')) return 'FACULTY_ADMIN';
-    return '';
-  });
+  const [userRole, setUserRole] = useState<string>('');
   const [displayName, setDisplayName] = useState('ผู้ใช้งานระบบ');
-  const [facultyName, setFacultyName] = useState<string>('กำลังโหลด...');
+  const [facultyName, setFacultyName] = useState<string>('');
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   
   useEffect(() => {
     const fetchUser = async () => {
@@ -49,6 +44,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         console.error(err);
+      } finally {
+        setIsAuthLoading(false);
       }
     };
     fetchUser();
@@ -89,7 +86,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-[#f3f4f7] overflow-hidden">
       
       {/* 1. เรียกใช้งาน Sidebar พร้อมส่ง Role ไปควบคุมการเปิด/ปิดเมนู */}
-      <Sidebar userRole={userRole} facultyName={facultyName} />
+      <Sidebar userRole={userRole} facultyName={facultyName} isAuthLoading={isAuthLoading} />
 
       {/* 2. พื้นที่ด้านขวา */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -312,7 +309,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 // ==========================================
 // 🛠️ SUB-COMPONENT: เมนูด้านซ้าย (Sidebar ฉบับแก้ไขสิทธิ์)
 // ==========================================
-function Sidebar({ userRole, facultyName }: { userRole: string, facultyName: string }) {
+function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, facultyName: string, isAuthLoading: boolean }) {
   const pathname = usePathname(); 
 
   // 🌟 โครงสร้างเมนูตาม Role ที่กำหนด
@@ -378,7 +375,7 @@ function Sidebar({ userRole, facultyName }: { userRole: string, facultyName: str
     switch (role) {
       case 'FACULTY_ADMIN': return 'ผู้ดูแลคณะ';
       case 'DRIVER': return 'พนักงานขับรถ';
-      case 'SUPER_ADMIN': return 'ผู้ดูแลระบบ';
+      case 'SUPER_ADMIN': return 'ผู้ดูแลระบบสูงสุด';
       default: return 'ผู้ใช้งานทั่วไป';
     }
   };
@@ -389,8 +386,17 @@ function Sidebar({ userRole, facultyName }: { userRole: string, facultyName: str
     <aside className="w-64 bg-gradient-to-b from-[#2a0c63] via-[#2f0f6f] to-[#240a58] text-white hidden md:flex flex-col h-full shadow-xl z-20 shrink-0">
       <div className="p-5 border-b border-white/10">
         <div>
-          <h1 className="font-black text-lg tracking-tight leading-tight">{userFaculty}</h1>
-          <p className="text-xs text-purple-200">{getRoleDisplayName(userRole)}</p>
+          {isAuthLoading ? (
+            <>
+              <div className="h-6 bg-white/10 rounded w-3/4 animate-pulse mb-1"></div>
+              <div className="h-4 bg-white/10 rounded w-1/2 animate-pulse"></div>
+            </>
+          ) : (
+            <>
+              <h1 className="font-black text-lg tracking-tight leading-tight">{userFaculty}</h1>
+              <p className="text-xs text-purple-200">{getRoleDisplayName(userRole)}</p>
+            </>
+          )}
           <div className="mt-2 flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
             <p className="text-[10px] font-bold text-green-300">ออนไลน์</p>
@@ -399,26 +405,37 @@ function Sidebar({ userRole, facultyName }: { userRole: string, facultyName: str
       </div>
 
       <nav className="flex-1 py-6 space-y-1 overflow-y-auto px-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {visibleMenus.map((item, idx) => {
-          // ไฮไลท์แถบเมนูสีขาวเมื่อ URL เบราว์เซอร์ตรงกับเมนูนั้นๆ
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <Link 
-              key={idx}
-              href={item.href}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold mb-1 ${
-                isActive 
-                  ? 'bg-white text-[#311171] shadow-md border-l-4 border-green-400 font-black' 
-                  : 'text-purple-100 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <span className={`grid place-items-center h-8 w-8 rounded-lg ${isActive ? 'bg-[#efeaff]' : 'bg-white/10'}`}>
-                <item.icon size={18} />
-              </span>
-              {item.label}
-            </Link>
-          );
-        })}
+        {isAuthLoading ? (
+          <div className="px-4 py-2 opacity-60 space-y-4">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-white/10 animate-pulse"></div>
+                <div className="h-4 bg-white/10 rounded w-32 animate-pulse"></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          visibleMenus.map((item, idx) => {
+            // ไฮไลท์แถบเมนูสีขาวเมื่อ URL เบราว์เซอร์ตรงกับเมนูนั้นๆ
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link 
+                key={idx}
+                href={item.href}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold mb-1 ${
+                  isActive 
+                    ? 'bg-white text-[#311171] shadow-md border-l-4 border-green-400 font-black' 
+                    : 'text-purple-100 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <span className={`grid place-items-center h-8 w-8 rounded-lg ${isActive ? 'bg-[#efeaff]' : 'bg-white/10'}`}>
+                  <item.icon size={18} />
+                </span>
+                {item.label}
+              </Link>
+            );
+          })
+        )}
       </nav>
 
       <div className="m-3 rounded-xl border border-white/15 bg-white/5 p-4 text-xs text-purple-100">
