@@ -270,9 +270,6 @@ export default function SuperAdminVans() {
                         <td className="py-3 px-3 text-center font-bold text-gray-900">{v.seats}</td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            {v.driver !== "ไม่มีคนขับประจำ" && (
-                              <img src={v.driverAvatar} alt={v.driver} className="w-6 h-6 rounded-full object-cover border border-gray-200" />
-                            )}
                             <span className="text-gray-800 text-[11px] font-bold">{v.driver}</span>
                           </div>
                         </td>

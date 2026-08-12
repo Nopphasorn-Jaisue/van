@@ -38,9 +38,16 @@ export default function DriverDashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      // Mock driverId = 1 for demo purposes
       try {
-        const res = await getDriverDashboardData(1);
+        const meRes = await fetch('/api/driver/me');
+        const meData = await meRes.json();
+        let driverId = 1; // Fallback, but it will be overridden if valid
+        if (meData.success && meData.driverData && meData.driverData.id) {
+          driverId = meData.driverData.id;
+          localStorage.setItem('current_driver_id', driverId.toString());
+        }
+
+        const res = await getDriverDashboardData(driverId);
         if (res && res.success && res.data) {
           setDashboardData(res.data);
         }
@@ -62,8 +69,15 @@ export default function DriverDashboard() {
     setIsSubmittingAvailability(true);
     
     try {
+      const driverId = parseInt(localStorage.getItem('current_driver_id') || '0');
+      if (!driverId) {
+        alert("ไม่พบข้อมูลคนขับ โปรดลองรีเฟรชหน้าเว็บ");
+        setIsSubmittingAvailability(false);
+        return;
+      }
+
       const res = await requestAvailabilityChange(
-        1, // Mock driverId
+        driverId,
         new Date(availabilityDate),
         availabilityType,
         availabilityDetail

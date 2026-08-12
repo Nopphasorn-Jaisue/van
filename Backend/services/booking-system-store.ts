@@ -224,6 +224,7 @@ async function toBookingDto(row: BookingWithRelations) {
     id: row.id,
     requester: row.requester.name,
     requesterFaculty: row.requester.faculty.nameTh,
+    requesterFacultyId: row.requester.facultyId,
     destination: row.destination,
     purpose: row.objective,
     passengers: row.passengersCount,
@@ -241,10 +242,17 @@ async function toBookingDto(row: BookingWithRelations) {
   };
 }
 
-export async function listBookings(status?: SystemBookingStatus) {
+export async function listBookings(status?: SystemBookingStatus, facultyId?: number) {
   await ensureSeedData();
 
-  const where = status ? { status: status as never } : undefined;
+  const where: any = {};
+  if (status) {
+    where.status = status;
+  }
+  if (facultyId) {
+    where.requester = { facultyId };
+  }
+
   const rows = await prisma.booking.findMany({
     where,
     include: {
@@ -336,11 +344,17 @@ function detectAvailability(driverId: number, bookings: Array<{ assignedDriverId
   return active ? "ON_TRIP" : "AVAILABLE";
 }
 
-export async function listDrivers(date?: string) {
+export async function listDrivers(date?: string, facultyId?: number) {
   await ensureSeedData();
+
+  const where: any = {};
+  if (facultyId) {
+    where.facultyId = facultyId;
+  }
 
   const [drivers, bookings] = await Promise.all([
     prisma.driver.findMany({
+      where,
       include: {
         user: true,
         faculty: { include: { vans: true } },
@@ -519,6 +533,13 @@ export async function getDriverDashboard(driverCode: string) {
     prisma.driverLog.findMany({
       where: { driverId: driver.id },
       orderBy: { createdAt: "desc" },
+      include: {
+        booking: {
+          include: {
+            requester: true
+          }
+        }
+      }
     }),
   ]);
 
@@ -546,7 +567,7 @@ export async function getDriverDashboard(driverCode: string) {
     },
     todayTrip,
     upcoming,
-    logs: logs.map((log) => ({
+    logs: logs.map((log: any) => ({
       id: `log-${log.id}`,
       bookingId: log.bookingId,
       driverId: makeDriverCode(log.driverId),
@@ -555,6 +576,21 @@ export async function getDriverDashboard(driverCode: string) {
       totalDistance: log.totalDistance,
       fuelRemark: log.fuelRemark || undefined,
       createdAt: log.createdAt.toISOString(),
+      // Add legs structure for frontend
+      tripNo: log.id.toString(),
+      date: new Date(log.createdAt).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+      legs: log.booking ? [{
+        deptTime: new Date(log.booking.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        passenger: log.booking.requester?.name || "ผู้ขอใช้รถ",
+        destination: log.booking.destination,
+        startMileage: log.mileageStart,
+        returnDate: new Date(log.booking.returnDate).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+        returnTime: new Date(log.booking.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        endMileage: log.mileageEnd,
+        distance: log.totalDistance,
+        driver: "มีลายเซ็น",
+        remark: log.fuelRemark || ""
+      }] : []
     })),
   };
 }

@@ -328,13 +328,6 @@ export default function SuperAdminUsers() {
                     <tr key={user.id} className="hover:bg-purple-50/30 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          {user.avatar ? (
-                            <img src={user.avatar} alt={user.name} className="w-7 h-7 rounded-full object-cover border border-gray-200 shadow-sm" />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center shadow-sm">
-                              <Users size={14} className="text-gray-400" />
-                            </div>
-                          )}
                           <span className="font-bold text-gray-900 whitespace-nowrap">{user.name}</span>
                         </div>
                       </td>

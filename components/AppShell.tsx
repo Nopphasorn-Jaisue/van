@@ -12,15 +12,47 @@ import { formatDistanceToNow } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { Role } from '@prisma/client';
 
+import { getAuthUser, clearSession } from '@/app/actions/auth';
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // 🌟 ปรับแก้: กำหนดสิทธิ์ชั่วคราวโดยอิงจาก URL เพื่อความสะดวกในการทดสอบ
-  let userRole = 'FACULTY_ADMIN';
-  if (pathname?.startsWith('/driver')) userRole = 'DRIVER';
-  else if (pathname?.startsWith('/super-admin')) userRole = 'SUPER_ADMIN';
-  else if (pathname?.startsWith('/executive')) userRole = 'EXECUTIVE';
-  else userRole = 'FACULTY_ADMIN'; 
-  const [displayName] = useState('ผู้ใช้งานระบบ');
+  const [userRole, setUserRole] = useState<string>(() => {
+    if (pathname?.startsWith('/driver')) return 'DRIVER';
+    if (pathname?.startsWith('/super-admin')) return 'SUPER_ADMIN';
+    if (pathname?.startsWith('/executive')) return 'EXECUTIVE';
+    if (pathname?.startsWith('/faculty-admin')) return 'FACULTY_ADMIN';
+    return '';
+  });
+  const [displayName, setDisplayName] = useState('ผู้ใช้งานระบบ');
+  const [facultyName, setFacultyName] = useState<string>('กำลังโหลด...');
+  
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const user = await getAuthUser();
+        if (user) {
+          setUserRole(user.role);
+          setDisplayName(user.name || 'ผู้ใช้งานระบบ');
+          if (user.faculty?.nameTh) {
+            setFacultyName(user.faculty.nameTh);
+          } else {
+            setFacultyName(
+              user.role === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
+              user.role === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
+              user.role === 'DRIVER' ? 'ทีมพนักงานขับรถประจำคณะ' :
+              'ไม่ระบุคณะ'
+            );
+          }
+        } else {
+          // If no user is returned, they shouldn't be here (middleware will catch them, but just in case)
+          setUserRole('');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchUser();
+  }, [pathname]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showDutiesModal, setShowDutiesModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -57,7 +89,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-[#f3f4f7] overflow-hidden">
       
       {/* 1. เรียกใช้งาน Sidebar พร้อมส่ง Role ไปควบคุมการเปิด/ปิดเมนู */}
-      <Sidebar userRole={userRole} />
+      <Sidebar userRole={userRole} facultyName={facultyName} />
 
       {/* 2. พื้นที่ด้านขวา */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -136,8 +168,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
 
             <button 
-              onClick={() => {
-                window.location.href = '/landing'; 
+              onClick={async () => {
+                await clearSession();
+                window.location.href = '/'; 
               }}
               className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-600 hover:text-red-600 rounded-lg transition-colors text-sm font-medium border border-gray-200"
             >
@@ -159,7 +192,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               { icon: LayoutDashboard, label: "แดชบอร์ด", href: "/driver/dashboard" },
               { icon: CalendarDays, label: "ตารางงาน", href: "/driver/schedule" },
               { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-              { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/driver/report" },
+              { icon: Wrench, label: "แจ้งซ่อม/ตรวจสภาพ", href: "/driver/inspection" },
               { icon: FileText, label: "รถและสัญญา", href: "/driver/contract" },
             ].map((item, idx) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -279,7 +312,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 // ==========================================
 // 🛠️ SUB-COMPONENT: เมนูด้านซ้าย (Sidebar ฉบับแก้ไขสิทธิ์)
 // ==========================================
-function Sidebar({ userRole }: { userRole: string }) {
+function Sidebar({ userRole, facultyName }: { userRole: string, facultyName: string }) {
   const pathname = usePathname(); 
 
   // 🌟 โครงสร้างเมนูตาม Role ที่กำหนด
@@ -291,10 +324,11 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: CalendarDays, label: "ตารางการใช้รถตู้", href: "/faculty-admin/calendar" },
         { icon: FileSignature, label: "คำขอที่ต้องอนุมัติ", href: "/faculty-admin/approvals" },
         { icon: CarFront, label: "จัดการรถประจำคณะ", href: "/faculty-admin/vans" },
-        { icon: Wrench, label: "ซ่อมบำรุง & ภาษี", href: "/faculty-admin/maintenance" },
+        { icon: Wrench, label: "ซ่อมบำรุง ", href: "/faculty-admin/maintenance" },
         { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
         { icon: FileSignature, label: "บันทึกการเดินทางคนขับประจำคณะ", href: "/faculty-admin/driver-records" },
         { icon: FilePlus, label: "เบิกค่าใช้จ่ายรายทริป", href: "/faculty-admin/trip-expenses" },
+        { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/faculty-admin/usage-report" },
         { icon: BarChart3, label: "รายงานและสถิติ", href: "/faculty-admin/reports" },
         { icon: User, label: "บัญชีผู้ใช้", href: "/faculty-admin/profile" },
       ];
@@ -305,9 +339,8 @@ function Sidebar({ userRole }: { userRole: string }) {
     // 2. เมนูสำหรับคณบดี / ผู้บริหาร (EXECUTIVE)
     if (role === "EXECUTIVE") {
       return [
-        { icon: LayoutDashboard, label: "แดชบอร์ดคณบดี", href: "/executive/approvals" },
-        { icon: FileSignature, label: "การอนุมัติคำขอ", href: "/executive/approvals" },
-        { icon: BarChart3, label: "รายงานผู้บริหาร", href: "/reports" },
+        { icon: LayoutDashboard, label: "แดชบอร์ดคณบดี", href: "/executive/dashboard" },
+        { icon: User, label: "บัญชีผู้ใช้", href: "/executive/profile" },
       ];
     }
 
@@ -317,7 +350,7 @@ function Sidebar({ userRole }: { userRole: string }) {
         { icon: LayoutDashboard, label: "แดชบอร์ดคนขับ", href: "/driver/dashboard" },
         { icon: CalendarDays, label: "ตารางงานของฉัน", href: "/driver/schedule" },
         { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-        { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/driver/report" },
+        { icon: Wrench, label: "แจ้งซ่อม/ตรวจสภาพรถ", href: "/driver/inspection" },
         { icon: FileText, label: "ข้อมูลรถและสัญญา", href: "/driver/contract" },
       ];
     }
@@ -350,10 +383,7 @@ function Sidebar({ userRole }: { userRole: string }) {
     }
   };
 
-  const userFaculty = userRole === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
-                      userRole === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
-                      userRole === 'DRIVER' ? 'ทีมพนักงานขับรถประจำคณะ' :
-                      'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+  const userFaculty = facultyName;
 
   return (
     <aside className="w-64 bg-gradient-to-b from-[#2a0c63] via-[#2f0f6f] to-[#240a58] text-white hidden md:flex flex-col h-full shadow-xl z-20 shrink-0">

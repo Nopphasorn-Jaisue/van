@@ -5,11 +5,19 @@ import {
   getDriverDashboard,
   listDrivers,
 } from "@/Backend/services/booking-system-store";
+import { getAuthUser } from "@/app/actions/auth";
 
 export async function handleListDrivers(request: Request) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date") || undefined;
-  return NextResponse.json({ drivers: await listDrivers(date) });
+  
+  const user = await getAuthUser();
+  let facultyId: number | undefined;
+  if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+    facultyId = user.facultyId;
+  }
+
+  return NextResponse.json({ drivers: await listDrivers(date, facultyId) });
 }
 
 export async function handleGetDriverDashboard(_request: Request, driverId: string) {

@@ -72,22 +72,22 @@ export async function getDriverDashboardData(driverId: number) {
     });
 
     // Find today's trip
-    const todaysTrip = bookings.find((b: any) => 
+    const todaysTrip = bookings.find((b) => 
       new Date(b.departureDate) >= today && new Date(b.departureDate) < tomorrow
     );
 
     // Find upcoming trips
-    const upcomingTrips = bookings.filter((b: any) => 
+    const upcomingTrips = bookings.filter((b) => 
       new Date(b.departureDate) >= tomorrow
     );
 
     // Calculate stats for current month
-    const thisMonthBookings = bookings.filter((b: any) => 
+    const thisMonthBookings = bookings.filter((b) => 
       new Date(b.departureDate) >= firstDayOfMonth && b.driverLog
     );
     
     const totalTrips = thisMonthBookings.length;
-    const totalDistance = thisMonthBookings.reduce((sum: number, b: any) => 
+    const totalDistance = thisMonthBookings.reduce((sum: number, b) => 
       sum + (b.driverLog?.totalDistance || 0), 0
     );
 
@@ -358,5 +358,82 @@ export async function submitTripExpenses(driverLogId: number, expenses: ExpenseD
   } catch (error) {
     console.error("Error submitting expenses:", error);
     return { success: false, error: "Failed to submit expenses" };
+  }
+}
+
+export async function getAllFacultyBookingsWithLogs() {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: {
+        status: "APPROVED",
+        driverLog: {
+          isNot: null
+        }
+      },
+      include: {
+        requester: {
+          include: { faculty: true }
+        },
+        targetFaculty: true,
+        assignedDriver: {
+          include: { user: true }
+        },
+        driverLog: {
+          include: { tripLegs: true }
+        }
+      },
+      orderBy: {
+        departureDate: 'desc'
+      }
+    });
+    return { success: true, bookings };
+  } catch (error) {
+    console.error("Error fetching all bookings:", error);
+    return { success: false, error: "Failed to fetch bookings" };
+  }
+}
+
+export async function submitRepairNotification(driverId: number, vanId: number, detail: string) {
+  try {
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: { 
+        faculty: { 
+          include: { 
+            users: { where: { role: 'FACULTY_ADMIN' } } 
+          } 
+        } 
+      }
+    });
+
+    if (!driver) return { success: false, error: "Driver not found" };
+
+    const record = await prisma.maintenanceRecord.create({
+      data: {
+        vanId,
+        type: "MAINTENANCE",
+        detail,
+        amount: 0,
+        date: new Date(),
+      }
+    });
+
+    // Notify faculty admins
+    const facultyAdmins = driver.faculty?.users || [];
+    if (facultyAdmins.length > 0) {
+      await prisma.notification.createMany({
+        data: facultyAdmins.map(admin => ({
+          userId: admin.id,
+          type: 'alert',
+          message: `แจ้งซ่อมรถตู้จากพนักงานขับรถ: ${detail}`
+        }))
+      });
+    }
+
+    revalidatePath("/driver/inspection");
+    return { success: true, record };
+  } catch (error) {
+    console.error("Error submitting repair notification:", error);
+    return { success: false, error: "Failed to submit repair notification" };
   }
 }

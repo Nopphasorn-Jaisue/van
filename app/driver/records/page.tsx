@@ -51,6 +51,7 @@ const defaultChecklist: ChecklistItem[] = [
 export default function DriverRecords() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [driverId, setDriverId] = useState<number | null>(null);
 
   const [assignedBookings, setAssignedBookings] = useState<AssignedBooking[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState("");
@@ -94,8 +95,11 @@ export default function DriverRecords() {
   const handleSaveAdhoc = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAdhocModalOpen(false);
-    setIsCreatingAdhoc(true);
-    const res = await createAdhocBooking(1, adhocForm); // Mock driverId
+    if (!driverId) {
+      alert("ไม่พบข้อมูลพนักงานขับรถ");
+      return;
+    }
+    const res = await createAdhocBooking(driverId, adhocForm);
     if (res.success && res.booking) {
       const newBooking = {
         id: res.booking.id,
@@ -156,10 +160,20 @@ export default function DriverRecords() {
   useEffect(() => {
     async function loadBookings() {
       setIsLoadingBookings(true);
-      const res = await getAssignedBookings(1); // Mock driverId
-      if (res.success && res.bookings) {
-        const available = res.bookings.filter((b: AssignedBooking) => !b.driverLog);
-        setAssignedBookings(available);
+      
+      const meRes = await fetch('/api/driver/me');
+      const meData = await meRes.json();
+      let currentDriverId = null;
+      if (meData.success && meData.driverData && meData.driverData.id) {
+        currentDriverId = meData.driverData.id;
+        setDriverId(currentDriverId);
+      }
+
+      if (currentDriverId) {
+        const res = await getAssignedBookings(currentDriverId); 
+        if (res.success && res.bookings) {
+          const available = res.bookings.filter((b: AssignedBooking) => !b.driverLog);
+          setAssignedBookings(available);
         if (available.length > 0) {
           setSelectedBookingId(available[0].id);
         }
@@ -174,6 +188,7 @@ export default function DriverRecords() {
       }
       setIsLoadingBookings(false);
     }
+  }
     loadBookings();
     
     // Init date
@@ -279,7 +294,7 @@ export default function DriverRecords() {
     setShowConfirmModal(false);
     setIsSubmitting(true);
     
-    const mockLegs = [
+    const tripLegs = [
       {
         id: "start",
         deptDate: startTrip.date,
@@ -311,10 +326,16 @@ export default function DriverRecords() {
       totalDistance: totalDistance,
       fuelRemark: `Fuel: ${endTrip.fuelCost} THB, ${endTrip.fuelLiters} L`,
       imgStartUrl,
-      legs: mockLegs
+      legs: tripLegs
     };
 
-    const res = await submitDriverLog(selectedBookingId, 1, data);
+    if (!driverId) {
+      alert("ไม่พบข้อมูลคนขับ");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const res = await submitDriverLog(selectedBookingId, driverId, data);
     setIsSubmitting(false);
     
     if (res.success) {

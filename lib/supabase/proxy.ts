@@ -72,15 +72,20 @@ export async function updateSession(request: NextRequest) {
     ? claims.user_metadata as Record<string, unknown>
     : {};
 
-  const role = normalizeRole(appMeta.role || userMeta.role || claims?.role);
+  let role = normalizeRole(appMeta.role || userMeta.role || claims?.role);
+
+  // Check mock_role cookie for Bypass mode
+  const mockRoleCookie = request.cookies.get("mock_role")?.value;
+  if (mockRoleCookie) {
+    role = normalizeRole(mockRoleCookie);
+  }
 
   const pathname = request.nextUrl.pathname;
   const matchedRule = ROLE_RULES.find((rule) => pathname.startsWith(rule.startsWith));
   if (matchedRule && !matchedRule.allowed.includes(role)) {
-    // const deniedUrl = request.nextUrl.clone();
-    // deniedUrl.pathname = "/landing";
-    // deniedUrl.searchParams.set("denied", "1");
-    // return NextResponse.redirect(deniedUrl);
+    const deniedUrl = request.nextUrl.clone();
+    deniedUrl.pathname = "/login";
+    return NextResponse.redirect(deniedUrl);
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

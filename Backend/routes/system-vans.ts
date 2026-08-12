@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/app/actions/auth";
 
 export async function handleListVans() {
   try {
+    const user = await getAuthUser();
+    const where: any = {};
+    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+      where.facultyId = user.facultyId;
+    }
+
     const vans = await prisma.van.findMany({
+      where,
       include: { faculty: { include: { drivers: { include: { user: true } } } } },
       orderBy: { id: "asc" },
     });

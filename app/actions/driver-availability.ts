@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { AvailabilityStatus, ApprovalStatus } from "@prisma/client";
 import { createAuditLog } from "./audit";
+import { getAuthUser } from "./auth";
 
 // สำหรับคนขับ: ส่งคำขอระบุความพร้อม (ลางาน/พร้อมทำงาน/ปฏิบัติงานแทน)
 export async function requestAvailabilityChange(
@@ -53,8 +54,14 @@ export async function getDriverCalendar(driverId: number, start: Date, end: Date
 }
 
 // สำหรับแอดมินคณะ: ดึงคำขอที่รอการอนุมัติ (หรือทั้งหมด)
-export async function getPendingAvailabilityRequests(facultyId?: number) {
+export async function getPendingAvailabilityRequests() {
   try {
+    const user = await getAuthUser();
+    let facultyId: number | undefined;
+    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+      facultyId = user.facultyId;
+    }
+
     return await prisma.driverAvailability.findMany({
       where: {
         approval: 'PENDING',

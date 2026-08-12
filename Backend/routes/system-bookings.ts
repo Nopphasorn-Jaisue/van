@@ -8,11 +8,20 @@ import {
 } from "@/Backend/services/booking-system-store";
 import { SystemBookingStatus } from "@/lib/booking-system-types";
 
+import { getAuthUser } from "@/app/actions/auth";
+
 export async function handleListBookings(request: Request) {
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status") as SystemBookingStatus | null;
   const status = statusParam || undefined;
-  return NextResponse.json({ bookings: await listBookings(status) });
+  
+  const user = await getAuthUser();
+  let facultyId: number | undefined;
+  if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+    facultyId = user.facultyId;
+  }
+  
+  return NextResponse.json({ bookings: await listBookings(status, facultyId) });
 }
 
 export async function handleCreateSystemBooking(request: Request) {

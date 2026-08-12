@@ -39,14 +39,16 @@ export default function DriversPage() {
   
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
+  const [adminId, setAdminId] = useState<number | null>(null);
+
   const loadDrivers = async () => {
     try {
       const res = await fetch('/api/drivers');
       const data = await res.json();
-      const mapped = (data.drivers || []).map((d: ApiDriver) => ({
-        id: d.id,
-        name: d.name,
-        email: d.email || `${d.id}@example.local`,
+      const mapped = (data.drivers || []).map((d: any) => ({
+        id: d.id.toString(),
+        name: d.user?.name || 'ไม่มีชื่อ',
+        email: d.user?.email || 'ไม่มีอีเมล',
         phone: d.phone,
         vanAssigned: d.vanPlate || 'ยังไม่ผูกทะเบียน',
         contractStart: d.contractStart || '2024-01-01',
@@ -75,11 +77,25 @@ export default function DriversPage() {
     setMounted(true);
     loadDrivers();
     loadPendingRequests();
+    
+    // Fetch current admin info
+    fetch('/api/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.id) {
+          setAdminId(data.id);
+        }
+      })
+      .catch(err => console.error(err));
   }, []);
 
   const handleApprove = async (id: number, approval: 'APPROVED' | 'REJECTED') => {
+    if (!adminId) {
+      alert("ไม่พบข้อมูลผู้ดำเนินการ โปรดรีเฟรชหน้าเว็บ");
+      return;
+    }
     try {
-      await updateAvailabilityApproval(id, approval, 1); // Mock Admin User ID = 1
+      await updateAvailabilityApproval(id, approval, adminId);
       loadPendingRequests();
       alert(`ทำรายการสำเร็จ (${approval})`);
     } catch (err) {
@@ -249,18 +265,7 @@ export default function DriversPage() {
     });
   };
 
-  const mockFetchEmail = () => {
-    if (formData.email.includes('@up.ac.th')) {
-      setFormData({
-        ...formData,
-        name: "ข้อมูล ดึงจากระบบมหาวิทยาลัย",
-        phone: "080-000-0000"
-      });
-      alert('ดึงข้อมูลจากฐานข้อมูลมหาวิทยาลัยสำเร็จ!');
-    } else {
-      alert('กรุณากรอกอีเมลของมหาวิทยาลัย (@up.ac.th)');
-    }
-  };
+
 
   const filteredDrivers = drivers.filter(d => 
     d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -526,23 +531,15 @@ export default function DriversPage() {
               </div>
 
               {!editingId && (
-                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
-                  <label className="block text-sm font-bold text-blue-900 mb-2">ดึงข้อมูลจากระบบมหาลัย (UP Account)</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="email" 
-                      value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      placeholder="เช่น user@up.ac.th"
-                      className="flex-1 px-4 py-2 border border-blue-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    />
-                    <button 
-                      onClick={mockFetchEmail}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors"
-                    >
-                      ดึงข้อมูล
-                    </button>
-                  </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">อีเมล (มหาวิทยาลัย)</label>
+                  <input 
+                    type="email" 
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    placeholder="เช่น user@up.ac.th"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
+                  />
                 </div>
               )}
 

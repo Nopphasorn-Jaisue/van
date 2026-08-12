@@ -20,22 +20,8 @@ function formatDate(value: string) {
   });
 }
 
-// Sample mock multi-leg log items matching user's image structure
-const sampleLogbookItems = [
-  {
-    id: "log-1",
-    tripNo: "1",
-    date: "01/04/69",
-    legs: [
-      { deptTime: "07.00", passenger: "ict", destination: "โครงการ Work from home", startMileage: 97750, returnDate: "01/04/69", returnTime: "08.00", endMileage: 97825, distance: 75, driver: "มีลายเซ็น", remark: "" },
-      { deptTime: "14.00", passenger: "ict", destination: "ตึก PKY", startMileage: 97825, returnDate: "01/04/69", returnTime: "14.30", endMileage: 97835, distance: 10, driver: "มีลายเซ็น", remark: "" },
-      { deptTime: "14.30", passenger: "ict", destination: "ธนาคารกรุงไทย", startMileage: 97835, returnDate: "01/04/69", returnTime: "15.00", endMileage: 97845, distance: 10, driver: "มีลายเซ็น", remark: "" },
-    ]
-  }
-];
-
 export default function DriverLogsPage() {
-  const [driverId, setDriverId] = useState("drv-001");
+  const [driverId, setDriverId] = useState<string>("");
   const [logs, setLogs] = useState<SystemDriverLog[]>([]);
 
   const loadLogs = async (id: string) => {
@@ -49,8 +35,17 @@ export default function DriverLogsPage() {
   };
 
   useEffect(() => {
-    loadLogs(driverId);
-  }, [driverId]);
+    async function init() {
+      const meRes = await fetch('/api/driver/me');
+      const meData = await meRes.json();
+      if (meData.success && meData.driverData && meData.driverData.id) {
+        const id = meData.driverData.id.toString();
+        setDriverId(id);
+        loadLogs(id);
+      }
+    }
+    init();
+  }, []);
 
   return (
     <AppShell>
@@ -66,15 +61,9 @@ export default function DriverLogsPage() {
           </div>
           
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={driverId}
-              onChange={(e) => setDriverId(e.target.value)}
-              className="rounded-xl border border-gray-200 px-3 py-2 bg-white text-xs font-semibold"
-            >
-              <option value="drv-001">นายสมชาย ใจดี (คนขับ)</option>
-              <option value="drv-002">นายอนุชา คำมี</option>
-              <option value="drv-003">นายวิชัย แสนดี</option>
-            </select>
+            <div className="rounded-xl border border-gray-200 px-4 py-2 bg-white text-xs font-semibold text-[#311171]">
+              รหัสพนักงานขับรถ: {driverId || 'กำลังโหลด...'}
+            </div>
 
             <Link href="/driver/records" className="inline-flex items-center gap-1.5 rounded-xl bg-[#311171] text-white px-3.5 py-2 text-xs font-bold shadow-sm hover:bg-[#250d55]">
               <Plus size={14} /> บันทึกการเดินทางใหม่
@@ -121,30 +110,47 @@ export default function DriverLogsPage() {
                 </tr>
               </thead>
               <tbody>
-                {sampleLogbookItems.map((item) => (
-                  <React.Fragment key={item.id}>
-                    {item.legs.map((leg, index) => (
-                      <tr key={index} className="hover:bg-slate-50 border-b border-slate-400">
-                        {index === 0 ? (
-                          <td rowSpan={item.legs.length} className="border border-slate-900 p-2 text-center font-bold align-top bg-slate-50">
-                            {item.tripNo}.
+                {logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="border border-slate-900 p-8 text-center text-slate-500 font-medium">
+                      ไม่มีประวัติการบันทึกสมุดใช้รถ
+                    </td>
+                  </tr>
+                ) : (
+                  logs.map((log: any, idx) => (
+                    <React.Fragment key={log.id}>
+                      {log.legs.length > 0 ? log.legs.map((leg: any, legIdx: number) => (
+                        <tr key={`${log.id}-leg-${legIdx}`} className="hover:bg-slate-50 border-b border-slate-400">
+                          {legIdx === 0 && (
+                            <td rowSpan={log.legs.length} className="border border-slate-900 p-2 text-center font-bold align-top bg-slate-50">
+                              {idx + 1}.
+                            </td>
+                          )}
+                          <td className="border border-slate-900 p-2 text-center whitespace-nowrap">{leg.returnDate}</td>
+                          <td className="border border-slate-900 p-2 text-center whitespace-nowrap font-mono">{leg.deptTime}</td>
+                          <td className="border border-slate-900 p-2 text-center font-bold text-slate-700">{leg.passenger}</td>
+                          <td className="border border-slate-900 p-2 font-bold text-slate-900">{leg.destination}</td>
+                          <td className="border border-slate-900 p-2 text-right font-mono">{leg.startMileage.toLocaleString("th-TH")}</td>
+                          <td className="border border-slate-900 p-2 text-center whitespace-nowrap">{leg.returnDate}</td>
+                          <td className="border border-slate-900 p-2 text-center whitespace-nowrap font-mono">{leg.returnTime}</td>
+                          <td className="border border-slate-900 p-2 text-right font-mono">{leg.endMileage.toLocaleString("th-TH")}</td>
+                          <td className="border border-slate-900 p-2 text-right font-mono font-bold text-emerald-700">{leg.distance}</td>
+                          <td className="border border-slate-900 p-2 text-center font-medium">{leg.driver}</td>
+                          <td className="border border-slate-900 p-2 text-center text-slate-400">{leg.remark || "-"}</td>
+                        </tr>
+                      )) : (
+                        <tr key={log.id} className="hover:bg-slate-50 border-b border-slate-400">
+                          <td className="border border-slate-900 p-2 text-center font-bold align-top bg-slate-50">
+                            {idx + 1}.
                           </td>
-                        ) : null}
-                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap">{leg.returnDate}</td>
-                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap font-mono">{leg.deptTime}</td>
-                        <td className="border border-slate-900 p-2 text-center font-bold text-slate-700">{leg.passenger}</td>
-                        <td className="border border-slate-900 p-2 font-bold text-slate-900">{leg.destination}</td>
-                        <td className="border border-slate-900 p-2 text-right font-mono">{leg.startMileage.toLocaleString("th-TH")}</td>
-                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap">{leg.returnDate}</td>
-                        <td className="border border-slate-900 p-2 text-center whitespace-nowrap font-mono">{leg.returnTime}</td>
-                        <td className="border border-slate-900 p-2 text-right font-mono">{leg.endMileage.toLocaleString("th-TH")}</td>
-                        <td className="border border-slate-900 p-2 text-right font-mono font-bold text-emerald-700">{leg.distance}</td>
-                        <td className="border border-slate-900 p-2 text-center font-medium">{leg.driver}</td>
-                        <td className="border border-slate-900 p-2 text-center text-slate-400">{leg.remark || "-"}</td>
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                ))}
+                          <td colSpan={11} className="border border-slate-900 p-2 text-center text-slate-400">
+                            (ไม่มีรายละเอียดทริป)
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

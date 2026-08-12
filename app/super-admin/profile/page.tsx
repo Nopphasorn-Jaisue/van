@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  User, Mail, Shield} from "lucide-react";
+import { User, Mail, Shield } from "lucide-react";
+import { getAuthUser } from "@/app/actions/auth";
 
 export default function SuperAdminProfile() {
   const [profileData, setProfileData] = useState({
@@ -18,14 +18,24 @@ export default function SuperAdminProfile() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch("/api/me");
-        if (res.ok) {
-          const data = await res.json();
+        const dbUser = await getAuthUser();
+        
+        if (dbUser) {
           setProfileData(prev => ({
             ...prev,
-            name: data.fullName || "ผู้ใช้งานระบบ",
-            email: data.email || "ไม่มีอีเมล",
-            role: data.role || "SUPER_ADMIN",
+            name: dbUser.name || "ไม่มีชื่อ",
+            email: dbUser.email || "ไม่มีอีเมล",
+            department: dbUser.faculty?.nameTh || "ศูนย์จัดการระบบส่วนกลาง",
+            role: dbUser.role === 'SUPER_ADMIN' ? "Super Admin" : dbUser.role,
+          }));
+        } else {
+          // Fallback สำหรับโหมด Bypass / ทดสอบระบบ
+          setProfileData(prev => ({
+            ...prev,
+            name: "ผู้ดูแลระบบสูงสุด (โหมดทดสอบ)",
+            email: "admin.test@up.ac.th",
+            department: "ศูนย์จัดการระบบส่วนกลาง",
+            role: "SUPER_ADMIN",
           }));
         }
       } catch (error) {

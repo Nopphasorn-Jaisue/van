@@ -6,6 +6,7 @@ import { CarFront, Calendar, ShieldCheck, Clock, FileText, AlertCircle, User } f
 export default function DriverContract() {
   const [driverData, setDriverData] = useState<{
     name: string;
+    email?: string;
     avatar?: string | null;
     vanAssigned: string;
     plate: string;
@@ -96,6 +97,7 @@ export default function DriverContract() {
             <div>
               <h2 className="text-sm font-bold text-gray-500 mb-1">พนักงานขับรถ</h2>
               <p className="text-xl font-black text-gray-900">{driverData.name}</p>
+              {driverData.email && <p className="text-sm text-gray-500 mt-1">{driverData.email}</p>}
             </div>
           </div>
 

@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
-  Download, ChevronLeft, ChevronRight, FileSpreadsheet, Search, Loader2
+  Download, ChevronLeft, ChevronRight, Search, Loader2
 } from 'lucide-react';
-import { getAssignedBookings, getDriverDashboardData } from '@/app/actions/driver';
+import { getAllFacultyBookingsWithLogs } from '@/app/actions/driver';
 
 interface ReportRow {
   id: string | number;
@@ -39,28 +39,33 @@ interface BookingItem {
     name?: string | null;
   } | null;
   driverLog?: DriverLogItem | null;
+  assignedDriver?: {
+    user?: {
+      name?: string | null;
+    } | null;
+  } | null;
 }
 
-export default function DriverReportPage() {
-  const [selectedMonth, setSelectedMonth] = useState("มิถุนายน");
-  const [selectedYear, setSelectedYear] = useState("2569");
-  const [driverName, setDriverName] = useState("พนักงานขับรถ");
+export default function FacultyUsageReportPage() {
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [driverName] = useState("พนักงานขับรถ");
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // ตั้งค่าเริ่มต้นเดือนและปีปัจจุบันหลังจาก component mount เพื่อแก้ปัญหา hydration error
+  useEffect(() => {
+    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+    setSelectedMonth(thaiMonths[new Date().getMonth()]);
+    setSelectedYear((new Date().getFullYear() + 543).toString());
+  }, []);
 
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
       try {
-        let currentDriver = "พนักงานขับรถ";
-        const dashRes = await getDriverDashboardData(1);
-        if (dashRes.success && dashRes.data?.driver?.name) {
-          currentDriver = dashRes.data.driver.name;
-          setDriverName(currentDriver);
-        }
-
-        const bookingsRes = await getAssignedBookings(1);
+        const bookingsRes = await getAllFacultyBookingsWithLogs();
         if (bookingsRes.success && Array.isArray(bookingsRes.bookings)) {
           const loggedBookings = (bookingsRes.bookings as BookingItem[]).filter(
             (b): b is BookingItem & { driverLog: DriverLogItem } => Boolean(b.driverLog)
@@ -87,7 +92,7 @@ export default function DriverReportPage() {
                 returnTime: isValidRet ? retD.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : "-",
                 endMileage: log?.mileageEnd != null ? log.mileageEnd.toLocaleString() : "-",
                 totalDistance: log?.totalDistance || 0,
-                driverName: currentDriver,
+                driverName: b.assignedDriver?.user?.name || "-",
                 remark: log?.fuelRemark || "-"
               };
             });
@@ -152,93 +157,62 @@ export default function DriverReportPage() {
 
   return (
     <AppShell>
-      <div className="w-full max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-24">
+      <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-12">
         
-        {/* Sticky Fixed Top Header */}
-        <div className="sticky -top-6 lg:-top-8 z-20 bg-[#f3f4f7]/95 backdrop-blur-md pt-8 lg:pt-10 pb-4 space-y-3 border-b border-gray-200/80 -mt-6 lg:-mt-8 -mx-6 lg:-mx-8 px-6 lg:px-8 shadow-xs">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-                <FileSpreadsheet className="text-[#311171]" size={26} />
-                รายงานการใช้งานรถ
-              </h1>
-              <p className="text-xs font-bold text-gray-500 mt-0.5">
-                แบบฟอร์ม 4 • บันทึกการใช้งานรถตู้และระยะทางการขับขี่
-              </p>
-            </div>
-
-            {/* Filter / Export Header Actions */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <select 
-                value={selectedMonth} 
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-white border border-gray-200 text-xs font-bold text-gray-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-xs"
-              >
-                <option value="มกราคม">มกราคม</option>
-                <option value="กุมภาพันธ์">กุมภาพันธ์</option>
-                <option value="มีนาคม">มีนาคม</option>
-                <option value="เมษายน">เมษายน</option>
-                <option value="พฤษภาคม">พฤษภาคม</option>
-                <option value="มิถุนายน">มิถุนายน</option>
-                <option value="กรกฎาคม">กรกฎาคม</option>
-                <option value="สิงหาคม">สิงหาคม</option>
-                <option value="กันยายน">กันยายน</option>
-                <option value="ตุลาคม">ตุลาคม</option>
-                <option value="พฤศจิกายน">พฤศจิกายน</option>
-                <option value="ธันวาคม">ธันวาคม</option>
-              </select>
-
-              <select 
-                value={selectedYear} 
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="bg-white border border-gray-200 text-xs font-bold text-gray-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-xs"
-              >
-                <option value="2567">2567</option>
-                <option value="2568">2568</option>
-                <option value="2569">2569</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* 🌟 Purple Title Banner Card (Matching Mockup Image 3) */}
-        <div className="bg-gradient-to-r from-[#2c0c63] via-[#3b1285] to-[#4c19a8] rounded-3xl p-6 text-white shadow-md relative overflow-hidden">
-          <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 opacity-10 pointer-events-none">
-            <FileSpreadsheet size={200} />
-          </div>
-          
-          <div className="relative z-10 space-y-1">
-            <h2 className="text-2xl font-black tracking-tight">รายงานการใช้งานรถ</h2>
-            <p className="text-sm font-bold text-purple-200">
-              แบบฟอร์ม 4 - เดือน{selectedMonth} {selectedYear}
-            </p>
-          </div>
-        </div>
-
         {/* 🌟 Section Header: ประวัติการเดินทาง & Export Button */}
         <div className="flex justify-between items-center pt-2">
-          <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            ประวัติการเดินทาง
-          </h3>
 
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 bg-[#efeaff] hover:bg-[#e2d8ff] text-[#311171] rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-xs active:scale-95 cursor-pointer"
-          >
-            <Download size={15} strokeWidth={2.5} />
-            Export
-          </button>
+
+          <div className="flex items-center gap-2">
+            <select 
+              value={selectedMonth} 
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-white border border-slate-200 text-sm font-bold text-slate-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+            >
+              <option value="มกราคม">มกราคม</option>
+              <option value="กุมภาพันธ์">กุมภาพันธ์</option>
+              <option value="มีนาคม">มีนาคม</option>
+              <option value="เมษายน">เมษายน</option>
+              <option value="พฤษภาคม">พฤษภาคม</option>
+              <option value="มิถุนายน">มิถุนายน</option>
+              <option value="กรกฎาคม">กรกฎาคม</option>
+              <option value="สิงหาคม">สิงหาคม</option>
+              <option value="กันยายน">กันยายน</option>
+              <option value="ตุลาคม">ตุลาคม</option>
+              <option value="พฤศจิกายน">พฤศจิกายน</option>
+              <option value="ธันวาคม">ธันวาคม</option>
+            </select>
+
+            <select 
+              value={selectedYear} 
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="bg-white border border-slate-200 text-sm font-bold text-slate-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+            >
+              <option value="2567">2567</option>
+              <option value="2568">2568</option>
+              <option value="2569">2569</option>
+              <option value="2570">2570</option>
+            </select>
+
+            <button
+              onClick={handleExportCSV}
+              className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-xs active:scale-95 cursor-pointer"
+            >
+              <Download size={15} strokeWidth={2.5} />
+              Export
+            </button>
+          </div>
         </div>
 
         {/* Search Bar (Optional Filter) */}
-        <div className="relative">
+        <div className="relative w-full md:w-[40%]">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ค้นหาตามผู้ใช้รถ, สถานที่ไป หรือ พนักงานขับรถ..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-xs"
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
           />
         </div>
 
@@ -289,9 +263,9 @@ export default function DriverReportPage() {
               <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-purple-700 font-bold">
+                    <td colSpan={12} className="py-12 text-center text-indigo-600 font-bold">
                       <div className="flex items-center justify-center gap-2">
-                        <Loader2 size={20} className="animate-spin text-[#311171]" />
+                        <Loader2 size={20} className="animate-spin text-indigo-600" />
                         <span>กำลังโหลดข้อมูลการเดินทาง...</span>
                       </div>
                     </td>
@@ -314,7 +288,7 @@ export default function DriverReportPage() {
                       <td className="py-3.5 px-4 text-gray-700">
                         {row.destination}
                       </td>
-                      <td className="py-3.5 px-3 text-center font-bold text-purple-700">
+                      <td className="py-3.5 px-3 text-center font-bold text-indigo-600">
                         {row.startMileage}
                       </td>
                       <td className="py-3.5 px-3 text-center font-bold text-gray-800">
@@ -323,7 +297,7 @@ export default function DriverReportPage() {
                       <td className="py-3.5 px-3 text-center text-gray-600">
                         {row.returnTime}
                       </td>
-                      <td className="py-3.5 px-3 text-center font-bold text-purple-700">
+                      <td className="py-3.5 px-3 text-center font-bold text-indigo-600">
                         {row.endMileage}
                       </td>
                       <td className="py-3.5 px-3 text-center">

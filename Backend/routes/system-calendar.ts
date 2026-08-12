@@ -7,7 +7,49 @@ import {
   facultyVansList,
   CalendarEventRecord
 } from "@/Backend/services/calendar-store";
+import { listBookings } from "@/Backend/services/booking-system-store";
 import { getGoogleCalendarClient } from "@/Backend/services/google-calendar";
+import { prisma } from "@/lib/prisma";
+import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
+import { getAuthUser } from "@/app/actions/auth";
+import { createClient } from "@/lib/supabase/server";
+
+interface GoogleCalendarCache {
+  events: CalendarEventRecord[];
+  timestamp: number;
+}
+const gcalCache: Record<string, GoogleCalendarCache> = {};
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+async function resolveCalendarId(vanId?: string): Promise<string | undefined> {
+  const defaultCalendarId = process.env.GOOGLE_CALENDAR_ID;
+  if (!vanId) return defaultCalendarId;
+  
+  const vanIdNum = parseInt(vanId);
+  if (!isNaN(vanIdNum)) {
+    const van = await prisma.van.findUnique({
+      where: { id: vanIdNum },
+      include: { faculty: true }
+    });
+    if (van && van.faculty && van.faculty.googleCalendarId) {
+      return van.faculty.googleCalendarId;
+    }
+  } else {
+    let facultyName = '';
+    if (vanId === 'v-ict') facultyName = 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+    else if (vanId === 'v-eng') facultyName = 'คณะวิศวกรรมศาสตร์';
+    else if (vanId === 'v-sci') facultyName = 'คณะวิทยาศาสตร์';
+    else if (vanId === 'v-agr') facultyName = 'คณะเกษตรศาสตร์';
+    else if (vanId === 'v-ener') facultyName = 'คณะพลังงานและสิ่งแวดล้อม';
+    
+    if (facultyName) {
+      const fac = await prisma.faculty.findFirst({ where: { nameTh: facultyName } });
+      if (fac && fac.googleCalendarId) return fac.googleCalendarId;
+    }
+  }
+  
+  return defaultCalendarId;
+}
 
 export async function handleSystemCalendarEvents(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -16,64 +58,176 @@ export async function handleSystemCalendarEvents(request: Request) {
 
   let events = getStoredCalendarEvents();
 
-  // Sync live events from Google Calendar API if environment variables are configured
-  const googleCalendarId = process.env.GOOGLE_CALENDAR_ID;
-  if (googleCalendarId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+  // Merge live bookings from Database/System Bookings
+  try {
+    const user = await getAuthUser();
+    let facultyId: number | undefined;
+    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+      facultyId = user.facultyId;
+    }
+
+    const dbBookings = await listBookings(undefined, facultyId);
+    const dbEvents: CalendarEventRecord[] = dbBookings.map(b => {
+      const startDate = new Date(b.startAt);
+      const endDate = new Date(b.endAt);
+      
+      const startTime = isNaN(startDate.getTime()) ? "08:30" : startDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      const endTime = isNaN(endDate.getTime()) ? "16:30" : endDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      
+      return {
+        id: `bk-${b.id}`,
+        vanId: b.assignedVanId || "v-ict",
+        facultyId: String((b as any).requesterFacultyId || "ict"),
+        bookingFaculty: b.requesterFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        destination: b.destination,
+        purpose: b.purpose,
+        purposeDetail: b.purpose,
+        routeDetail: b.destination,
+        date: b.startAt ? b.startAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        time: `${startTime} - ${endTime} น.`,
+        passengers: b.passengers || 1,
+        requester: b.requester || "ผู้ขอใช้รถ",
+        department: "ระบบจองรถตู้",
+        status: (b.status === "APPROVED" || b.status === "COMPLETED") ? "approved" : "pending",
+        statusText: b.status === "APPROVED" ? "อนุมัติแล้ว" : (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "รอการอนุมัติ"),
+        statusTime: "ระบบการจอง",
+        createdAt: b.submittedAt || new Date().toISOString()
+      };
+    });
+
+    const existingIds = new Set(events.map(e => e.id));
+    const newDbEvents = dbEvents.filter(e => !existingIds.has(e.id));
+    events = [...newDbEvents, ...events];
+  } catch (err) {
+    console.warn("Notice: Failed to fetch DB bookings for calendar:", err);
+  }
+
+  // Sync live events from Google Calendar API
+  if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
     try {
       const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
       const month = monthParam ? parseInt(monthParam, 10) : new Date().getMonth() + 1;
+      const cacheKey = `${year}-${month}`;
       
-      const timeMin = new Date(year, month - 1, 1).toISOString();
-      const timeMax = new Date(year, month, 0, 23, 59, 59).toISOString();
-      
-      const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar.readonly']);
-      const response = await calendar.events.list({
-        calendarId: googleCalendarId,
-        timeMin,
-        timeMax,
-        maxResults: 250,
-        singleEvents: true,
-        orderBy: 'startTime',
-      });
+      let googleEventsMapped: CalendarEventRecord[] = [];
 
-      const googleItems = response.data.items || [];
-      if (googleItems.length > 0) {
-        const googleEventsMapped: CalendarEventRecord[] = googleItems.map((item, index) => {
-          const startDate = item.start?.dateTime || item.start?.date || new Date().toISOString();
-          const summary = item.summary || 'ภารกิจใช้รถตู้';
-          const description = item.description || '';
-          
-          let facultyName = 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
-          let facultyId = 'ict';
-          if (summary.includes('วิศวะ')) { facultyName = 'คณะวิศวกรรมศาสตร์'; facultyId = 'eng'; }
-          else if (summary.includes('วิทยาศาสตร์')) { facultyName = 'คณะวิทยาศาสตร์'; facultyId = 'sci'; }
-          else if (summary.includes('เกษตร')) { facultyName = 'คณะเกษตรศาสตร์'; facultyId = 'agr'; }
-          else if (summary.includes('พลังงาน')) { facultyName = 'คณะพลังงานและสิ่งแวดล้อม'; facultyId = 'ener'; }
+      if (gcalCache[cacheKey] && (Date.now() - gcalCache[cacheKey].timestamp < CACHE_TTL_MS)) {
+        googleEventsMapped = gcalCache[cacheKey].events;
+      } else {
+        const timeMin = new Date(year, month - 1, 1).toISOString();
+        const timeMax = new Date(year, month, 0, 23, 59, 59).toISOString();
+        
+        const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar.readonly']);
+        
+        // Determine which calendars to fetch
+        let allGoogleCalendarIds: { id: string, facultyName: string, facultyId: string }[] = [];
+        try {
+          const faculties = await prisma.faculty.findMany({
+            where: { googleCalendarId: { not: null } }
+          });
+          faculties.forEach(f => {
+            if (f.googleCalendarId) {
+              allGoogleCalendarIds.push({
+                id: f.googleCalendarId,
+                facultyName: f.nameTh,
+                facultyId: f.id.toString()
+              });
+            }
+          });
+        } catch (err) {
+          console.warn("Failed to fetch faculties for calendar IDs", err);
+        }
 
-          return {
-            id: `gcal-${item.id || index}`,
-            gcalId: item.id || undefined,
-            vanId: 'v-ict',
-            facultyId,
-            date: startDate.slice(0, 10),
-            time: new Date(startDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.',
-            destination: summary,
-            purpose: summary,
-            passengers: 10,
-            status: 'approved' as const,
-            bookingFaculty: facultyName,
-            requester: item.organizer?.displayName || item.organizer?.email || 'Google Calendar Sync',
-            department: 'Google Calendar Live',
-            purposeDetail: description,
-            routeDetail: summary,
-            statusText: 'ซิงค์จาก Google Calendar',
-            statusTime: 'Live Data',
-            createdAt: startDate,
-          };
+        // Fallback to central calendar if no specific ones are configured or as an addition
+        const centralCalendarId = process.env.GOOGLE_CALENDAR_ID;
+        if (centralCalendarId && !allGoogleCalendarIds.find(c => c.id === centralCalendarId)) {
+          allGoogleCalendarIds.push({
+            id: centralCalendarId,
+            facultyName: 'คณะรวม (Central)',
+            facultyId: 'central'
+          });
+        }
+
+        const fetchPromises = allGoogleCalendarIds.map(async (cal) => {
+          try {
+            const response = await calendar.events.list({
+              calendarId: cal.id,
+              timeMin,
+              timeMax,
+              maxResults: 250,
+              singleEvents: true,
+              orderBy: 'startTime',
+            });
+            return { items: response.data.items, meta: cal };
+          } catch (err) {
+            console.warn(`Failed to fetch calendar ${cal.id}`, err);
+            return null;
+          }
         });
 
-        // Merge Google Calendar events with store
-        events = [...googleEventsMapped, ...events];
+        const responses = await Promise.all(fetchPromises);
+
+        responses.forEach((res) => {
+          if (!res || !res.items || res.items.length === 0) return;
+          
+          const mapped: CalendarEventRecord[] = res.items.map((item, index) => {
+            const startDate = item.start?.dateTime || item.start?.date || new Date().toISOString();
+            const summary = item.summary || 'ภารกิจใช้รถตู้';
+            const description = item.description || '';
+            
+            let facultyName = res.meta.facultyName;
+            let facultyId = res.meta.facultyId;
+
+            // Legacy parse if central
+            if (facultyId === 'central') {
+              if (summary.includes('วิศวะ')) { facultyName = 'คณะวิศวกรรมศาสตร์'; facultyId = 'eng'; }
+              else if (summary.includes('วิทยาศาสตร์')) { facultyName = 'คณะวิทยาศาสตร์'; facultyId = 'sci'; }
+              else if (summary.includes('เกษตร')) { facultyName = 'คณะเกษตรศาสตร์'; facultyId = 'agr'; }
+              else if (summary.includes('พลังงาน')) { facultyName = 'คณะพลังงานและสิ่งแวดล้อม'; facultyId = 'ener'; }
+              else { facultyName = 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร'; facultyId = 'ict'; }
+            }
+
+            return {
+              id: `gcal-${item.id || index}`,
+              gcalId: item.id || undefined,
+              vanId: 'v-ict',
+              facultyId,
+              date: startDate.slice(0, 10),
+              returnDate: (item.end?.dateTime || item.end?.date || startDate).slice(0, 10),
+              time: new Date(startDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.',
+              destination: summary,
+              purpose: summary,
+              passengers: 10,
+              status: 'approved' as const,
+              bookingFaculty: facultyName,
+              requester: item.organizer?.displayName || item.organizer?.email || 'Google Calendar Sync',
+              department: 'Google Calendar Live',
+              purposeDetail: description,
+              routeDetail: summary,
+              statusText: 'ซิงค์จาก Google Calendar',
+              statusTime: 'Live Data',
+              createdAt: startDate,
+            };
+          });
+          googleEventsMapped = [...googleEventsMapped, ...mapped];
+        });
+
+        gcalCache[cacheKey] = {
+          events: googleEventsMapped,
+          timestamp: Date.now()
+        };
+      }
+
+      if (googleEventsMapped.length > 0) {
+        // Merge Google Calendar events with store, avoiding duplicates
+        const existingGcalIds = new Set(events.map(e => e.gcalId).filter(Boolean));
+        const existingSignatures = new Set(events.map(e => `${e.date.slice(0,10)}_${e.destination}`));
+        
+        const filteredGcal = googleEventsMapped.filter(e => 
+          !existingGcalIds.has(e.gcalId) && !existingSignatures.has(`${e.date}_${e.destination}`)
+        );
+
+        events = [...filteredGcal, ...events];
       }
     } catch (gcalError) {
       console.warn("Google Calendar Live Sync notice:", gcalError instanceof Error ? gcalError.message : gcalError);
@@ -114,38 +268,85 @@ export async function handleSystemCalendarEvents(request: Request) {
     {},
   );
 
+  // Fetch real vans from database
+  let realVansList: UnifiedVanInfo[] = [];
+  try {
+    const realVans = await prisma.van.findMany({
+      include: {
+        faculty: true,
+        assignedDrivers: {
+          include: { user: true }
+        }
+      }
+    });
+    realVansList = realVans.map(v => {
+      const driver = v.assignedDrivers[0];
+      return {
+        id: v.id.toString(),
+        facultyId: v.facultyId.toString(),
+        facultyName: v.faculty?.nameTh || "คณะ",
+        shortFacultyName: v.faculty?.nameTh?.replace('คณะ', '') || "คณะ",
+        vanName: v.name || `รถตู้ (ID: ${v.id})`,
+        plate: v.plate || "ไม่ระบุทะเบียน",
+        driverName: driver?.user?.name || "ยังไม่มีคนขับ",
+        driverPhone: driver?.phone || "-",
+        driverImage: driver?.avatar || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=100&q=80",
+        vanImage: v.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80"
+      };
+    });
+  } catch (err) {
+    console.warn("Failed to fetch real vans:", err);
+  }
+
+  const allVans = [...realVansList, ...facultyVansList];
+
   return NextResponse.json({ 
     success: true,
     events: eventsByDate, 
     rawEvents: events,
-    vans: facultyVansList
+    vans: allVans
   });
 }
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const created = addStoredCalendarEvent(body);
 
     // Push new event to Google Calendar API if configured
-    const googleCalendarId = process.env.GOOGLE_CALENDAR_ID;
-    if (googleCalendarId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
-        const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
-        const startDate = created.date ? new Date(created.date).toISOString() : new Date().toISOString();
-        
-        const gcalResponse = await calendar.events.insert({
-          calendarId: googleCalendarId,
-          requestBody: {
-            summary: `[${created.bookingFaculty || 'คณะ'}] ${created.destination || 'ภารกิจใช้รถตู้'}`,
-            description: `ผู้ขอใช้บริการ: ${created.requester || '-'}\nหน่วยงาน: ${created.bookingFaculty || '-'}\nวัตถุประสงค์: ${created.purpose || '-'}\nผู้โดยสาร: ${created.passengers || 1} คน`,
-            start: { dateTime: startDate, timeZone: 'Asia/Bangkok' },
-            end: { dateTime: startDate, timeZone: 'Asia/Bangkok' },
-          },
-        });
+        const targetCalendarId = await resolveCalendarId(created.vanId);
 
-        if (gcalResponse.data.id) {
-          created.gcalId = gcalResponse.data.id;
+        if (targetCalendarId) {
+          const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
+          
+          const startDateRaw = created.date ? created.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
+          const endDateRaw = created.returnDate ? created.returnDate.slice(0, 10) : startDateRaw;
+
+          const startDateTime = `${startDateRaw}T08:30:00+07:00`;
+          const endDateTime = `${endDateRaw}T16:30:00+07:00`;
+
+          const gcalResponse = await calendar.events.insert({
+            calendarId: targetCalendarId,
+            requestBody: {
+              summary: `[${created.bookingFaculty || 'คณะ'}] ${created.destination || 'ภารกิจใช้รถตู้'}`,
+              description: `ผู้ขอใช้บริการ: ${created.requester || '-'}\nหน่วยงาน: ${created.bookingFaculty || '-'}\nวัตถุประสงค์: ${created.purpose || '-'}\nผู้โดยสาร: ${created.passengers || 1} คน`,
+              start: { dateTime: startDateTime, timeZone: 'Asia/Bangkok' },
+              end: { dateTime: endDateTime, timeZone: 'Asia/Bangkok' },
+            },
+          });
+
+          if (gcalResponse.data.id) {
+            created.gcalId = gcalResponse.data.id;
+            updateStoredCalendarEvent(created.id, { gcalId: created.gcalId });
+          }
         }
       } catch (gcalErr) {
         console.warn("Google Calendar Push Insert Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
@@ -161,6 +362,12 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id, gcalId, ...fields } = body;
     if (!id) return NextResponse.json({ success: false, error: "Missing ID" }, { status: 400 });
@@ -168,20 +375,23 @@ export async function PATCH(request: Request) {
     const updated = updateStoredCalendarEvent(id, fields);
 
     // Sync update to Google Calendar
-    const googleCalendarId = process.env.GOOGLE_CALENDAR_ID;
     const targetGcalId = gcalId || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
 
-    if (googleCalendarId && targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
-        const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
-        await calendar.events.patch({
-          calendarId: googleCalendarId,
-          eventId: targetGcalId,
-          requestBody: {
-            summary: fields.destination ? `[${fields.bookingFaculty || 'คณะ'}] ${fields.destination}` : undefined,
-            description: fields.purpose ? `วัตถุประสงค์: ${fields.purpose}` : undefined,
-          },
-        });
+        const targetCalendarId = await resolveCalendarId(updated?.vanId || fields.vanId);
+
+        if (targetCalendarId) {
+          const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
+          await calendar.events.patch({
+            calendarId: targetCalendarId,
+            eventId: targetGcalId,
+            requestBody: {
+              summary: fields.destination ? `[${fields.bookingFaculty || 'คณะ'}] ${fields.destination}` : undefined,
+              description: fields.purpose ? `วัตถุประสงค์: ${fields.purpose}` : undefined,
+            },
+          });
+        }
       } catch (gcalErr) {
         console.warn("Google Calendar Push Patch Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
       }
@@ -196,24 +406,50 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authUser = await getAuthUser();
+    if (!authUser) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const gcalId = searchParams.get("gcalId");
     if (!id) return NextResponse.json({ success: false, error: "Missing ID" }, { status: 400 });
 
+    // Authorization check for FACULTY_ADMIN
+    const allEvents = getStoredCalendarEvents();
+    const storedEvent = allEvents.find(e => String(e.id) === String(id));
+    
+    if (authUser.role === 'FACULTY_ADMIN' && storedEvent) {
+      const adminFacultyId = String(authUser.facultyId || '');
+      const adminFacultyName = authUser.faculty?.nameTh || '';
+      
+      // Allow if the event's faculty matches the admin's faculty
+      const matchesId = storedEvent.facultyId === adminFacultyId;
+      const matchesName = storedEvent.bookingFaculty === adminFacultyName;
+      
+      if (!matchesId && !matchesName) {
+         return NextResponse.json({ success: false, error: "Forbidden: ท่านสามารถลบได้เฉพาะตารางงานของคณะตนเองเท่านั้น" }, { status: 403 });
+      }
+    }
+
     deleteStoredCalendarEvent(id);
 
     // Sync delete to Google Calendar
-    const googleCalendarId = process.env.GOOGLE_CALENDAR_ID;
     const targetGcalId = gcalId || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
 
-    if (googleCalendarId && targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
-        const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
-        await calendar.events.delete({
-          calendarId: googleCalendarId,
-          eventId: targetGcalId,
-        });
+        // We already found storedEvent above, use it to get vanId
+        const targetCalendarId = await resolveCalendarId(storedEvent?.vanId);
+
+        if (targetCalendarId) {
+          const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
+          await calendar.events.delete({
+            calendarId: targetCalendarId,
+            eventId: targetGcalId,
+          });
+        }
       } catch (gcalErr) {
         console.warn("Google Calendar Push Delete Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
       }

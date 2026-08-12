@@ -4,86 +4,73 @@ import React, { useState, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 
-// ==========================================
-// 1. Mock Data สำหรับ Faculty Admin (ระดับคณะ)
-// ==========================================
-const FACULTY_TRIP_STATS = {
-  internal: 45, // คนในคณะจอง
-  external: 12, // คนนอกคณะจองข้ามมา
-  inProvince: 35, // วิ่งในจังหวัด
-  outProvince: 22, // วิ่งต่างจังหวัด
-};
+// Data structures for Reports
+interface FacultyTripStats {
+  internal: number;
+  external: number;
+  inProvince: number;
+  outProvince: number;
+}
+interface DriverWorkload {
+  id: string;
+  name: string;
+  hours_this_week: number;
+  max_safe_hours: number;
+  trips: number;
+  status: string;
+}
+interface FleetStatus {
+  faculty: string;
+  total_vans: number;
+  active: number;
+  maintenance: number;
+  usage_rate: string;
+}
+interface WeeklyDensity {
+  day: string;
+  trips: number;
+  percent: number;
+}
+interface CrossFacultyUsage {
+  borrower: string;
+  lender: string;
+  count: number;
+  percent: number;
+}
 
-const DRIVER_WORKLOAD = [
-  { 
-    id: "d1", 
-    name: "นายสมชาย ใจดี", 
-    hours_this_week: 45, // ชั่วโมงทำงานสัปดาห์นี้
-    max_safe_hours: 48, // ลิมิตความปลอดภัยตามกฎหมายแรงงาน
-    trips: 5,
-    status: "warning" // warning เพราะใกล้ทะลุลิมิต
-  },
-  { 
-    id: "d2", 
-    name: "นายบุญฤทธิ์ บัวบาน", 
-    hours_this_week: 22, 
-    max_safe_hours: 48, 
-    trips: 3,
-    status: "safe" 
-  },
-];
-
-// ==========================================
-// 2. Mock Data สำหรับ Super Admin (ระดับมหาลัย)
-// ==========================================
-const FLEET_STATUS = [
-  { faculty: "คณะวิศวกรรมศาสตร์", total_vans: 3, active: 2, maintenance: 1, usage_rate: "88%" },
-  { faculty: "คณะวิทยาศาสตร์", total_vans: 2, active: 2, maintenance: 0, usage_rate: "75%" },
-  { faculty: "คณะนิติศาสตร์", total_vans: 1, active: 1, maintenance: 0, usage_rate: "50%" },
-  { faculty: "คณะรัฐศาสตร์และสังคมศาสตร์", total_vans: 4, active: 3, maintenance: 1, usage_rate: "95%" },
-];
-
-const WEEKLY_DENSITY = [
-    { day: "จ", trips: 15, percent: 30 },
-    { day: "อ", trips: 22, percent: 45 },
-    { day: "พ", trips: 48, percent: 95 },
-    { day: "พฤ", trips: 30, percent: 60 },
-    { day: "ศ", trips: 50, percent: 100 },
-    { day: "ส", trips: 18, percent: 38 },
-    { day: "อา", trips: 8, percent: 15 },
-];
-
-const CROSS_FACULTY_USAGE = [
-    { borrower: "คณะนิติศาสตร์", lender: "วิศวกรรมศาสตร์", count: 18, percent: 90 },
-    { borrower: "คณะวิทยาศาสตร์สุขภาพ", lender: "พยาบาลศาสตร์", count: 15, percent: 75 },
-    { borrower: "คณะสถาปัตยกรรมศาสตร์", lender: "วิศวกรรมศาสตร์", count: 11, percent: 60 },
-    { borrower: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร", lender: "รัฐศาสตร์และสังคมศาสตร์", count: 9, percent: 50 },
-];
-
+import { getDashboardReports } from '@/app/actions/reports';
 
 // ==========================================
 // 3. Main Page Component
 // ==========================================
 export default function ReportsPage() {
   const [role, setRole] = useState("FACULTY_ADMIN");
+  const [reportData, setReportData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadRole = async () => {
+    const loadData = async () => {
       try {
-        const response = await fetch('/api/me', { cache: 'no-store' });
-        const data = await response.json();
-        setRole(data.role || 'FACULTY_ADMIN');
-      } catch {
-        setRole('FACULTY_ADMIN');
+        const res = await getDashboardReports();
+        if (res.success && res.data) {
+          setRole(res.data.role || 'FACULTY_ADMIN');
+          setReportData(res.data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
-    loadRole();
+    loadData();
   }, []);
+
+  if (loading) return <AppShell><div className="p-8 text-center text-gray-500">กำลังโหลดข้อมูลเชิงปฏิบัติการ...</div></AppShell>;
 
   return (
     <AppShell>
       {/* สลับ Component ตาม Role อัตโนมัติ */}
-      {role === "SUPER_ADMIN" ? <SuperAdminView /> : <FacultyAdminView />}
+      {role === "SUPER_ADMIN" ? <SuperAdminView data={reportData} /> : <FacultyAdminView data={reportData} />}
     </AppShell>
   );
 }
@@ -91,8 +78,9 @@ export default function ReportsPage() {
 // ==========================================
 // 📊 VIEW A: หน้า Report สำหรับผู้ดูแลรถตู้คณะ
 // ==========================================
-function FacultyAdminView() {
-  const totalTrips = FACULTY_TRIP_STATS.internal + FACULTY_TRIP_STATS.external;
+function FacultyAdminView({ data }: { data: any }) {
+  const { facultyTripStats, driverWorkload } = data;
+  const totalTrips = (facultyTripStats?.internal || 0) + (facultyTripStats?.external || 0);
 
   return (
     <div className="animate-in fade-in duration-500">
@@ -110,28 +98,23 @@ function FacultyAdminView() {
             <p className="text-sm text-gray-500">ติดตามชั่วโมงขับรถเพื่อป้องกันความเหนื่อยล้า (Fatigue Management)</p>
           </div>
 
-          <div className="space-y-6">
-            {DRIVER_WORKLOAD.map((driver) => {
+          <div className="space-y-4">
+            {(driverWorkload || []).map((driver: DriverWorkload) => {
               const percent = Math.min((driver.hours_this_week / driver.max_safe_hours) * 100, 100);
               const isWarning = driver.status === "warning";
 
               return (
-                <div key={driver.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="font-bold text-gray-800">{driver.name}</div>
-                    {isWarning ? (
-                      <span className="rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">⚠️ ใกล้เกินลิมิต</span>
-                    ) : (
-                      <span className="rounded bg-green-100 px-2 py-1 text-[10px] font-bold text-green-700">✓ พักผ่อนเพียงพอ</span>
-                    )}
+                <div key={driver.id} className="p-4 rounded-2xl border border-gray-100 flex justify-between items-center bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                  <div>
+                    <h4 className="font-bold text-gray-800 text-sm">{driver.name}</h4>
+                    <p className="text-xs text-gray-500 mt-1">รับงานไปแล้ว {driver.trips} เที่ยว</p>
                   </div>
-                  
-                  <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                    <span>ขับไปแล้ว {driver.hours_this_week} ชม. (ออกรถ {driver.trips} ทริป)</span>
-                    <span>ลิมิต {driver.max_safe_hours} ชม.</span>
-                  </div>
-
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
+                  {isWarning ? (
+                    <span className="rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">⚠️ ใกล้เกินลิมิต</span>
+                  ) : (
+                    <span className="rounded bg-green-100 px-2 py-1 text-[10px] font-bold text-green-700">✓ พักผ่อนเพียงพอ</span>
+                  )}
+                  <div className="h-2.5 w-16 overflow-hidden rounded-full bg-gray-200">
                     <div 
                       className={`h-full rounded-full transition-all duration-1000 ${isWarning ? 'bg-red-500' : 'bg-green-500'}`}
                       style={{ width: `${percent}%` }}
@@ -152,20 +135,20 @@ function FacultyAdminView() {
               <div>
                 <div className="flex justify-between text-sm font-semibold mb-1">
                   <span className="text-purple-800">คนในคณะของเรา</span>
-                  <span>{FACULTY_TRIP_STATS.internal} ทริป</span>
+                  <span>{facultyTripStats?.internal || 0} ทริป</span>
                 </div>
                 <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
-                  <div className="h-full bg-purple-600 rounded-full" style={{ width: `${(FACULTY_TRIP_STATS.internal / totalTrips) * 100}%` }} />
+                  <div className="h-full bg-purple-600 rounded-full" style={{ width: `${totalTrips > 0 ? (facultyTripStats?.internal / totalTrips) * 100 : 0}%` }} />
                 </div>
               </div>
               
               <div>
                 <div className="flex justify-between text-sm font-semibold mb-1">
                   <span className="text-blue-600">คณะอื่นยืม (Cross-Faculty)</span>
-                  <span>{FACULTY_TRIP_STATS.external} ทริป</span>
+                  <span>{facultyTripStats?.external || 0} ทริป</span>
                 </div>
                 <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(FACULTY_TRIP_STATS.external / totalTrips) * 100}%` }} />
+                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${totalTrips > 0 ? (facultyTripStats?.external / totalTrips) * 100 : 0}%` }} />
                 </div>
               </div>
             </div>
@@ -177,12 +160,12 @@ function FacultyAdminView() {
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-xl border border-orange-100 bg-orange-50 p-4 text-center">
                 <p className="text-xs font-bold text-orange-600 uppercase tracking-wide">ต่างจังหวัด</p>
-                <p className="mt-2 text-3xl font-black text-orange-900">{FACULTY_TRIP_STATS.outProvince}</p>
+                <p className="mt-2 text-3xl font-black text-orange-900">{facultyTripStats?.outProvince || 0}</p>
                 <p className="text-xs text-orange-700 mt-1">ทริป</p>
               </div>
               <div className="rounded-xl border border-teal-100 bg-teal-50 p-4 text-center">
                 <p className="text-xs font-bold text-teal-600 uppercase tracking-wide">ภายในจังหวัด</p>
-                <p className="mt-2 text-3xl font-black text-teal-900">{FACULTY_TRIP_STATS.inProvince}</p>
+                <p className="mt-2 text-3xl font-black text-teal-900">{facultyTripStats?.inProvince || 0}</p>
                 <p className="text-xs text-teal-700 mt-1">ทริป</p>
               </div>
             </div>
@@ -195,9 +178,10 @@ function FacultyAdminView() {
 }
 
 // ==========================================
-// 📊 VIEW B: หน้า Report สำหรับ Super Admin
+// 📊 VIEW B: หน้า Report สำหรับผู้บริหารส่วนกลาง
 // ==========================================
-function SuperAdminView() {
+function SuperAdminView({ data }: { data: any }) {
+  const { fleetStatus, weeklyDensity, crossFacultyUsage, facultyTripStats } = data;
   return (
     <div className="animate-in fade-in duration-500">
       <PageHeader
@@ -206,15 +190,15 @@ function SuperAdminView() {
       />
 
       {/* --- Section 1: KPI Cards ระดับมหาวิทยาลัย --- */}
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <GlobalStatCard title="จำนวนรถตู้ทั้งหมดในระบบ" value="42" unit="คัน" subtitle="พร้อมใช้งาน 38 คัน" tone="purple" />
-        <GlobalStatCard title="ทริปการเดินทาง (เดือนนี้)" value="1,245" unit="ทริป" subtitle="เพิ่มขึ้น 12% จากเดือนที่แล้ว" tone="blue" />
-        <GlobalStatCard title="อัตราการยืมข้ามคณะ" value="35" unit="%" subtitle="ลดภาระส่วนกลางได้ดีเยี่ยม" tone="green" />
-        <GlobalStatCard title="งบประมาณที่ประหยัดได้" value="1.2" unit="ล้านบาท" subtitle="จากการทำ Smart Matchmaking" tone="yellow" />
+      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard title="คนในคณะจอง" value={facultyTripStats?.internal || 0} suffix="ครั้ง" color="blue" />
+        <StatCard title="นอกคณะยืมรถ" value={facultyTripStats?.external || 0} suffix="ครั้ง" color="purple" />
+        <StatCard title="วิ่งในจังหวัด" value={facultyTripStats?.inProvince || 0} suffix="เที่ยว" color="green" />
+        <StatCard title="วิ่งต่างจังหวัด" value={facultyTripStats?.outProvince || 0} suffix="เที่ยว" color="orange" />
       </div>
 
       {/* --- Section 2: กราฟวิเคราะห์ (Charts) --- */}
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* กราฟความหนาแน่นของการใช้รถ (Usage Density) */}
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
@@ -223,19 +207,17 @@ function SuperAdminView() {
             <p className="text-sm text-gray-500">Peak Time ส่วนใหญ่กระจุกตัวในวันพุธและศุกร์</p>
           </div>
           
-          <div className="flex h-64 items-end justify-between gap-2 px-2">
-            {WEEKLY_DENSITY.map((item) => (
-              <div key={item.day} className="group relative flex w-full flex-col items-center">
-                {/* Tooltip (แสดงเมื่อ Hover) */}
-                <div className="absolute -top-10 hidden rounded bg-gray-800 px-2 py-1 text-xs text-white group-hover:block whitespace-nowrap">
-                  {item.trips} ทริป
+          <div className="flex items-end justify-between h-40 mt-4 gap-1">
+            {(weeklyDensity || []).map((d: WeeklyDensity, i: number) => (
+              <div key={i} className="flex flex-col items-center flex-1 group">
+                <span className="text-[10px] text-gray-400 mb-2 opacity-0 group-hover:opacity-100 transition-opacity">{d.trips}</span>
+                <div className="w-full max-w-[24px] bg-[#311171]/20 rounded-t-sm relative flex justify-center">
+                  <div 
+                    className="absolute bottom-0 w-full bg-[#311171] rounded-t-sm transition-all duration-1000"
+                    style={{ height: `${d.percent}%` }}
+                  />
                 </div>
-                {/* Bar */}
-                <div 
-                  className={`w-full max-w-[40px] rounded-t-md transition-all duration-500 ${item.percent > 80 ? 'bg-purple-800 hover:bg-purple-900' : 'bg-purple-200 hover:bg-purple-300'}`}
-                  style={{ height: `${item.percent}%` }}
-                />
-                <span className="mt-3 text-xs font-medium text-gray-600">{item.day}</span>
+                <span className="text-xs font-bold text-gray-600 mt-2">{d.day}</span>
               </div>
             ))}
           </div>
@@ -248,17 +230,17 @@ function SuperAdminView() {
             <p className="text-sm text-gray-500">แสดงข้อมูล "ผู้ยืม" ➔ "ผู้ให้ยืม (เจ้าของรถ)"</p>
           </div>
 
-          <div className="space-y-6 mt-4">
-            {CROSS_FACULTY_USAGE.map((data, idx) => (
+          <div className="space-y-4">
+            {(crossFacultyUsage || []).map((usage: CrossFacultyUsage, idx: number) => (
               <div key={idx}>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="font-bold text-gray-700">{data.borrower} <span className="text-purple-500 font-normal">➔ ยืม ➔</span> {data.lender}</span>
-                  <span className="font-bold text-gray-900">{data.count} ครั้ง</span>
+                  <span className="font-bold text-gray-700">{usage.borrower} <span className="text-purple-500 font-normal">➔ ยืม ➔</span> {usage.lender}</span>
+                  <span className="font-bold text-gray-900">{usage.count} ครั้ง</span>
                 </div>
                 <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
                   <div 
                     className="h-full rounded-full bg-gradient-to-r from-purple-400 to-purple-800 transition-all duration-1000"
-                    style={{ width: `${data.percent}%` }}
+                    style={{ width: `${usage.percent}%` }}
                   />
                 </div>
               </div>
@@ -291,7 +273,7 @@ function SuperAdminView() {
               </tr>
             </thead>
             <tbody>
-              {FLEET_STATUS.map((fleet, idx) => (
+              {(fleetStatus || []).map((fleet: FleetStatus, idx: number) => (
                 <tr key={idx} className="border-t border-gray-100 hover:bg-gray-50/50">
                   <td className="p-4 font-bold text-purple-900">{fleet.faculty}</td>
                   <td className="p-4 text-center font-medium">{fleet.total_vans}</td>

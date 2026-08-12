@@ -59,24 +59,25 @@ enum BookingStatus {
 // ==========================================
 
 model Faculty {
-  id        Int       @id @default(autoincrement())
-  nameTh    String    @map("name_th") // เช่น คณะวิศวกรรมศาสตร์
-  nameEn    String?   @map("name_en")
-  
+  id               Int     @id @default(autoincrement())
+  nameTh           String  @map("name_th") // เช่น คณะวิศวกรรมศาสตร์
+  nameEn           String? @map("name_en")
+  googleCalendarId String? @map("google_calendar_id")
+
   // Relations
-  users     User[]
-  drivers   Driver[]
-  vans      Van[]     // 1 คณะมีรถตู้หลายคันได้ (1:N)
-  bookings  Booking[] @relation("TargetFaculty")
+  users    User[]
+  drivers  Driver[]
+  vans     Van[] // 1 คณะมีรถตู้หลายคันได้ (1:N)
+  bookings Booking[] @relation("TargetFaculty")
 
   @@map("faculties")
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  facultyId Int      @map("faculty_id")
-  faculty   Faculty  @relation(fields: [facultyId], references: [id])
-  
+  id        Int     @id @default(autoincrement())
+  facultyId Int     @map("faculty_id")
+  faculty   Faculty @relation(fields: [facultyId], references: [id])
+
   name      String
   email     String   @unique // รองรับระบบ Microsoft 365 SSO ของมหาวิทยาลัย
   avatar    String?  @db.Text
@@ -84,8 +85,8 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  driverProfile Driver?   // ถ้า Role เป็น DRIVER จะมีข้อมูลเชื่อมไปตารางคนขับ (1:1)
-  bookings      Booking[] @relation("Requester")
+  driverProfile Driver? // ถ้า Role เป็น DRIVER จะมีข้อมูลเชื่อมไปตารางคนขับ (1:1)
+  bookings      Booking[]      @relation("Requester")
   auditLogs     AuditLog[]
   notifications Notification[]
 
@@ -93,113 +94,112 @@ model User {
 }
 
 model Van {
-  id        Int      @id @default(autoincrement())
-  facultyId Int      @map("faculty_id") // 1 คณะต่อหลายคันได้
-  faculty   Faculty  @relation(fields: [facultyId], references: [id])
-  
-  name      String?  @map("name")
-  plate     String   @map("plate") // ทะเบียนรถ เช่น นข 1234 พะเยา
-  engine    String?  @map("engine")
-  capacity  Int      @default(12)  @map("capacity") // จำนวนที่นั่ง
-  isActive  Boolean  @default(true) @map("is_active")
-  isShared  Boolean  @default(true) @map("is_shared")
-  
-  image            String?   @db.Text
-  taxExp           DateTime? @map("tax_exp")
-  insExp           DateTime? @map("ins_exp")
+  id        Int     @id @default(autoincrement())
+  facultyId Int     @map("faculty_id") // 1 คณะต่อหลายคันได้
+  faculty   Faculty @relation(fields: [facultyId], references: [id])
 
-  nextCheckMileage Int?      @map("next_check_mileage")
+  name     String? @map("name")
+  plate    String  @map("plate") // ทะเบียนรถ เช่น นข 1234 พะเยา
+  engine   String? @map("engine")
+  capacity Int     @default(12) @map("capacity") // จำนวนที่นั่ง
+  isActive Boolean @default(true) @map("is_active")
+  isShared Boolean @default(true) @map("is_shared")
+
+  image  String?   @db.Text
+  taxExp DateTime? @map("tax_exp")
+  insExp DateTime? @map("ins_exp")
+
+  nextCheckMileage Int? @map("next_check_mileage")
 
   // Relations
-  assignedDrivers   Driver[]
-  maintenanceLogs   MaintenanceRecord[]
+  assignedDrivers Driver[]
+  maintenanceLogs MaintenanceRecord[]
 
   @@map("vans")
 }
 
 model Driver {
-  id        Int        @id @default(autoincrement())
-  userId    Int        @unique @map("user_id") // เชื่อมกับบัญชีผู้ใช้หลัก (1:1)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  facultyId Int        @map("faculty_id")
-  faculty   Faculty    @relation(fields: [facultyId], references: [id])
-  
-  phone     String
-  age       Int
-  type      DriverType @default(PRIMARY)
-  isActive  Boolean    @default(true) @map("is_active")
-  avatar    String?    @db.Text
-  
-  contractStart DateTime?  @map("contract_start")
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique @map("user_id") // เชื่อมกับบัญชีผู้ใช้หลัก (1:1)
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  
-  assignedVanId Int?       @map("assigned_van_id")
-  assignedVan   Van?       @relation(fields: [assignedVanId], references: [id], onDelete: SetNull)
+  facultyId Int     @map("faculty_id")
+  faculty   Faculty @relation(fields: [facultyId], references: [id])
+
+  phone    String
+  age      Int
+  type     DriverType @default(PRIMARY)
+  isActive Boolean    @default(true) @map("is_active")
+  avatar   String?    @db.Text
+
+  contractStart DateTime? @map("contract_start")
+
+  assignedVanId Int? @map("assigned_van_id")
+  assignedVan   Van? @relation(fields: [assignedVanId], references: [id], onDelete: SetNull)
 
   // Relations
-  bookings  Booking[]  // ประวัติการถูกจัดสรรคิวรถยนต์
-  logs      DriverLog[] // ประวัติบันทึกฟอร์ม 4 จริงหลังวิ่งงานเสร็จ
+  bookings       Booking[] // ประวัติการถูกจัดสรรคิวรถยนต์
+  logs           DriverLog[] // ประวัติบันทึกฟอร์ม 4 จริงหลังวิ่งงานเสร็จ
   availabilities DriverAvailability[] // ปฏิทินความพร้อมใช้งาน
 
   @@map("drivers")
 }
 
 model DriverAvailability {
-  id        Int      @id @default(autoincrement())
-  driverId  Int      @map("driver_id")
-  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  
-  date      DateTime @db.Date // วันที่มีผล
-  status    AvailabilityStatus
-  approval  ApprovalStatus @default(PENDING) // ถ้าเป็นการลา ต้องรออนุมัติ
-  reason    String?  @db.Text
-  
+  id       Int    @id @default(autoincrement())
+  driverId Int    @map("driver_id")
+  driver   Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  date     DateTime           @db.Date // วันที่มีผล
+  status   AvailabilityStatus
+  approval ApprovalStatus     @default(PENDING) // ถ้าเป็นการลา ต้องรออนุมัติ
+  reason   String?            @db.Text
+
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("driver_availabilities")
 }
 
 model Booking {
-  id              String        @id // ใช้รหัสรูปแบบเฉพาะ เช่น UP-2567-0132
-  requesterId     Int           @map("requester_id")
-  requester       User          @relation("Requester", fields: [requesterId], references: [id])
-  
-  targetFacultyId Int           @map("target_faculty_id")
-  targetFaculty   Faculty       @relation("TargetFaculty", fields: [targetFacultyId], references: [id])
-  
-  destination     String        @db.Text
-  objective       String        @db.Text
-  departureDate   DateTime      @map("departure_date")
-  returnDate      DateTime      @map("return_date")
-  passengersCount Int           @map("passengers_count")
-  budgetSource    String        @map("budget_source")
-  tripType        String?       @map("trip_type")
-  
+  id          String @id // ใช้รหัสรูปแบบเฉพาะ เช่น UP-2567-0132
+  requesterId Int    @map("requester_id")
+  requester   User   @relation("Requester", fields: [requesterId], references: [id])
+
+  targetFacultyId Int     @map("target_faculty_id")
+  targetFaculty   Faculty @relation("TargetFaculty", fields: [targetFacultyId], references: [id])
+
+  destination     String   @db.Text
+  objective       String   @db.Text
+  departureDate   DateTime @map("departure_date")
+  returnDate      DateTime @map("return_date")
+  passengersCount Int      @map("passengers_count")
+  budgetSource    String   @map("budget_source")
+  tripType        String?  @map("trip_type")
+
   // ตัวควบคุม State Machine
-  status          BookingStatus @default(WAITING_ADMIN)
-  rejectReason    String?       @db.Text @map("reject_reason") // เหตุผลกรณีปัดตก
+  status       BookingStatus @default(WAITING_ADMIN)
+  rejectReason String?       @map("reject_reason") @db.Text // เหตุผลกรณีปัดตก
 
   // ข้อมูลที่ Admin คณะจะเข้ามาแสตมป์จัดสรรให้ (Nullable ตอนส่งฟอร์มแรกสุด)
-  assignedDriverId Int?         @map("assigned_driver_id")
-  assignedDriver   Driver?      @relation(fields: [assignedDriverId], references: [id])
+  assignedDriverId Int?    @map("assigned_driver_id")
+  assignedDriver   Driver? @relation(fields: [assignedDriverId], references: [id])
 
-  createdAt       DateTime      @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  attachments     Attachment[]  // 1 คำขอแนบไฟล์โครงการได้หลายไฟล์ (1:N)
-  driverLog       DriverLog?    // ทริปที่เดินทางเสร็จแล้วจะมีบันทึกการใช้งาน 1 ใบ (1:1)
+  attachments Attachment[] // 1 คำขอแนบไฟล์โครงการได้หลายไฟล์ (1:N)
+  driverLog   DriverLog? // ทริปที่เดินทางเสร็จแล้วจะมีบันทึกการใช้งาน 1 ใบ (1:1)
 
   @@map("bookings")
 }
 
 model Attachment {
-  id        Int      @id @default(autoincrement())
-  bookingId String   @map("booking_id")
-  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  
+  id        Int     @id @default(autoincrement())
+  bookingId String  @map("booking_id")
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
   fileName  String   @map("file_name") // เช่น บันทึกข้อความขออนุมัติ.pdf
-  fileUrl   String   @db.Text @map("file_url") // ลิงก์เก็บไฟล์บน Cloud Storage
+  fileUrl   String   @map("file_url") @db.Text // ลิงก์เก็บไฟล์บน Cloud Storage
   fileSize  Float    @map("file_size") // ขนาดหน่วย MB
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -207,46 +207,46 @@ model Attachment {
 }
 
 model DriverLog {
-  id            Int      @id @default(autoincrement())
-  bookingId     String   @unique @map("booking_id") // 1 ทริปจอง มีบันทึกปิดงานได้ใบเดียว
-  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  
-  driverId      Int      @map("driver_id")
-  driver        Driver   @relation(fields: [driverId], references: [id])
-  
+  id        Int     @id @default(autoincrement())
+  bookingId String  @unique @map("booking_id") // 1 ทริปจอง มีบันทึกปิดงานได้ใบเดียว
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  driverId Int    @map("driver_id")
+  driver   Driver @relation(fields: [driverId], references: [id])
+
   // ตัวเลขฟอร์ม 4 และข้อมูลสแกนหน้าปัดรถยนต์ (AI OCR)
-  mileageStart  Int      @map("mileage_start")
-  mileageEnd    Int      @map("mileage_end")
-  totalDistance Int      @map("total_distance") // ระยะรวมคำนวณอัตโนมัติ
-  fuelRemark    String?  @map("fuel_remark") // บันทึกหมวดหมู่ค่าน้ำมัน
-  
-  imgStartUrl   String?  @db.Text @map("img_start_url") // รูปหน้าปัดตอนสตาร์ทรถ
-  imgEndUrl     String?  @db.Text @map("img_end_url") // รูปหน้าปัดตอนดับเครื่อง
-  createdAt     DateTime @default(now()) @map("created_at")
+  mileageStart  Int     @map("mileage_start")
+  mileageEnd    Int     @map("mileage_end")
+  totalDistance Int     @map("total_distance") // ระยะรวมคำนวณอัตโนมัติ
+  fuelRemark    String? @map("fuel_remark") // บันทึกหมวดหมู่ค่าน้ำมัน
+
+  imgStartUrl String?  @map("img_start_url") @db.Text // รูปหน้าปัดตอนสตาร์ทรถ
+  imgEndUrl   String?  @map("img_end_url") @db.Text // รูปหน้าปัดตอนดับเครื่อง
+  createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
-  tripLegs      TripLeg[]
-  expenses      Expense[]
+  tripLegs TripLeg[]
+  expenses Expense[]
 
   @@map("driver_logs")
 }
 
 model TripLeg {
-  id            Int      @id @default(autoincrement())
-  driverLogId   Int      @map("driver_log_id")
-  driverLog     DriverLog @relation(fields: [driverLogId], references: [id], onDelete: Cascade)
+  id          Int       @id @default(autoincrement())
+  driverLogId Int       @map("driver_log_id")
+  driverLog   DriverLog @relation(fields: [driverLogId], references: [id], onDelete: Cascade)
 
-  deptDate      String   @map("dept_date")
-  deptTime      String   @map("dept_time")
-  passenger     String
-  destination   String
-  startMileage  String   @map("start_mileage")
-  returnDate    String   @map("return_date")
-  returnTime    String   @map("return_time")
-  endMileage    String   @map("end_mileage")
-  remark        String?
-  
-  createdAt     DateTime @default(now()) @map("created_at")
+  deptDate     String  @map("dept_date")
+  deptTime     String  @map("dept_time")
+  passenger    String
+  destination  String
+  startMileage String  @map("start_mileage")
+  returnDate   String  @map("return_date")
+  returnTime   String  @map("return_time")
+  endMileage   String  @map("end_mileage")
+  remark       String?
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("trip_legs")
 }
@@ -258,32 +258,32 @@ enum ExpenseStatus {
 }
 
 model Expense {
-  id            Int      @id @default(autoincrement())
-  driverLogId   Int      @map("driver_log_id")
-  driverLog     DriverLog @relation(fields: [driverLogId], references: [id], onDelete: Cascade)
-  
-  category      String
-  amount        Float
-  remark        String?
-  imgUrl        String?  @db.Text @map("img_url")
-  status        ExpenseStatus @default(PENDING)
+  id          Int       @id @default(autoincrement())
+  driverLogId Int       @map("driver_log_id")
+  driverLog   DriverLog @relation(fields: [driverLogId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  category String
+  amount   Float
+  remark   String?
+  imgUrl   String?       @map("img_url") @db.Text
+  status   ExpenseStatus @default(PENDING)
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("expenses")
 }
 
 model MaintenanceRecord {
-  id        Int      @id @default(autoincrement())
-  vanId     Int      @map("van_id")
-  van       Van      @relation(fields: [vanId], references: [id], onDelete: Cascade)
-  
-  type      MaintenanceType
-  detail    String
-  amount    Float
-  garage    String?
-  date      DateTime
-  
+  id    Int @id @default(autoincrement())
+  vanId Int @map("van_id")
+  van   Van @relation(fields: [vanId], references: [id], onDelete: Cascade)
+
+  type   MaintenanceType
+  detail String
+  amount Float
+  garage String?
+  date   DateTime
+
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("maintenance_records")
@@ -295,18 +295,18 @@ model AuditLog {
   userId    Int?     @map("user_id")
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   target    String?
-  type      String   // 'info' | 'success' | 'warning' | 'danger'
+  type      String // 'info' | 'success' | 'warning' | 'danger'
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   @@map("audit_logs")
 }
 
 model Notification {
   id        Int      @id @default(autoincrement())
-  role      Role?    // null means specific user, otherwise broadcast to role
+  role      Role? // null means specific user, otherwise broadcast to role
   userId    Int?     @map("user_id")
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // 'info' | 'success' | 'alert' | 'urgent'
+  type      String // 'info' | 'success' | 'alert' | 'urgent'
   message   String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")

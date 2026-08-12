@@ -5,6 +5,7 @@ import {
   CarFront, User, FileText, CalendarDays, 
   ChevronLeft, ChevronRight, ExternalLink} from 'lucide-react';
 import AppShell from '@/components/AppShell';
+import DashboardLoader from '@/components/DashboardLoader';
 import { useRouter } from 'next/navigation';
 
 type RequestItem = {
@@ -49,6 +50,7 @@ export default function FacultyAdminDashboard() {
   const [driversCount, setDriversCount] = useState(0);
   const [activeDriversCount, setActiveDriversCount] = useState(0);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
@@ -94,6 +96,8 @@ export default function FacultyAdminDashboard() {
 
       } catch (err) {
         console.error(err);
+      } finally {
+        setIsLoading(false);
       }
     }
     loadData();
@@ -160,6 +164,14 @@ export default function FacultyAdminDashboard() {
   const displayMonthName = `${thaiMonths[currentDate.getMonth()]} ${currentDate.getFullYear() + 543}`;
 
   const todayEventsCount = getEventsForDay(selectedDay || 19).length;
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <DashboardLoader />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

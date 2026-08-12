@@ -12,7 +12,7 @@ interface ProfileUser {
   avatar: string;
 }
 
-export default function FacultyAdminProfilePage() {
+export default function ExecutiveProfilePage() {
   const [user, setUser] = useState<ProfileUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -26,16 +26,16 @@ export default function FacultyAdminProfilePage() {
             name: dbUser.name || "ไม่มีชื่อ",
             email: dbUser.email || "ไม่มีอีเมล",
             faculty: dbUser.faculty?.nameTh || "ไม่ระบุคณะ",
-            role: dbUser.role === 'FACULTY_ADMIN' ? "ผู้ดูแลระดับคณะ (Faculty Admin)" : dbUser.role,
+            role: dbUser.role === 'EXECUTIVE' ? "คณบดี (Executive)" : dbUser.role,
             avatar: dbUser.avatar || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150"
           });
         } else {
           // 🌟 FALLBACK สำหรับโหมด Bypass / ทดสอบระบบ
           setUser({
-            name: "สมหญิง รักงาน (โหมดทดสอบ)",
-            email: "somying.test@up.ac.th",
+            name: "รศ.ดร. ฐิติรัตน์ เชี่ยวสุวรรณ (โหมดทดสอบ)",
+            email: "thitirat.ch@up.ac.th",
             faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-            role: "ผู้ดูแลระดับคณะ (Faculty Admin)",
+            role: "คณบดี (Executive)",
             avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150"
           });
         }

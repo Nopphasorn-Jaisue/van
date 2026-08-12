@@ -1,6 +1,5 @@
 "use client";
-import React, { useState, useEffect, Suspense } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   ChevronLeft, ChevronRight, 
@@ -10,12 +9,14 @@ import {
 } from 'lucide-react';
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
+import { getAuthUser } from '@/app/actions/auth';
 
 type RawCalendarEventItem = {
   id?: string | number;
   vanId?: string;
   facultyId?: string;
   date?: string | Date;
+  returnDate?: string | Date;
   time?: string;
   destination?: string;
   purpose?: string;
@@ -35,6 +36,7 @@ type CalendarBookingEvent = {
   vanId: string;
   facultyId?: string;
   date: Date | string;
+  returnDate?: Date | string;
   time: string;
   destination: string;
   purpose: string;
@@ -64,23 +66,53 @@ function CalendarContent() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const datePickerRef = useRef<HTMLInputElement>(null);
+  const returnDatePickerRef = useRef<HTMLInputElement>(null);
+
+  const openDatePicker = () => {
+    const pickerEl = datePickerRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+    if (pickerEl) {
+      if (typeof pickerEl.showPicker === 'function') {
+        pickerEl.showPicker();
+      } else {
+        pickerEl.focus();
+      }
+    }
+  };
+
+  const openReturnDatePicker = () => {
+    const pickerEl = returnDatePickerRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+    if (pickerEl) {
+      if (typeof pickerEl.showPicker === 'function') {
+        pickerEl.showPicker();
+      } else {
+        pickerEl.focus();
+      }
+    }
+  };
 
   const d = new Date();
   const initDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const [currentUser, setCurrentUser] = useState<{ name: string; faculty: string } | null>(null);
 
   const [eventFormData, setEventFormData] = useState({
     destination: '',
     purpose: '',
     date: initDate,
-    time: '08:30 - 16:30 น.',
-    requester: 'ดร.สมเกียรติ เรียนดี',
+    returnDate: initDate,
+    departTime: '08:30',
+    returnTime: '16:30',
+    requester: '',
     bookingFaculty: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
-    passengers: 10,
+    passengers: 1,
     vanId: 'v-ict',
     vanType: 'OWN' as 'OWN' | 'BORROW',
   });
 
   const [bookingsData, setBookingsData] = useState<CalendarBookingEvent[]>([]);
+  const [vansList, setVansList] = useState<UnifiedVanInfo[]>(facultyVansList);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchEvents = async () => {
@@ -110,6 +142,7 @@ function CalendarContent() {
                   vanId: String(e.vanId || 'v-ict'),
                   facultyId: e.facultyId || 'ict',
                   date: eventDate,
+                  returnDate: e.returnDate ? String(e.returnDate) : undefined,
                   time: e.time || '08:30 - 16:30 น.',
                   destination: e.destination || 'ไม่ระบุสถานที่',
                   purpose: e.purpose || 'ภารกิจคณะ',
@@ -125,6 +158,9 @@ function CalendarContent() {
                 };
               });
               setBookingsData(mapped);
+            }
+            if (data && data.vans && Array.isArray(data.vans)) {
+              setVansList(data.vans);
             }
           } catch (err) {
             console.warn("JSON Parse Error:", err);
@@ -143,6 +179,23 @@ function CalendarContent() {
     setBaseDate(now);
     setTodayDate(now);
     fetchEvents();
+
+    const fetchUser = async () => {
+      try {
+        const u = await getAuthUser();
+        if (u && u.name) {
+          const userFaculty = u.faculty?.nameTh || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+          setCurrentUser({
+            name: u.name,
+            faculty: userFaculty
+          });
+          setSelectedFacultyFilter(userFaculty);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchUser();
   }, []);
 
   const handlePrevDateRange = () => {
@@ -211,8 +264,27 @@ function CalendarContent() {
            date1.getDate() === date2.getDate();
   };
 
+  const isBookingActiveOnDate = (b: CalendarBookingEvent, targetDate: Date) => {
+    const startDate = b.date instanceof Date ? b.date : new Date(b.date);
+    if (isNaN(startDate.getTime())) return false;
+
+    const targetTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
+    const startTime = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime();
+
+    if (!b.returnDate) {
+      return targetTime === startTime;
+    }
+
+    const endDate = b.returnDate instanceof Date ? b.returnDate : new Date(b.returnDate);
+    if (isNaN(endDate.getTime())) {
+      return targetTime === startTime;
+    }
+
+    const endTime = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate()).getTime();
+    return targetTime >= startTime && targetTime <= endTime;
+  };
+
   // 1 Faculty = 1 Van + 1 Driver
-  const vansList: UnifiedVanInfo[] = facultyVansList;
   const vansMap: Record<string, UnifiedVanInfo> = {};
   vansList.forEach(v => vansMap[v.id] = v);
 
@@ -249,10 +321,12 @@ function CalendarContent() {
       destination: '',
       purpose: '',
       date: defaultDate,
-      time: '08:30 - 16:30 น.',
-      requester: 'ดร.สมเกียรติ เรียนดี',
-      bookingFaculty: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
-      passengers: 10,
+      returnDate: defaultDate,
+      departTime: '08:30',
+      returnTime: '16:30',
+      requester: currentUser?.name || '',
+      bookingFaculty: currentUser?.faculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+      passengers: 1,
       vanId: 'v-ict',
       vanType: 'OWN',
     });
@@ -270,11 +344,22 @@ function CalendarContent() {
       }
     }
 
+    let depart = '08:30';
+    let ret = '16:30';
+    if (event.time) {
+      const cleaned = event.time.replace(/น\./g, '').trim();
+      const parts = cleaned.split('-').map(s => s.trim());
+      if (parts[0]) depart = parts[0];
+      if (parts[1]) ret = parts[1];
+    }
+
     setEventFormData({
       destination: event.destination || '',
       purpose: event.purpose || '',
       date: eventDateStr,
-      time: event.time || '08:30 - 16:30 น.',
+      returnDate: event.returnDate ? String(event.returnDate) : eventDateStr,
+      departTime: depart,
+      returnTime: ret,
       requester: event.requester || '',
       bookingFaculty: event.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
       passengers: event.passengers || 10,
@@ -291,6 +376,7 @@ function CalendarContent() {
     const targetVan = vansMap[eventFormData.vanId] || vansList[0];
 
     const isBorrowing = eventFormData.vanType === 'BORROW';
+    const combinedTime = `${eventFormData.departTime} - ${eventFormData.returnTime} น.`;
     const payload = {
       vanId: eventFormData.vanId,
       facultyId: targetVan.facultyId,
@@ -300,7 +386,8 @@ function CalendarContent() {
       purposeDetail: eventFormData.purpose,
       routeDetail: `พะเยา -> ${eventFormData.destination}`,
       date: eventFormData.date,
-      time: eventFormData.time,
+      returnDate: eventFormData.returnDate,
+      time: combinedTime,
       passengers: Number(eventFormData.passengers),
       requester: eventFormData.requester,
       department: "สำนักงานคณบดี",
@@ -345,65 +432,127 @@ function CalendarContent() {
     }
   };
 
-  const handleDeleteCalendarEvent = async (id: string) => {
-    if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบกิจกรรมในปฏิทินนี้?")) return;
+  const confirmDelete = async (id: string) => {
     try {
-      await fetch(`/api/calendar-events?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/calendar-events?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert(errorData.error || "เกิดข้อผิดพลาดในการลบข้อมูล");
+        setDeleteConfirmId(null);
+        return;
+      }
       setBookingsData(prev => prev.filter(b => b.id !== id));
       if (selectedEvent && selectedEvent.id === id) {
         setSelectedEvent(null);
       }
+      setDeleteConfirmId(null);
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Cute Faculty Palette Styling (Soft aesthetic matching screenshot)
+  const handleDeleteCalendarEvent = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  // Smart Faculty Palette Styling for all UP Faculties
   const getFacultyStyle = (facultyName: string | undefined) => {
-    switch (facultyName) {
-      case "คณะเภสัชศาสตร์":
-        return {
-          shortName: "เภสัชฯ",
-          colorClass: "text-[#51621F] bg-[#51621F]/10 border-[#51621F]/30",
-          dotColor: "bg-[#51621F]",
-          barColor: "bg-[#51621F]"
-        };
-      case "คณะวิทยาศาสตร์":
-        return {
-          shortName: "วิทยาศาสตร์",
-          colorClass: "text-[#d97706] bg-[#fef3c7] border-[#fde68a]",
-          dotColor: "bg-[#f59e0b]",
-          barColor: "bg-[#f59e0b]"
-        };
-      case "คณะเทคโนโลยีสารสนเทศและการสื่อสาร":
-        return {
-          shortName: "ICT",
-          colorClass: "text-[#b45309] bg-[#fef3c7]/60 border-[#fde68a]",
-          dotColor: "bg-[#d97706]",
-          barColor: "bg-[#d97706]"
-        };
-      case "คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ":
-        return {
-          shortName: "เกษตรฯ",
-          colorClass: "text-emerald-700 bg-emerald-50 border-emerald-200",
-          dotColor: "bg-emerald-600",
-          barColor: "bg-emerald-600"
-        };
-      case "คณะพลังงานและสิ่งแวดล้อม":
-        return {
-          shortName: "พลังงานฯ",
-          colorClass: "text-lime-800 bg-lime-50 border-lime-200",
-          dotColor: "bg-lime-600",
-          barColor: "bg-lime-600"
-        };
-      default:
-        return {
-          shortName: facultyName || "ทั่วไป",
-          colorClass: "text-purple-800 bg-purple-50 border-purple-200",
-          dotColor: "bg-[#311171]",
-          barColor: "bg-[#311171]"
-        };
+    const name = facultyName || "";
+    if (name.includes("เภสัช")) {
+      return {
+        shortName: "เภสัชฯ",
+        colorClass: "text-[#51621F] bg-[#51621F]/10 border-[#51621F]/30",
+        dotColor: "bg-[#51621F]",
+        barColor: "bg-[#51621F]"
+      };
     }
+    if (name.includes("วิทยาศาสตร์") && !name.includes("สารสนเทศ")) {
+      return {
+        shortName: "วิทยาศาสตร์",
+        colorClass: "text-[#d97706] bg-[#fef3c7] border-[#fde68a]",
+        dotColor: "bg-[#f59e0b]",
+        barColor: "bg-[#f59e0b]"
+      };
+    }
+    if (name.includes("สารสนเทศ") || name.includes("ICT") || name.includes("ไอซีที")) {
+      return {
+        shortName: "ICT",
+        colorClass: "text-[#b45309] bg-[#fef3c7]/60 border-[#fde68a]",
+        dotColor: "bg-[#d97706]",
+        barColor: "bg-[#d97706]"
+      };
+    }
+    if (name.includes("เกษตร")) {
+      return {
+        shortName: "เกษตรฯ",
+        colorClass: "text-emerald-700 bg-emerald-50 border-emerald-200",
+        dotColor: "bg-emerald-600",
+        barColor: "bg-emerald-600"
+      };
+    }
+    if (name.includes("พลังงาน")) {
+      return {
+        shortName: "พลังงานฯ",
+        colorClass: "text-lime-800 bg-lime-50 border-lime-200",
+        dotColor: "bg-lime-600",
+        barColor: "bg-lime-600"
+      };
+    }
+    if (name.includes("วิศวกรรม") || name.includes("วิศวะ")) {
+      return {
+        shortName: "วิศวะฯ",
+        colorClass: "text-orange-800 bg-orange-50 border-orange-200",
+        dotColor: "bg-orange-600",
+        barColor: "bg-orange-600"
+      };
+    }
+    if (name.includes("พยาบาล")) {
+      return {
+        shortName: "พยาบาลฯ",
+        colorClass: "text-pink-800 bg-pink-50 border-pink-200",
+        dotColor: "bg-pink-600",
+        barColor: "bg-pink-600"
+      };
+    }
+    if (name.includes("นิติ")) {
+      return {
+        shortName: "นิติฯ",
+        colorClass: "text-red-800 bg-red-50 border-red-200",
+        dotColor: "bg-red-600",
+        barColor: "bg-red-600"
+      };
+    }
+    if (name.includes("แพทย์") && !name.includes("เภสัช")) {
+      return {
+        shortName: "แพทย์ฯ",
+        colorClass: "text-teal-800 bg-teal-50 border-teal-200",
+        dotColor: "bg-teal-600",
+        barColor: "bg-teal-600"
+      };
+    }
+    if (name.includes("บริหาร") || name.includes("นิเทศ")) {
+      return {
+        shortName: "บริหารฯ",
+        colorClass: "text-sky-800 bg-sky-50 border-sky-200",
+        dotColor: "bg-sky-600",
+        barColor: "bg-sky-600"
+      };
+    }
+    if (name.includes("ศิลปศาสตร์")) {
+      return {
+        shortName: "ศิลปศาสตร์",
+        colorClass: "text-indigo-800 bg-indigo-50 border-indigo-200",
+        dotColor: "bg-indigo-600",
+        barColor: "bg-indigo-600"
+      };
+    }
+
+    return {
+      shortName: name ? (name.length > 10 ? `${name.slice(0, 8)}...` : name) : "ทั่วไป",
+      colorClass: "text-purple-800 bg-purple-50 border-purple-200",
+      dotColor: "bg-[#311171]",
+      barColor: "bg-[#311171]"
+    };
   };
 
   const getStatusBadgeColor = (status: string | undefined) => {
@@ -441,14 +590,6 @@ function CalendarContent() {
   };
 
   const weekDays = getWeekDays(baseDate);
-
-  const selectedEventDateObj = selectedEvent?.date 
-    ? (selectedEvent.date instanceof Date ? selectedEvent.date : new Date(selectedEvent.date))
-    : new Date();
-
-  const safeDayIndex = !isNaN(selectedEventDateObj.getTime())
-    ? (selectedEventDateObj.getDay() === 0 ? 6 : selectedEventDateObj.getDay() - 1)
-    : 0;
 
   return (
     <div className="max-w-[1600px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0 space-y-2">
@@ -505,6 +646,16 @@ function CalendarContent() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="/api/calendar-events/export"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
+              title="ส่งออกไฟล์ .ics สำหรับเชื่อมต่อกับ Google Calendar หรือ Outlook"
+            >
+              <CalendarDays size={15} className="text-[#311171]" />
+              <span>ซิงค์/ส่งออกปฏิทิน (.ics)</span>
+            </a>
             <button
               onClick={() => handleOpenAddModal()}
               className="px-4 py-2 bg-[#311171] hover:bg-[#230b54] text-white rounded-full text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
@@ -512,14 +663,6 @@ function CalendarContent() {
               <Plus size={16} />
               <span>เพิ่มตารางปฏิทิน</span>
             </button>
-
-            <Link
-              href="/faculty-admin/google-calendar"
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
-            >
-              <CalendarDays size={14} />
-              <span>ซิงค์ Google Calendar</span>
-            </Link>
           </div>
 
         </div>
@@ -615,7 +758,7 @@ function CalendarContent() {
                         
                         {[0, 1, 2, 3, 4, 5, 6].map(dayIndex => {
                           const cellDate = weekDays[dayIndex].dateObj;
-                          const event = filteredBookings.find(b => b.vanId === van.id && isSameDate(b.date, cellDate));
+                          const event = filteredBookings.find(b => b.vanId === van.id && isBookingActiveOnDate(b, cellDate));
                           const isSelected = selectedEvent && selectedEvent.id === event?.id;
                           const style = event ? getFacultyStyle(event.bookingFaculty) : null;
                           
@@ -676,7 +819,7 @@ function CalendarContent() {
                 
                 <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-y-auto p-1">
                   {getCalendarDays(baseDate).map((cell) => {
-                    const dayBookings = filteredBookings.filter(b => isSameDate(b.date, cell.dateObj));
+                    const dayBookings = filteredBookings.filter(b => isBookingActiveOnDate(b, cell.dateObj));
                     const isTodayCell = isSameDate(todayDate, cell.dateObj);
                     
                     return (
@@ -759,7 +902,7 @@ function CalendarContent() {
                   })}
                 </div>
 
-                {/* Cute Legend Bar (อธิบายสี) */}
+                {/* Legend Bar (อธิบายสี 5 คณะ) */}
                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-4 text-xs shrink-0 flex-wrap">
                   <span className="font-bold text-gray-500">อธิบายสี:</span>
                   <div className="flex items-center gap-1.5">
@@ -852,20 +995,36 @@ function CalendarContent() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-3">
                     <div className="flex gap-3">
                       <Calendar size={16} className="text-[#311171] shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-[10px] font-bold text-gray-500 mb-0.5">วันที่เดินทาง</p>
+                        <p className="text-[10px] font-bold text-gray-500 mb-0.5">ช่วงเวลาเดินทาง (ไป - กลับ)</p>
                         <p className="text-[12px] font-bold text-gray-900 leading-tight">
-                          {getDayNameFull(safeDayIndex)}ที่ {selectedEventDateObj.getDate()} {getThaiMonthFull(selectedEventDateObj.getMonth())} {selectedEventDateObj.getFullYear() + 543}
+                          {(() => {
+                            const dStart = selectedEvent.date instanceof Date ? selectedEvent.date : new Date(selectedEvent.date);
+                            if (isNaN(dStart.getTime())) return 'ไม่ระบุวันที่';
+
+                            const startDayName = getDayNameFull(dStart.getDay() === 0 ? 6 : dStart.getDay() - 1);
+                            const startStr = `${startDayName}ที่ ${dStart.getDate()} ${getThaiMonthFull(dStart.getMonth())} ${dStart.getFullYear() + 543}`;
+
+                            if (!selectedEvent.returnDate) return startStr;
+
+                            const dEnd = selectedEvent.returnDate instanceof Date ? selectedEvent.returnDate : new Date(selectedEvent.returnDate);
+                            if (isNaN(dEnd.getTime()) || isSameDate(dStart, dEnd)) return startStr;
+
+                            const endDayName = getDayNameFull(dEnd.getDay() === 0 ? 6 : dEnd.getDay() - 1);
+                            const endStr = `${endDayName}ที่ ${dEnd.getDate()} ${getThaiMonthFull(dEnd.getMonth())} ${dEnd.getFullYear() + 543}`;
+
+                            return `${startStr} ถึง ${endStr}`;
+                          })()}
                         </p>
                       </div>
                     </div>
                     <div className="flex gap-3">
                       <Clock size={16} className="text-[#311171] shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-[10px] font-bold text-gray-500 mb-0.5">เวลาเดินทาง</p>
+                        <p className="text-[10px] font-bold text-gray-500 mb-0.5">เวลาเดินทางประจำวัน</p>
                         <p className="text-[13px] font-bold text-gray-900 leading-tight">{selectedEvent.time || '08:30 น.'}</p>
                       </div>
                     </div>
@@ -908,6 +1067,7 @@ function CalendarContent() {
               </button>
             </div>
 
+
             <form onSubmit={handleSaveCalendarEvent} className="p-6 space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-gray-700 mb-1">สถานที่ปลายทาง</label>
@@ -933,24 +1093,120 @@ function CalendarContent() {
                 />
               </div>
 
+              {/* วันที่เดินทาง (ออก) & วันเดินทางกลับ */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">วันที่เดินทาง</label>
+                  <label className="block font-bold text-gray-700 mb-1">วันที่เดินทาง (ออก)</label>
+                  <div className="relative flex items-center">
+                    <input 
+                      type="text"
+                      readOnly
+                      onClick={openDatePicker}
+                      value={(() => {
+                        if (!eventFormData.date) return '';
+                        const parts = eventFormData.date.split('-');
+                        if (parts.length !== 3) return eventFormData.date;
+                        const y = parseInt(parts[0], 10);
+                        const m = parseInt(parts[1], 10);
+                        const d = parseInt(parts[2], 10);
+                        if (!y || !m || !d) return eventFormData.date;
+                        const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+                        return `${d} ${thaiMonths[m - 1]} ${y + 543} (พ.ศ.)`;
+                      })()}
+                      placeholder="เลือกวันที่เดินทาง"
+                      className="w-full pl-3 pr-9 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171] bg-white cursor-pointer font-bold text-gray-800"
+                    />
+                    <input 
+                      ref={datePickerRef}
+                      type="date"
+                      value={eventFormData.date}
+                      onChange={e => {
+                        if (e.target.value) {
+                          const newDepart = e.target.value;
+                          setEventFormData(prev => ({
+                            ...prev,
+                            date: newDepart,
+                            returnDate: prev.returnDate < newDepart ? newDepart : prev.returnDate
+                          }));
+                        }
+                      }}
+                      className="sr-only opacity-0 pointer-events-none absolute w-0 h-0"
+                    />
+                    <button 
+                      type="button"
+                      onClick={openDatePicker}
+                      className="absolute right-1.5 p-1 text-[#311171] hover:bg-purple-100 transition-colors rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center"
+                      title="คลิกเพื่อเลือกวันที่จากปฏิทิน"
+                    >
+                      <Calendar size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">วันเดินทางกลับ</label>
+                  <div className="relative flex items-center">
+                    <input 
+                      type="text"
+                      readOnly
+                      onClick={openReturnDatePicker}
+                      value={(() => {
+                        if (!eventFormData.returnDate) return '';
+                        const parts = eventFormData.returnDate.split('-');
+                        if (parts.length !== 3) return eventFormData.returnDate;
+                        const y = parseInt(parts[0], 10);
+                        const m = parseInt(parts[1], 10);
+                        const d = parseInt(parts[2], 10);
+                        if (!y || !m || !d) return eventFormData.returnDate;
+                        const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+                        return `${d} ${thaiMonths[m - 1]} ${y + 543} (พ.ศ.)`;
+                      })()}
+                      placeholder="เลือกวันเดินทางกลับ"
+                      className="w-full pl-3 pr-9 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171] bg-white cursor-pointer font-bold text-gray-800"
+                    />
+                    <input 
+                      ref={returnDatePickerRef}
+                      type="date"
+                      min={eventFormData.date}
+                      value={eventFormData.returnDate}
+                      onChange={e => {
+                        if (e.target.value) {
+                          setEventFormData(prev => ({ ...prev, returnDate: e.target.value }));
+                        }
+                      }}
+                      className="sr-only opacity-0 pointer-events-none absolute w-0 h-0"
+                    />
+                    <button 
+                      type="button"
+                      onClick={openReturnDatePicker}
+                      className="absolute right-1.5 p-1 text-[#311171] hover:bg-purple-100 transition-colors rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center"
+                      title="คลิกเพื่อเลือกวันกลับจากปฏิทิน"
+                    >
+                      <Calendar size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* เวลาเดินทาง & เวลากลับ */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">เวลาเดินทาง (ออก)</label>
                   <input 
                     required
-                    type="date"
-                    value={eventFormData.date}
-                    onChange={e => setEventFormData({ ...eventFormData, date: e.target.value })}
+                    type="time"
+                    value={eventFormData.departTime}
+                    onChange={e => setEventFormData({ ...eventFormData, departTime: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">เวลาเดินทาง</label>
+                  <label className="block font-bold text-gray-700 mb-1">เวลากลับ</label>
                   <input 
-                    type="text"
-                    value={eventFormData.time}
-                    onChange={e => setEventFormData({ ...eventFormData, time: e.target.value })}
-                    placeholder="เช่น 08:30 - 16:30 น."
+                    required
+                    type="time"
+                    value={eventFormData.returnTime}
+                    onChange={e => setEventFormData({ ...eventFormData, returnTime: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
                   />
                 </div>
@@ -963,7 +1219,7 @@ function CalendarContent() {
                     type="text"
                     value={eventFormData.requester}
                     onChange={e => setEventFormData({ ...eventFormData, requester: e.target.value })}
-                    placeholder="เช่น ดร.สมเกียรติ"
+                    placeholder="ระบุชื่อ-นามสกุล ผู้ขอใช้บริการ"
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
                   />
                 </div>
@@ -971,8 +1227,11 @@ function CalendarContent() {
                   <label className="block font-bold text-gray-700 mb-1">จำนวนผู้โดยสาร (คน)</label>
                   <input 
                     type="number"
-                    value={eventFormData.passengers}
+                    min={1}
+                    max={20}
+                    value={eventFormData.passengers || ''}
                     onChange={e => setEventFormData({ ...eventFormData, passengers: Number(e.target.value) })}
+                    placeholder="ระบุจำนวนคน"
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
                   />
                 </div>
@@ -1078,6 +1337,33 @@ function CalendarContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: ยืนยันการลบ */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+               <Trash2 size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">ลบรายการจอง?</h3>
+            <p className="text-sm text-gray-500 mb-6">คุณแน่ใจหรือไม่ว่าต้องการลบกิจกรรมในปฏิทินนี้?<br/>การกระทำนี้ไม่สามารถกู้คืนได้</p>
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setDeleteConfirmId(null)} 
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={() => confirmDelete(deleteConfirmId)} 
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-sm shadow-red-200"
+              >
+                ยืนยันการลบ
+              </button>
+            </div>
           </div>
         </div>
       )}

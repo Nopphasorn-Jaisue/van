@@ -27,7 +27,7 @@ export async function getFaculties() {
     id: f.id,
     name: f.nameTh,
     adminName: f.users.length > 0 ? f.users[0].name : "ไม่มีข้อมูล",
-    adminPhone: "-", // User table doesn't have phone, would need to join driver or separate profile, mock for now
+    adminPhone: "-", 
     vansCount: f.vans.length,
     driversCount: f.drivers.length,
   }));
@@ -46,7 +46,6 @@ export async function getVans() {
   });
 
   return vans.map(v => {
-    // mock status calculation based on isActive
     let status = "READY";
     if (!v.isActive) status = "MAINTENANCE";
 

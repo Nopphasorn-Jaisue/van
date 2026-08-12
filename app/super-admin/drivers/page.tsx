@@ -247,7 +247,6 @@ export default function SuperAdminDrivers() {
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2.5">
-                            <img src={d.avatar} alt={d.name} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" />
                             <div>
                               <p className="font-bold text-gray-900 whitespace-nowrap">{d.name}</p>
                               <p className="text-[10px] text-gray-400 font-mono">รหัส: {d.employeeId}</p>

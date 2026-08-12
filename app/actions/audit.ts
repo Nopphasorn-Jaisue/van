@@ -40,15 +40,27 @@ export async function createAuditLog({
     return { success: false, error: "Failed to create audit log" };
   }
 }
+import { getAuthUser } from "./auth";
 
 export async function getAuditLogs(search: string = "") {
   try {
+    const authUser = await getAuthUser();
+    let facultyIdFilter: number | undefined;
+    if (authUser && (authUser.role === 'FACULTY_ADMIN' || authUser.role === 'EXECUTIVE') && authUser.facultyId) {
+      facultyIdFilter = authUser.facultyId;
+    }
+
     const logs = await prisma.auditLog.findMany({
       where: {
-        OR: [
-          { action: { contains: search, mode: 'insensitive' } },
-          { target: { contains: search, mode: 'insensitive' } },
-          { user: { name: { contains: search, mode: 'insensitive' } } }
+        AND: [
+          facultyIdFilter ? { user: { facultyId: facultyIdFilter } } : {},
+          {
+            OR: [
+              { action: { contains: search, mode: 'insensitive' } },
+              { target: { contains: search, mode: 'insensitive' } },
+              { user: { name: { contains: search, mode: 'insensitive' } } }
+            ]
+          }
         ]
       },
       include: {

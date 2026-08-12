@@ -2,12 +2,14 @@
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Loader2, AlertCircle, Building2, Car, Shield } from 'lucide-react';
+import { setMockSession, getRoleByEmail } from '@/app/actions/auth';
+import { Loader2, AlertCircle, Building2, Car, Shield, UserCheck } from 'lucide-react';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [loadingRole, setLoadingRole] = useState<'ADMIN' | 'DRIVER' | 'SUPER_ADMIN' | null>(null);
+  const [loadingRole, setLoadingRole] = useState<'ADMIN' | 'DRIVER' | 'SUPER_ADMIN' | 'EXECUTIVE' | 'GUEST' | null>(null);
+  const [emailInput, setEmailInput] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(
     searchParams.get('error') ? 'การยืนยันตัวตนล้มเหลว กรุณาลองใหม่อีกครั้ง' : null
   );
@@ -102,9 +104,10 @@ function LoginForm() {
 
             <button 
               disabled={loadingRole !== null}
-              onClick={() => {
+              onClick={async () => {
                 setLoadingRole('ADMIN');
-                setTimeout(() => router.push('/faculty-admin/dashboard'), 400);
+                await setMockSession('FACULTY_ADMIN');
+                router.push('/faculty-admin/dashboard');
               }}
               className="w-full bg-[#311171] hover:bg-[#230b54] active:scale-[0.99] disabled:opacity-75 text-white font-bold text-[15px] py-3.5 rounded-xl flex items-center justify-center gap-3 transition-all shadow-md"
             >
@@ -118,9 +121,10 @@ function LoginForm() {
 
             <button 
               disabled={loadingRole !== null}
-              onClick={() => {
+              onClick={async () => {
                 setLoadingRole('DRIVER');
-                setTimeout(() => router.push('/driver/dashboard'), 400);
+                await setMockSession('DRIVER');
+                router.push('/driver/dashboard');
               }}
               className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-75 text-white font-bold text-[15px] py-3.5 rounded-xl flex items-center justify-center gap-3 transition-all shadow-md"
             >
@@ -134,9 +138,27 @@ function LoginForm() {
 
             <button 
               disabled={loadingRole !== null}
-              onClick={() => {
+              onClick={async () => {
+                setLoadingRole('EXECUTIVE');
+                await setMockSession('EXECUTIVE');
+                router.push('/executive/dashboard');
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.99] disabled:opacity-75 text-white font-bold text-[15px] py-3.5 rounded-xl flex items-center justify-center gap-3 transition-all shadow-md"
+            >
+              {loadingRole === 'EXECUTIVE' ? (
+                <Loader2 className="w-5 h-5 animate-spin text-white" />
+              ) : (
+                <UserCheck className="w-5 h-5 text-blue-100" />
+              )}
+              <span>เข้าสู่ระบบ (คณบดี / ผู้บริหาร)</span>
+            </button>
+
+            <button 
+              disabled={loadingRole !== null}
+              onClick={async () => {
                 setLoadingRole('SUPER_ADMIN');
-                setTimeout(() => router.push('/super-admin/dashboard'), 400);
+                await setMockSession('SUPER_ADMIN');
+                router.push('/super-admin/dashboard');
               }}
               className="w-full bg-gray-900 hover:bg-black active:scale-[0.99] disabled:opacity-75 text-white font-bold text-[15px] py-3.5 rounded-xl flex items-center justify-center gap-3 transition-all shadow-md"
             >
@@ -149,6 +171,50 @@ function LoginForm() {
             </button>
 
             <div className="flex items-center gap-4 py-1">
+              <div className="h-px bg-gray-200 flex-1"></div>
+              <span className="text-xs font-bold text-gray-400">เข้าสู่ระบบด้วยอีเมลจำลอง</span>
+              <div className="h-px bg-gray-200 flex-1"></div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <input 
+                type="email" 
+                placeholder="กรอกอีเมลของคุณ (เช่น test@up.ac.th)" 
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#311171] focus:border-transparent outline-none"
+              />
+              <button 
+                disabled={loadingRole !== null || !emailInput}
+                onClick={async () => {
+                  setLoadingRole('GUEST');
+                  try {
+                    const trimmedEmail = emailInput.trim();
+                    const role = await getRoleByEmail(trimmedEmail);
+                    if (!role) {
+                      setErrorMessage('ไม่พบอีเมลนี้ในระบบฐานข้อมูล');
+                      setLoadingRole(null);
+                      return;
+                    }
+                    await setMockSession(role, trimmedEmail);
+                    
+                    if (role === 'SUPER_ADMIN') router.push('/super-admin/dashboard');
+                    else if (role === 'FACULTY_ADMIN') router.push('/faculty-admin/dashboard');
+                    else if (role === 'EXECUTIVE') router.push('/executive/dashboard');
+                    else if (role === 'DRIVER') router.push('/driver/dashboard');
+                    else router.push('/landing');
+                  } catch (err) {
+                    setErrorMessage('เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+                    setLoadingRole(null);
+                  }
+                }}
+                className="w-full bg-[#311171] hover:bg-[#230b54] active:scale-[0.99] disabled:opacity-50 text-white font-bold text-[14px] py-3 rounded-xl transition-all shadow-sm flex justify-center"
+              >
+                {loadingRole === 'GUEST' ? <Loader2 className="w-5 h-5 animate-spin" /> : 'เข้าสู่ระบบ'}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4 py-1 mt-4">
               <div className="h-px bg-gray-200 flex-1"></div>
               <span className="text-xs font-bold text-gray-400">หรือทดสอบผ่าน OAuth</span>
               <div className="h-px bg-gray-200 flex-1"></div>
