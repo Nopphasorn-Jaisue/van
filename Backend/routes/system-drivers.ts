@@ -54,13 +54,27 @@ export async function handleCreateDriver(request: Request) {
       return NextResponse.json({ success: false, message: "NAME_AND_EMAIL_REQUIRED" }, { status: 400 });
     }
 
-    const faculty = await prisma.faculty.findFirstOrThrow();
+    const userRoleInfo = await getAuthUser();
+    let facultyIdToUse: number;
+
+    if (body.facultyId && userRoleInfo && (userRoleInfo.role === 'SUPER_ADMIN' || userRoleInfo.role === 'EXECUTIVE')) {
+      facultyIdToUse = Number(body.facultyId);
+    } else if (userRoleInfo && userRoleInfo.facultyId) {
+      facultyIdToUse = userRoleInfo.facultyId;
+    } else if (body.facultyId) {
+      facultyIdToUse = Number(body.facultyId);
+    } else {
+      const defaultFaculty = await prisma.faculty.findFirstOrThrow();
+      facultyIdToUse = defaultFaculty.id;
+    }
+
+    const assignedVanId = body.assignedVanId ? Number(body.assignedVanId) : null;
 
     let user = await prisma.user.findFirst({ where: { email: body.email } });
     if (!user) {
       user = await prisma.user.create({
         data: {
-          facultyId: faculty.id,
+          facultyId: facultyIdToUse,
           name: body.name,
           email: body.email,
           role: "DRIVER",
@@ -83,18 +97,21 @@ export async function handleCreateDriver(request: Request) {
           isActive: body.isLocked !== undefined ? !body.isLocked : existingDriver.isActive,
           avatar: body.avatar !== undefined ? body.avatar : existingDriver.avatar,
           contractStart: body.contractStart ? new Date(body.contractStart) : existingDriver.contractStart,
+          assignedVanId: assignedVanId !== null ? assignedVanId : existingDriver.assignedVanId,
+          facultyId: facultyIdToUse,
         }
       });
     } else {
       driver = await prisma.driver.create({
         data: {
           userId: user.id,
-          facultyId: faculty.id,
+          facultyId: facultyIdToUse,
           phone: body.phone || "",
           age: 35,
           isActive: !body.isLocked,
           avatar: body.avatar || null,
           contractStart: body.contractStart ? new Date(body.contractStart) : new Date(),
+          assignedVanId: assignedVanId,
         }
       });
     }
@@ -120,6 +137,8 @@ export async function handleUpdateDriver(request: Request, id: string) {
         isActive: body.isLocked !== undefined ? !body.isLocked : undefined,
         contractStart: body.contractStart ? new Date(body.contractStart) : undefined,
         avatar: body.avatar !== undefined ? body.avatar : undefined,
+        assignedVanId: body.assignedVanId !== undefined ? (body.assignedVanId ? Number(body.assignedVanId) : null) : undefined,
+        facultyId: body.facultyId ? Number(body.facultyId) : undefined,
       }
     });
 

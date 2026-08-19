@@ -3,46 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from './auth';
 
-export interface FacultyTripStats {
-  internal: number;
-  external: number;
-  inProvince: number;
-  outProvince: number;
-}
-export interface DriverWorkload {
-  id: string;
-  name: string;
-  hours_this_week: number;
-  max_safe_hours: number;
-  trips: number;
-  status: string;
-}
-export interface FleetStatus {
-  faculty: string;
-  total_vans: number;
-  active: number;
-  maintenance: number;
-  usage_rate: string;
-}
-export interface WeeklyDensity {
-  day: string;
-  trips: number;
-  percent: number;
-}
-export interface CrossFacultyUsage {
-  borrower: string;
-  lender: string;
-  count: number;
-  percent: number;
-}
-export interface ReportsData {
-  role: string;
-  facultyTripStats: FacultyTripStats;
-  driverWorkload: DriverWorkload[];
-  fleetStatus: FleetStatus[];
-  weeklyDensity: WeeklyDensity[];
-  crossFacultyUsage: CrossFacultyUsage[];
-}
+import { FacultyTripStats, DriverWorkload, FleetStatus, WeeklyDensity, CrossFacultyUsage, ReportsData } from '@/app/types/reports';
 
 export async function getDashboardReports(): Promise<{ success: boolean; data?: ReportsData; error?: string }> {
   const user = await getAuthUser();
@@ -52,7 +13,7 @@ export async function getDashboardReports(): Promise<{ success: boolean; data?: 
   const facultyId = user.facultyId;
 
   try {
-    let facultyTripStats: FacultyTripStats = { internal: 0, external: 0, inProvince: 0, outProvince: 0 };
+    const facultyTripStats: FacultyTripStats = { internal: 0, external: 0, inProvince: 0, outProvince: 0 };
     let driverWorkload: DriverWorkload[] = [];
     let fleetStatus: FleetStatus[] = [];
     let weeklyDensity: WeeklyDensity[] = [];
@@ -63,7 +24,7 @@ export async function getDashboardReports(): Promise<{ success: boolean; data?: 
       const allVans = await prisma.van.findMany({ include: { faculty: true } });
       const facultiesMap = new Map();
       allVans.forEach(van => {
-        const facName = van.faculty.nameTh;
+        const facName = van.faculty?.nameTh || "ส่วนกลาง";
         if (!facultiesMap.has(facName)) {
           facultiesMap.set(facName, { faculty: facName, total_vans: 0, active: 0, maintenance: 0, usage_rate: '0%' });
         }
@@ -85,7 +46,9 @@ export async function getDashboardReports(): Promise<{ success: boolean; data?: 
       });
       const daysCount = [0, 0, 0, 0, 0, 0, 0]; // Sun to Sat
       recentBookings.forEach(b => {
-        daysCount[b.departureDate.getDay()]++;
+        if (b.departureDate) {
+          daysCount[b.departureDate.getDay()]++;
+        }
       });
       const totalRecent = recentBookings.length || 1;
       const dayNames = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
@@ -103,12 +66,12 @@ export async function getDashboardReports(): Promise<{ success: boolean; data?: 
         }
       });
       
-      const crossBookings = allBookings.filter(b => b.requester.facultyId !== b.targetFacultyId);
+      const crossBookings = allBookings.filter(b => b.requester?.facultyId && b.targetFacultyId && b.requester.facultyId !== b.targetFacultyId);
       
       const crossMap = new Map();
       crossBookings.forEach(b => {
-        const borrower = b.requester.faculty.nameTh;
-        const lender = b.targetFaculty.nameTh;
+        const borrower = b.requester?.faculty?.nameTh || "ไม่ระบุคณะ";
+        const lender = b.targetFaculty?.nameTh || "ไม่ระบุคณะ";
         const key = `${borrower}-${lender}`;
         if (!crossMap.has(key)) crossMap.set(key, { borrower, lender, count: 0, percent: 0 });
         crossMap.get(key).count++;
@@ -130,11 +93,12 @@ export async function getDashboardReports(): Promise<{ success: boolean; data?: 
       });
       
       bookings.forEach(b => {
-        if (b.requester.facultyId === facultyId) facultyTripStats.internal++;
+        if (b.requester?.facultyId === facultyId) facultyTripStats.internal++;
         else facultyTripStats.external++;
         
         // Infer province from destination (simplistic approach, default to outProvince if contains จังหวัด)
-        if (b.destination.includes('พะเยา') || !b.destination.includes('จังหวัด')) facultyTripStats.inProvince++;
+        const dest = b.destination || '';
+        if (dest.includes('พะเยา') || !dest.includes('จังหวัด')) facultyTripStats.inProvince++;
         else facultyTripStats.outProvince++;
       });
 
@@ -145,11 +109,11 @@ export async function getDashboardReports(): Promise<{ success: boolean; data?: 
       });
       
       driverWorkload = drivers.map(d => {
-        const trips = d.bookings.length;
+        const trips = d.bookings ? d.bookings.length : 0;
         const hours = trips * 8; // Estimate 8 hours per trip
         return {
           id: d.id.toString(),
-          name: d.user.name,
+          name: d.user?.name || "พนักงานขับรถ",
           hours_this_week: hours,
           max_safe_hours: 48,
           trips,

@@ -95,9 +95,9 @@ export async function getDriverDashboardData(driverId: number) {
       success: true, 
       data: {
         driver: {
-          name: driver.user.name,
-          faculty: driver.faculty.nameTh,
-          vanPlate: driver.faculty.vans?.[0]?.plate || "ยังไม่ระบุรถตู้"
+          name: driver.user?.name || "พนักงานขับรถ",
+          faculty: driver.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
+          vanPlate: driver.faculty?.vans?.[0]?.plate || "ยังไม่ระบุรถตู้"
         },
         todaysTrip: JSON.parse(JSON.stringify(todaysTrip || null)),
         upcomingTrips: JSON.parse(JSON.stringify(upcomingTrips)),
@@ -267,6 +267,35 @@ export async function deleteAdhocBooking(bookingId: string) {
 
 export async function submitDriverLog(bookingId: string, driverId: number, data: DriverLogData) {
   try {
+    // Ensure booking exists in database if it's a calendar event ID
+    const existingBooking = await prisma.booking.findUnique({
+      where: { id: bookingId }
+    });
+
+    if (!existingBooking) {
+      const driverObj = await prisma.driver.findUnique({
+        where: { id: driverId }
+      });
+
+      if (driverObj) {
+        await prisma.booking.create({
+          data: {
+            id: bookingId,
+            requesterId: driverObj.userId,
+            targetFacultyId: driverObj.facultyId,
+            destination: "ภารกิจตามตารางปฏิทิน",
+            objective: "บันทึกการเดินทางตามปฏิทินระบบ",
+            departureDate: new Date(),
+            returnDate: new Date(),
+            passengersCount: 1,
+            budgetSource: "-",
+            status: "APPROVED",
+            assignedDriverId: driverId
+          }
+        });
+      }
+    }
+
     const existingLog = await prisma.driverLog.findUnique({
       where: { bookingId }
     });
@@ -306,10 +335,10 @@ export async function submitDriverLog(bookingId: string, driverId: number, data:
     revalidatePath('/driver/records');
     revalidatePath('/driver/schedule');
     
-    return { success: true, log: newLog };
+    return { success: true, log: JSON.parse(JSON.stringify(newLog)) };
   } catch (error) {
     console.error("Error submitting log:", error);
-    return { success: false, error: "Failed to submit log" };
+    return { success: false, error: error instanceof Error ? error.message : "Failed to submit log" };
   }
 }
 
@@ -333,7 +362,7 @@ export async function getDriverExpensesHistory(driverId: number) {
       }
     });
 
-    return { success: true, expenses };
+    return { success: true, expenses: JSON.parse(JSON.stringify(expenses)) };
   } catch (error) {
     console.error("Error fetching expenses:", error);
     return { success: false, error: "Failed to fetch expenses" };
@@ -361,14 +390,28 @@ export async function submitTripExpenses(driverLogId: number, expenses: ExpenseD
   }
 }
 
+import { getAuthUser } from "@/app/actions/auth";
+
 export async function getAllFacultyBookingsWithLogs() {
   try {
+    const userRoleInfo = await getAuthUser();
+    if (!userRoleInfo || !['SUPER_ADMIN', 'FACULTY_ADMIN'].includes(userRoleInfo.role)) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const facultyId = userRoleInfo.facultyId;
+    let facultyFilter = {};
+    if (facultyId && userRoleInfo.role !== 'SUPER_ADMIN') {
+      facultyFilter = { targetFacultyId: facultyId };
+    }
+
     const bookings = await prisma.booking.findMany({
       where: {
         status: "APPROVED",
         driverLog: {
           isNot: null
-        }
+        },
+        ...facultyFilter
       },
       include: {
         requester: {
@@ -393,7 +436,7 @@ export async function getAllFacultyBookingsWithLogs() {
   }
 }
 
-export async function submitRepairNotification(driverId: number, vanId: number, detail: string) {
+export async function submitInspectionRecord(driverId: number, vanId: number, detail: string, needsRepair: boolean, inspectionDate: Date) {
   try {
     const driver = await prisma.driver.findUnique({
       where: { id: driverId },
@@ -408,32 +451,44 @@ export async function submitRepairNotification(driverId: number, vanId: number, 
 
     if (!driver) return { success: false, error: "Driver not found" };
 
+    let validVanId = vanId;
+    const vanExists = await prisma.van.findUnique({ where: { id: vanId } });
+    if (!vanExists) {
+      const firstVan = await prisma.van.findFirst({ where: { facultyId: driver.facultyId } });
+      if (!firstVan) return { success: false, error: "ไม่พบข้อมูลรถตู้ในระบบ" };
+      validVanId = firstVan.id;
+    }
+
+    const recordDetail = needsRepair ? `แจ้งซ่อม/ผิดปกติ: ${detail}` : `ตรวจสภาพปกติ: ${detail || '-'}`;
+
     await prisma.maintenanceRecord.create({
       data: {
-        vanId,
+        vanId: validVanId,
         type: "MAINTENANCE",
-        detail,
+        detail: recordDetail,
         amount: 0,
-        date: new Date(),
+        date: inspectionDate,
       }
     });
 
-    // Notify faculty admins
-    const facultyAdmins = driver.faculty?.users || [];
-    if (facultyAdmins.length > 0) {
-      await prisma.notification.createMany({
-        data: facultyAdmins.map(admin => ({
-          userId: admin.id,
-          type: 'alert',
-          message: `แจ้งซ่อมรถตู้จากพนักงานขับรถ: ${detail}`
-        }))
-      });
+    // Notify faculty admins ONLY if needsRepair is true
+    if (needsRepair) {
+      const facultyAdmins = driver.faculty?.users || [];
+      if (facultyAdmins.length > 0) {
+        await prisma.notification.createMany({
+          data: facultyAdmins.map(admin => ({
+            userId: admin.id,
+            type: 'alert',
+            message: `แจ้งซ่อมรถตู้จากพนักงานขับรถ: ${detail}`
+          }))
+        });
+      }
     }
 
     revalidatePath("/driver/inspection");
     return { success: true };
   } catch (error) {
-    console.error("Error submitting repair notification:", error);
-    return { success: false, error: "Failed to submit repair notification" };
+    console.error("Error submitting inspection record:", error);
+    return { success: false, error: "Failed to submit inspection record" };
   }
 }

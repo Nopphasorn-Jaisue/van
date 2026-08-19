@@ -20,10 +20,12 @@ export type CalendarEventRecord = {
   time: string; // e.g. "08:30 - 16:30 น."
   passengers: number;
   requester: string;
+  phone?: string;
   department: string;
   status: "approved" | "pending" | "ongoing" | "completed";
   statusText: string;
   statusTime: string;
+  tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
   createdAt: string;
 };
 

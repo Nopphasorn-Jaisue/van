@@ -1,24 +1,54 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Users, Mail, Phone, Search, Plus, Edit, 
-  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, Camera, UserX
-} from 'lucide-react';
+  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, Camera} from 'lucide-react';
 import { getPendingAvailabilityRequests, updateAvailabilityApproval } from '@/app/actions/driver-availability';
+import { getFaculties } from '@/app/actions/superadmin';
+import { getAuthUser } from '@/app/actions/auth';
 
 
-interface ApiDriver {
-  id: string;
+interface FacultyOption {
+  id: number;
   name: string;
+  adminName?: string;
+  adminPhone?: string;
+  vansCount?: number;
+  driversCount?: number;
+}
+
+interface VanOption {
+  id: string | number;
+  vanName: string;
+  plate: string;
+  faculty?: {
+    id: number;
+    nameTh?: string;
+  };
+}
+
+interface RawDriverData {
+  id: number | string;
+  name?: string;
   email?: string;
   phone: string;
   vanPlate?: string;
+  assignedVanId?: number | string;
+  facultyId?: number | string;
   contractStart?: string;
   licenseExpiry?: string;
-  isActive?: boolean;
+  isActive: boolean;
   avatar?: string;
+  user?: {
+    name: string;
+    email: string;
+  };
+  assignedVan?: {
+    id: number | string;
+  };
 }
+
 
 interface Driver {
   id: string;
@@ -26,6 +56,8 @@ interface Driver {
   email: string;
   phone: string;
   vanAssigned: string;
+  assignedVanId?: string;
+  facultyId?: string;
   contractStart: string;
   licenseExpiry: string;
   isLocked: boolean;
@@ -42,17 +74,22 @@ export default function DriversPage() {
   const [pendingRequests, setPendingRequests] = useState<Awaited<ReturnType<typeof getPendingAvailabilityRequests>>>([]);
 
   const [adminId, setAdminId] = useState<number | null>(null);
+  const [userFacultyId, setUserFacultyId] = useState<string>("");
+  const [faculties, setFaculties] = useState<FacultyOption[]>([]);
+  const [vans, setVans] = useState<VanOption[]>([]);
 
   const loadDrivers = async () => {
     try {
       const res = await fetch('/api/drivers');
       const data = await res.json();
-      const mapped = (data.drivers || []).map((d: { id: number, user?: { name: string, email: string }, phone: string, vanPlate?: string, contractStart?: string, licenseExpiry?: string, isActive: boolean, avatar?: string }) => ({
+      const mapped = (data.drivers || []).map((d: RawDriverData) => ({
         id: d.id.toString(),
-        name: d.user?.name || 'ไม่มีชื่อ',
-        email: d.user?.email || 'ไม่มีอีเมล',
+        name: d.name || d.user?.name || 'ไม่มีชื่อ',
+        email: d.email || d.user?.email || 'ไม่มีอีเมล',
         phone: d.phone,
         vanAssigned: d.vanPlate || 'ยังไม่ผูกทะเบียน',
+        assignedVanId: d.assignedVanId ? d.assignedVanId.toString() : (d.assignedVan?.id ? d.assignedVan.id.toString() : ""),
+        facultyId: d.facultyId ? d.facultyId.toString() : "",
         contractStart: d.contractStart || '2024-01-01',
         licenseExpiry: d.licenseExpiry || '2025-01-01',
         isLocked: !d.isActive,
@@ -89,6 +126,15 @@ export default function DriversPage() {
         }
       })
       .catch(err => console.error(err));
+
+    getAuthUser().then(user => {
+      if (user?.facultyId) {
+        setUserFacultyId(user.facultyId.toString());
+      }
+    }).catch(console.error);
+
+    getFaculties().then(setFaculties).catch(console.error);
+    fetch('/api/vans').then(res => res.json()).then(data => setVans(data.vans || [])).catch(console.error);
   }, []);
 
   const handleApprove = async (id: number, approval: 'APPROVED' | 'REJECTED') => {
@@ -101,6 +147,7 @@ export default function DriversPage() {
       loadPendingRequests();
       alert(`ทำรายการสำเร็จ (${approval})`);
     } catch (err) {
+      console.error(err);
       alert("เกิดข้อผิดพลาด");
     }
   };
@@ -115,6 +162,8 @@ export default function DriversPage() {
     email: "",
     phone: "",
     vanAssigned: "",
+    assignedVanId: "",
+    facultyId: "",
     contractStart: "",
     licenseExpiry: "",
     isLocked: false,
@@ -156,11 +205,17 @@ export default function DriversPage() {
 
   const openAddModal = () => {
     setEditingId(null);
+    const defaultFacId = userFacultyId || (faculties.length > 0 ? faculties[0].id.toString() : "");
+    const matchingVans = vans.filter(v => !defaultFacId || v.faculty?.id?.toString() === defaultFacId || !v.faculty);
+    const defaultVanId = matchingVans.length > 0 ? matchingVans[0].id.toString() : "";
+
     setFormData({
       name: "",
       email: "",
       phone: "",
       vanAssigned: "",
+      assignedVanId: defaultVanId,
+      facultyId: defaultFacId,
       contractStart: new Date().toISOString().split('T')[0],
       licenseExpiry: new Date().toISOString().split('T')[0],
       isLocked: false,
@@ -171,11 +226,16 @@ export default function DriversPage() {
 
   const openEditModal = (driver: Driver) => {
     setEditingId(driver.id);
+    const facId = driver.facultyId ? driver.facultyId.toString() : (userFacultyId || (faculties.length > 0 ? faculties[0].id.toString() : ""));
+    const driverVanId = driver.assignedVanId ? driver.assignedVanId.toString() : "";
+
     setFormData({
       name: driver.name,
       email: driver.email,
       phone: driver.phone,
       vanAssigned: driver.vanAssigned,
+      assignedVanId: driverVanId,
+      facultyId: facId,
       contractStart: driver.contractStart,
       licenseExpiry: driver.licenseExpiry,
       isLocked: driver.isLocked,
@@ -572,9 +632,10 @@ export default function DriversPage() {
                   <label className="block text-sm font-bold text-gray-700 mb-2">เบอร์โทรศัพท์ติดต่อ</label>
                   <input 
                     type="text" 
+                    maxLength={10}
                     value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    placeholder="เช่น 081-234-5678"
+                    onChange={(e) => setFormData({...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                    placeholder="เช่น 0812345678"
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
                   />
                 </div>
@@ -600,6 +661,46 @@ export default function DriversPage() {
                   />
                 </div>
               </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">สังกัดคณะ (Faculty)</label>
+                  <select 
+                    value={formData.facultyId}
+                    onChange={(e) => {
+                      const newFacId = e.target.value;
+                      const validVans = vans.filter(v => !newFacId || v.faculty?.id?.toString() === newFacId || !v.faculty);
+                      setFormData({
+                        ...formData, 
+                        facultyId: newFacId,
+                        assignedVanId: validVans.length > 0 ? validVans[0].id.toString() : ""
+                      });
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-bold text-gray-800"
+                  >
+                    <option value="" disabled>-- เลือกคณะ --</option>
+                    {faculties.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">รถตู้ประจำการ (Van)</label>
+                  <select 
+                    value={formData.assignedVanId}
+                    onChange={(e) => setFormData({...formData, assignedVanId: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-bold text-gray-800"
+                  >
+                    <option value="">-- ไม่ระบุรถตู้ --</option>
+                    {vans
+                      .filter(v => !formData.facultyId || v.faculty?.id?.toString() === formData.facultyId || !v.faculty)
+                      .map(v => (
+                      <option key={v.id} value={v.id}>{v.vanName} ({v.plate})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
             </div>
             
             <div className="p-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 
 export async function getNotifications(role: Role, userId?: number) {
+  if (!role) return [];
   try {
     const notifications = await prisma.notification.findMany({
       where: {

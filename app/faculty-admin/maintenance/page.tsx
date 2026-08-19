@@ -13,8 +13,6 @@ interface MaintenanceRecord {
   typeColor: string;
   type: string;
   detail: string;
-  amount: string | number;
-  garage: string;
 }
 
 export default function MaintenancePage() {
@@ -60,8 +58,8 @@ export default function MaintenancePage() {
         {/* Header */}
         <div className="flex justify-between items-start md:items-center">
           <div>
-            <h1 className="text-2xl font-black text-slate-900">ประวัติการซ่อมบำรุง</h1>
-            <p className="text-xs text-slate-500 mt-1">รายการซ่อมบำรุงรถตู้ประจำคณะที่คนขับได้บันทึกไว้</p>
+            <h1 className="text-2xl font-black text-slate-900">ประวัติการตรวจสภาพรถตู้</h1>
+            <p className="text-xs text-slate-500 mt-1">รายการตรวจสภาพรถตู้ประจำคณะที่คนขับได้บันทึกไว้</p>
           </div>
         </div>
 
@@ -72,8 +70,8 @@ export default function MaintenancePage() {
               <Wrench className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-400 mb-0.5">ค่าซ่อมบำรุงรวม (ปีนี้)</p>
-              <h3 className="text-xl font-black text-slate-900 leading-tight">{kpiCostYTD.toLocaleString()} <span className="text-xs font-medium text-slate-500">บาท</span></h3>
+              <p className="text-[11px] font-semibold text-slate-400 mb-0.5">จำนวนการตรวจสภาพ (เดือนนี้)</p>
+              <h3 className="text-xl font-black text-slate-900 leading-tight">{kpiCostYTD.toLocaleString()} <span className="text-xs font-medium text-slate-500">ครั้ง</span></h3>
             </div>
           </div>
 
@@ -113,11 +111,9 @@ export default function MaintenancePage() {
                 <table className="w-full text-left border-collapse min-w-[650px]">
                   <thead>
                     <tr className="bg-slate-50/70 border-y border-slate-100 text-[11px] text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-4 font-semibold">วันที่ซ่อม</th>
+                      <th className="py-3 px-4 font-semibold">วันที่ และเวลา</th>
                       <th className="py-3 px-4 font-semibold">รถตู้</th>
-                      <th className="py-3 px-4 font-semibold">รายการ</th>
-                      <th className="py-3 px-4 font-semibold text-right">จำนวนเงิน</th>
-                      <th className="py-3 px-4 font-semibold">สถานที่ซ่อม/อู่</th>
+                      <th className="py-3 px-4 font-semibold">รายการตรวจสภาพ / แจ้งปัญหา</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
@@ -134,13 +130,11 @@ export default function MaintenancePage() {
                           </div>
                         </td>
                         <td className="py-3.5 px-4 text-slate-700 font-medium">{item.detail}</td>
-                        <td className="py-3.5 px-4 text-right font-bold text-slate-900">{item.amount}</td>
-                        <td className="py-3.5 px-4 text-slate-500 text-xs">{item.garage}</td>
                       </tr>
                     ))}
                     {maintenanceHistory.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="text-center py-8 text-slate-500">ไม่มีประวัติการซ่อมบำรุง</td>
+                        <td colSpan={3} className="text-center py-8 text-slate-500">ไม่มีประวัติการตรวจสภาพรถตู้</td>
                       </tr>
                     )}
                   </tbody>

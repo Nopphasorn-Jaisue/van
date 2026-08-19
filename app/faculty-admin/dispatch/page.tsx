@@ -68,16 +68,23 @@ export default function DriverDispatchPage() {
   );
 
   const filteredDrivers = useMemo(() => {
-    const term = searchText.trim().toLowerCase();
-    if (!term) {
-      return drivers;
+    let result = drivers;
+
+    // Filter drivers to match the selected booking's faculty
+    if (selectedBooking) {
+      result = result.filter((driver) => driver.faculty === selectedBooking.requesterFaculty);
     }
 
-    return drivers.filter((driver) => {
+    const term = searchText.trim().toLowerCase();
+    if (!term) {
+      return result;
+    }
+
+    return result.filter((driver) => {
       const text = [driver.name, driver.phone, driver.faculty, driver.vanPlate].join(" ").toLowerCase();
       return text.includes(term);
     });
-  }, [drivers, searchText]);
+  }, [drivers, searchText, selectedBooking]);
 
   const assignDriver = async () => {
     if (!selectedBooking || !selectedDriverId) {

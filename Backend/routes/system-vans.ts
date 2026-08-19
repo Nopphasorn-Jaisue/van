@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/actions/auth";
+import { Prisma } from "@prisma/client";
 
 export async function handleListVans() {
   try {
     const user = await getAuthUser();
-    const where: any = {};
+    const where: Prisma.VanWhereInput = {};
     if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
       where.facultyId = user.facultyId;
     }
@@ -40,17 +41,44 @@ export async function handleListVans() {
 export async function handleCreateVan(request: Request) {
   try {
     const body = await request.json();
-    // Default to first faculty if none provided (for simplicity since faculty selection is not in UI)
-    const faculty = await prisma.faculty.findFirstOrThrow();
-    
+    const userRoleInfo = await getAuthUser();
+
+    let facultyIdToUse: number;
+
+    if (body.facultyId) {
+      facultyIdToUse = Number(body.facultyId);
+    } else if (body.faculty) {
+      const fac = await prisma.faculty.findFirst({
+        where: {
+          OR: [
+            { nameTh: { contains: body.faculty } },
+            { nameEn: { contains: body.faculty } }
+          ]
+        }
+      });
+      if (fac) {
+        facultyIdToUse = fac.id;
+      } else if (userRoleInfo && userRoleInfo.facultyId) {
+        facultyIdToUse = userRoleInfo.facultyId;
+      } else {
+        const defaultFaculty = await prisma.faculty.findFirstOrThrow();
+        facultyIdToUse = defaultFaculty.id;
+      }
+    } else if (userRoleInfo && userRoleInfo.facultyId) {
+      facultyIdToUse = userRoleInfo.facultyId;
+    } else {
+      const defaultFaculty = await prisma.faculty.findFirstOrThrow();
+      facultyIdToUse = defaultFaculty.id;
+    }
+
     const van = await prisma.van.create({
       data: {
-        facultyId: faculty.id,
-        name: body.vanName,
-        plate: body.plate,
-        capacity: body.capacity || 12,
+        facultyId: facultyIdToUse,
+        name: body.vanName || `รถตู้ (${body.plate || 'ใหม่'})`,
+        plate: body.plate || "ยังไม่ระบุทะเบียน",
+        capacity: Number(body.capacity || 12),
         engine: body.fuelType || "ดีเซล",
-        isActive: body.status === "ready",
+        isActive: body.status === "ready" || body.status === "READY",
         isShared: body.isShared !== undefined ? body.isShared : true,
         image: body.image,
         taxExp: body.taxExp ? new Date(body.taxExp) : null,
@@ -69,18 +97,36 @@ export async function handleUpdateVan(request: Request, id: string) {
     const numericId = parseInt(id.replace(/\D/g, ''));
     const body = await request.json();
 
+    let facultyIdToUpdate: number | undefined;
+    if (body.facultyId) {
+      facultyIdToUpdate = Number(body.facultyId);
+    } else if (body.faculty) {
+      const fac = await prisma.faculty.findFirst({
+        where: {
+          OR: [
+            { nameTh: { contains: body.faculty } },
+            { nameEn: { contains: body.faculty } }
+          ]
+        }
+      });
+      if (fac) {
+        facultyIdToUpdate = fac.id;
+      }
+    }
+
     const van = await prisma.van.update({
       where: { id: numericId },
       data: {
-        name: body.vanName,
-        plate: body.plate,
-        capacity: body.capacity,
-        engine: body.fuelType,
-        isActive: body.status === "ready",
-        isShared: body.isShared !== undefined ? body.isShared : true,
-        image: body.image,
-        taxExp: body.taxExp ? new Date(body.taxExp) : null,
-        insExp: body.insExp ? new Date(body.insExp) : null,
+        facultyId: facultyIdToUpdate,
+        name: body.vanName || undefined,
+        plate: body.plate || undefined,
+        capacity: body.capacity ? Number(body.capacity) : undefined,
+        engine: body.fuelType || undefined,
+        isActive: body.status !== undefined ? (body.status === "ready" || body.status === "READY") : undefined,
+        isShared: body.isShared !== undefined ? body.isShared : undefined,
+        image: body.image || undefined,
+        taxExp: body.taxExp ? new Date(body.taxExp) : undefined,
+        insExp: body.insExp ? new Date(body.insExp) : undefined,
       }
     });
 
@@ -93,6 +139,17 @@ export async function handleUpdateVan(request: Request, id: string) {
 export async function handleDeleteVan(_request: Request, id: string) {
   try {
     const numericId = parseInt(id.replace(/\D/g, ''));
+    if (isNaN(numericId)) {
+      return NextResponse.json({ success: false, message: "INVALID_ID" }, { status: 400 });
+    }
+
+    // Disconnect drivers assigned to this van
+    await prisma.driver.updateMany({
+      where: { assignedVanId: numericId },
+      data: { assignedVanId: null }
+    });
+
+    // Delete the van record
     await prisma.van.delete({
       where: { id: numericId }
     });

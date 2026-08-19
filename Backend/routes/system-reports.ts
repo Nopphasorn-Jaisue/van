@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/app/actions/auth";
+import { Prisma } from "@prisma/client";
 
 export async function handleGetReports() {
   try {
+    const userRoleInfo = await getAuthUser();
+    
+    // Determine faculty filter
+    let facultyIdFilter: number | undefined;
+    if (userRoleInfo && (userRoleInfo.role === 'FACULTY_ADMIN' || userRoleInfo.role === 'EXECUTIVE') && userRoleInfo.facultyId) {
+      facultyIdFilter = userRoleInfo.facultyId;
+    }
+
+    const driverWhere: Prisma.DriverWhereInput = facultyIdFilter ? { facultyId: facultyIdFilter } : {};
+    const vanWhere: Prisma.VanWhereInput = facultyIdFilter ? { facultyId: facultyIdFilter } : {};
+    const bookingWhere: Prisma.BookingWhereInput = facultyIdFilter ? { targetFacultyId: facultyIdFilter } : {};
+
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const firstDayOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -24,6 +38,7 @@ export async function handleGetReports() {
     ] = await Promise.all([
       prisma.booking.count({ 
         where: { 
+          ...bookingWhere,
           status: 'APPROVED',
           departureDate: { gte: firstDayOfMonth }
         } 
@@ -41,6 +56,7 @@ export async function handleGetReports() {
       }),
       prisma.booking.count({ 
         where: { 
+          ...bookingWhere,
           status: 'APPROVED',
           departureDate: { gte: firstDayOfLastMonth, lte: lastDayOfLastMonth }
         } 
@@ -58,6 +74,7 @@ export async function handleGetReports() {
       }),
       prisma.booking.findMany({
         take: 10,
+        where: bookingWhere,
         orderBy: { departureDate: 'desc' },
         include: {
           requester: { include: { faculty: true } },
@@ -69,6 +86,7 @@ export async function handleGetReports() {
         by: ['destination'],
         _count: { destination: true },
         where: {
+          ...bookingWhere,
           status: 'APPROVED',
           departureDate: { gte: firstDayOfMonth }
         },
@@ -79,6 +97,7 @@ export async function handleGetReports() {
         by: ['objective'],
         _count: { objective: true },
         where: {
+          ...bookingWhere,
           status: 'APPROVED',
           departureDate: { gte: firstDayOfMonth }
         }
@@ -89,6 +108,7 @@ export async function handleGetReports() {
         where: { createdAt: { gte: firstDayOfMonth } }
       }),
       prisma.driver.findMany({
+        where: driverWhere,
         include: {
           user: true,
           _count: {
@@ -96,7 +116,9 @@ export async function handleGetReports() {
           }
         }
       }),
-      prisma.van.findMany()
+      prisma.van.findMany({
+        where: vanWhere
+      })
     ]);
 
     const totalDistance = distanceResult._sum.totalDistance || 0;

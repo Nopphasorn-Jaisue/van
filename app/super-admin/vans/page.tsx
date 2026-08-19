@@ -2,10 +2,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getVans } from "@/app/actions/superadmin";
+import { getVans, getFaculties } from "@/app/actions/superadmin";
 import { 
   Bus, CheckCircle2, Wrench, RefreshCw,
-  Search, Eye, Edit, ChevronLeft, ChevronRight, X
+  Search, Eye, Edit, ChevronLeft, ChevronRight, X, Trash2
   } from "lucide-react";
 
 interface VanItem {
@@ -40,29 +40,53 @@ export default function SuperAdminVans() {
   const [detailVan, setDetailVan] = useState<VanItem | null>(null);
 
   const [vans, setVans] = useState<VanItem[]>([]);
+  const [facultiesList, setFacultiesList] = useState<{ id: number; name: string }[]>([]);
 
+  const [addForm, setAddForm] = useState({ plate: "", facultyId: "", faculty: "" });
+  const [editForm, setEditForm] = useState({ plate: "", facultyId: "", faculty: "" });
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmColor: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "ยืนยัน",
+    confirmColor: "bg-[#311171]",
+    onConfirm: () => {}
+  });
+
+  const loadData = async () => {
+    try {
+      const [vansData, facultiesData] = await Promise.all([
+        getVans(),
+        getFaculties()
+      ]);
+      setVans(vansData.map(v => ({
+        ...v,
+        brandModel: v.brand,
+        seats: v.capacity,
+        driverAvatar: v.driverAvatar,
+        status: v.status as "READY" | "MAINTENANCE" | "DISABLED",
+        nextInspection: v.nextMaintenance,
+        nextService: "-",
+        image: v.image,
+        taxExp: v.taxExp,
+        insExp: v.insExp
+      })));
+      setFacultiesList(facultiesData);
+    } catch (error) {
+      console.error("Failed to load vans", error);
+      showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลรถตู้");
+    }
+  };
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await getVans();
-        setVans(data.map(v => ({
-          ...v,
-          brandModel: v.brand,
-          seats: v.capacity,
-          driverAvatar: v.driverAvatar,
-          status: v.status as "READY" | "MAINTENANCE" | "DISABLED",
-          nextInspection: v.nextMaintenance,
-          nextService: "-",
-          image: v.image,
-          taxExp: v.taxExp,
-          insExp: v.insExp
-        })));
-      } catch (error) {
-        console.error("Failed to load vans", error);
-        showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลรถตู้");
-      }
-    }
     loadData();
   }, []);
 
@@ -71,6 +95,34 @@ export default function SuperAdminVans() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleDeleteVan = (van: VanItem) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "ยืนยันการลบข้อมูลรถตู้",
+      message: `คุณต้องการลบรถตู้ทะเบียน "${van.plate}" (${van.faculty}) ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+      confirmText: "ลบข้อมูล",
+      confirmColor: "bg-red-500 hover:bg-red-600",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/vans/${van.id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showToast("ลบข้อมูลรถตู้เรียบร้อยแล้ว");
+            if (selectedVan?.id === van.id) setSelectedVanId(null);
+            loadData();
+          } else {
+            showToast("เกิดข้อผิดพลาดในการลบ: " + (data.error || ""));
+          }
+        } catch (err) {
+          console.error("Failed to delete van", err);
+          showToast("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   const filteredVans = vans.filter(v => {
@@ -278,9 +330,14 @@ export default function SuperAdminVans() {
                         </td>
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={(e) => { e.stopPropagation(); setDetailVan(v); }} className="p-1 text-gray-400 hover:text-purple-600"><Eye size={14} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); setEditingVan(v); }} className="p-1 text-gray-400 hover:text-blue-600"><Edit size={14} /></button>
-
+                            <button onClick={(e) => { e.stopPropagation(); setDetailVan(v); }} className="p-1 text-gray-400 hover:text-purple-600" title="ดูรายละเอียด"><Eye size={14} /></button>
+                            <button onClick={(e) => { 
+                              e.stopPropagation(); 
+                              const matchedFac = facultiesList.find(f => f.name === v.faculty);
+                              setEditForm({ plate: v.plate, facultyId: matchedFac ? matchedFac.id.toString() : "", faculty: v.faculty });
+                              setEditingVan(v); 
+                            }} className="p-1 text-gray-400 hover:text-blue-600" title="แก้ไขข้อมูล"><Edit size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteVan(v); }} className="p-1 text-gray-400 hover:text-red-600" title="ลบรถตู้"><Trash2 size={14} /></button>
                           </div>
                         </td>
                       </tr>
@@ -398,11 +455,23 @@ export default function SuperAdminVans() {
               </button>
 
               <button 
-                onClick={() => setEditingVan(selectedVan)}
+                onClick={() => {
+                  const matchedFac = facultiesList.find(f => f.name === selectedVan.faculty);
+                  setEditForm({ plate: selectedVan.plate, facultyId: matchedFac ? matchedFac.id.toString() : "", faculty: selectedVan.faculty });
+                  setEditingVan(selectedVan);
+                }}
                 className="flex-1 py-2.5 bg-[#311171] hover:bg-[#230b54] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
               >
                 <Edit size={14} />
                 <span>แก้ไขข้อมูล</span>
+              </button>
+
+              <button 
+                onClick={() => handleDeleteVan(selectedVan)}
+                className="p-2.5 bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 rounded-xl transition-colors shrink-0"
+                title="ลบรถตู้"
+              >
+                <Trash2 size={14} />
               </button>
             </div>
 
@@ -424,23 +493,63 @@ export default function SuperAdminVans() {
             <div className="space-y-3 text-xs">
               <div>
                 <label className="font-bold block mb-1">ทะเบียนรถ:</label>
-                <input type="text" placeholder="เช่น นข 9999 เชียงใหม่" className="w-full p-3 border rounded-xl" />
+                <input 
+                  type="text" 
+                  value={addForm.plate}
+                  onChange={(e) => setAddForm({...addForm, plate: e.target.value})}
+                  placeholder="เช่น นข 9999 พะเยา" 
+                  className="w-full p-3 border rounded-xl" 
+                />
               </div>
               <div>
                 <label className="font-bold block mb-1">สังกัดคณะ:</label>
-                <select className="w-full p-3 border rounded-xl bg-white outline-none">
-                  <option value="">เลือกคณะ</option>
-                  <option value="คณะเภสัชฯ">คณะเภสัชฯ</option>
-                  <option value="คณะวิทยาศาสตร์">คณะวิทยาศาสตร์</option>
-                  <option value="คณะ ICT">คณะ ICT</option>
-                  <option value="คณะเกษตรฯ">คณะเกษตรฯ</option>
-                  <option value="คณะพลังงานฯ">คณะพลังงานฯ</option>
+                <select 
+                  value={addForm.facultyId}
+                  onChange={(e) => {
+                    const sel = facultiesList.find(f => f.id.toString() === e.target.value);
+                    setAddForm({...addForm, facultyId: e.target.value, faculty: sel?.name || ""});
+                  }}
+                  className="w-full p-3 border rounded-xl bg-white outline-none font-bold"
+                >
+                  <option value="">-- เลือกคณะ --</option>
+                  {facultiesList.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
             <div className="flex gap-2 pt-2">
               <button onClick={() => setIsAddOpen(false)} className="flex-1 bg-gray-100 py-2 rounded-xl text-xs font-bold">ยกเลิก</button>
-              <button onClick={() => { setIsAddOpen(false); showToast("เพิ่มรถตู้ใหม่เรียบร้อยแล้ว"); }} className="flex-1 bg-[#311171] text-white py-2 rounded-xl text-xs font-bold">บันทึก</button>
+              <button 
+                onClick={async () => {
+                  if (!addForm.plate) {
+                    showToast("กรุณากรอกทะเบียนรถ");
+                    return;
+                  }
+                  try {
+                    const res = await fetch('/api/vans', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        plate: addForm.plate,
+                        facultyId: addForm.facultyId,
+                        faculty: addForm.faculty,
+                        vanName: `รถตู้ (${addForm.plate})`
+                      })
+                    });
+                    if (res.ok) {
+                      setIsAddOpen(false);
+                      showToast("เพิ่มรถตู้ใหม่เรียบร้อยแล้ว");
+                      loadData();
+                    }
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }} 
+                className="flex-1 bg-[#311171] text-white py-2 rounded-xl text-xs font-bold"
+              >
+                บันทึก
+              </button>
             </div>
           </div>
         </div>
@@ -476,26 +585,92 @@ export default function SuperAdminVans() {
             <div className="space-y-3 text-xs">
               <div>
                 <label className="font-bold block mb-1">ทะเบียนรถ:</label>
-                <input type="text" defaultValue={editingVan.plate} className="w-full p-3 border rounded-xl" />
-              </div>
-              <div>
-                <label className="font-bold block mb-1">คนขับประจำ:</label>
-                <input type="text" defaultValue={editingVan.driver} className="w-full p-3 border rounded-xl" />
+                <input 
+                  type="text" 
+                  value={editForm.plate}
+                  onChange={(e) => setEditForm({...editForm, plate: e.target.value})}
+                  className="w-full p-3 border rounded-xl" 
+                />
               </div>
               <div>
                 <label className="font-bold block mb-1">สังกัดคณะ:</label>
-                <select defaultValue={editingVan.faculty} className="w-full p-3 border rounded-xl bg-white outline-none">
-                  <option value="คณะเภสัชฯ">คณะเภสัชฯ</option>
-                  <option value="คณะวิทยาศาสตร์">คณะวิทยาศาสตร์</option>
-                  <option value="คณะ ICT">คณะ ICT</option>
-                  <option value="คณะเกษตรฯ">คณะเกษตรฯ</option>
-                  <option value="คณะพลังงานฯ">คณะพลังงานฯ</option>
+                <select 
+                  value={editForm.facultyId} 
+                  onChange={(e) => {
+                    const sel = facultiesList.find(f => f.id.toString() === e.target.value);
+                    setEditForm({...editForm, facultyId: e.target.value, faculty: sel?.name || ""});
+                  }}
+                  className="w-full p-3 border rounded-xl bg-white outline-none font-bold"
+                >
+                  <option value="">-- เลือกคณะ --</option>
+                  {facultiesList.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
             <div className="flex gap-2 pt-2">
               <button onClick={() => setEditingVan(null)} className="flex-1 bg-gray-100 py-2 rounded-xl text-xs font-bold">ยกเลิก</button>
-              <button onClick={() => { setEditingVan(null); showToast("บันทึกการแก้ไขรถตู้เรียบร้อยแล้ว"); }} className="flex-1 bg-[#311171] text-white py-2 rounded-xl text-xs font-bold">บันทึก</button>
+              <button 
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/vans/${editingVan.id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        plate: editForm.plate,
+                        facultyId: editForm.facultyId,
+                        faculty: editForm.faculty
+                      })
+                    });
+                    if (res.ok) {
+                      setEditingVan(null);
+                      showToast("บันทึกการแก้ไขรถตู้เรียบร้อยแล้ว");
+                      loadData();
+                    }
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }} 
+                className="flex-1 bg-[#311171] text-white py-2 rounded-xl text-xs font-bold"
+              >
+                บันทึก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div 
+          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-red-100 text-red-500 mx-auto flex items-center justify-center mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h2 className="text-xl font-black text-gray-900 mb-2">{confirmModal.title}</h2>
+              <p className="text-sm text-gray-500">{confirmModal.message}</p>
+            </div>
+            <div className="p-4 bg-gray-50 flex gap-3">
+              <button 
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 py-2.5 text-sm font-bold text-gray-600 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={confirmModal.onConfirm}
+                className={`flex-1 py-2.5 text-white text-sm font-bold rounded-xl transition-colors shadow-sm ${confirmModal.confirmColor}`}
+              >
+                {confirmModal.confirmText}
+              </button>
             </div>
           </div>
         </div>

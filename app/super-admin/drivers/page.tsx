@@ -485,7 +485,13 @@ export default function SuperAdminDrivers() {
               </div>
               <div>
                 <label className="font-bold block mb-1">เบอร์โทรศัพท์:</label>
-                <input type="text" defaultValue={editingDriver.phone} className="w-full p-3 border rounded-xl font-mono" />
+                <input 
+                  type="text" 
+                  maxLength={10}
+                  defaultValue={editingDriver.phone} 
+                  onChange={(e) => setEditingDriver({...editingDriver, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                  className="w-full p-3 border rounded-xl font-mono" 
+                />
               </div>
               <div>
                 <label className="font-bold block mb-1">สังกัดคณะ:</label>

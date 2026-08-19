@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { Clock, Users, Phone, AlertTriangle, CheckCircle, Gauge, X, FileText, CalendarDays, Loader2, ChevronRight, CarFront, FileSpreadsheet } from 'lucide-react';
+import { Clock, Users, Phone, AlertTriangle, CheckCircle, Gauge, X, FileText, CalendarDays, Loader2, ChevronRight, CarFront } from 'lucide-react';
 import Link from 'next/link';
 import { getDriverDashboardData } from '@/app/actions/driver';
 import { requestAvailabilityChange } from '@/app/actions/driver-availability';
@@ -13,8 +13,23 @@ type Trip = {
   departureDate: string | Date;
   returnDate: string | Date;
   passengersCount?: number;
-  requester?: { name: string };
+  requester?: { name: string; phone?: string };
   targetFaculty?: { nameTh: string };
+};
+
+type RawCalendarEvent = {
+  id?: string | number;
+  vanId?: string;
+  phone?: string;
+  date?: string;
+  returnDate?: string;
+  time?: string;
+  destination?: string;
+  purpose?: string;
+  passengers?: number | string;
+  requester?: string;
+  bookingFaculty?: string;
+  status?: string;
 };
 
 export default function DriverDashboard() {
@@ -48,8 +63,75 @@ export default function DriverDashboard() {
         }
 
         const res = await getDriverDashboardData(driverId);
+
+        // Fetch Calendar Events to check for today's trip and total trips
+        let calTodaysTrip: Trip | null = null;
+        let calTotalTrips = 0;
+
+        try {
+          const calRes = await fetch('/api/calendar-events');
+          if (calRes.ok) {
+            const calData = await calRes.json();
+            if (calData && calData.rawEvents && Array.isArray(calData.rawEvents)) {
+              const actualVanId = meData.driverData.assignedVanId || meData.driverData.facultyVanId;
+              const driverVanIdStr = String(actualVanId);
+              const driverLegacyVanId = meData.driverData.legacyVanId;
+              
+              const activeEvents = calData.rawEvents.filter((e: RawCalendarEvent) => {
+                if (e.status === 'rejected' || e.status === 'cancelled') return false;
+                if (e.id && String(e.id).startsWith('bk-')) return false;
+                
+                const eventVanId = String(e.vanId);
+                const driverVanIdFormatted = `van-${driverVanIdStr.padStart(3, '0')}`;
+                
+                // Check if the event matches the driver's database van ID, formatted ID, or legacy van ID
+                return eventVanId === driverVanIdStr || eventVanId === driverLegacyVanId || eventVanId === driverVanIdFormatted;
+              });
+              
+              const now = new Date();
+              const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+              calTotalTrips = activeEvents.length;
+
+              const foundToday = activeEvents.find((e: RawCalendarEvent) => {
+                const sDate = e.date ? String(e.date).slice(0, 10) : '';
+                const rDate = e.returnDate ? String(e.returnDate).slice(0, 10) : sDate;
+                return todayStr >= sDate && todayStr <= rDate;
+              });
+
+              if (foundToday) {
+                calTodaysTrip = {
+                  id: String(foundToday.id || 'UP-TODAY'),
+                  destination: foundToday.destination || 'ไม่ระบุสถานที่',
+                  departureDate: foundToday.date ? (foundToday.date.includes('T') ? foundToday.date : `${foundToday.date}T08:30:00`) : new Date().toISOString(),
+                  returnDate: foundToday.returnDate ? (foundToday.returnDate.includes('T') ? foundToday.returnDate : `${foundToday.returnDate}T16:30:00`) : new Date().toISOString(),
+                  passengersCount: Number(foundToday.passengers || 1),
+                  requester: { name: foundToday.requester || 'ผู้ขอใช้บริการ', phone: foundToday.phone || '-' },
+                  targetFaculty: { nameTh: foundToday.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร' }
+                };
+              }
+            }
+          }
+        } catch (calErr) {
+          console.warn("Failed to load calendar events for driver dashboard:", calErr);
+        }
+
         if (res && res.success && res.data) {
-          setDashboardData(res.data);
+          const mergedData = {
+            ...res.data,
+            todaysTrip: res.data.todaysTrip || calTodaysTrip,
+            stats: {
+              ...res.data.stats,
+              totalTrips: (res.data.stats?.totalTrips || 0) + calTotalTrips,
+              totalDistance: res.data.stats?.totalDistance || 0
+            }
+          };
+          setDashboardData(mergedData);
+        } else {
+          setDashboardData({
+            todaysTrip: calTodaysTrip,
+            stats: { totalTrips: calTotalTrips, totalDistance: 0 }
+          });
         }
       } catch (err) {
         console.error(err);
@@ -240,7 +322,7 @@ export default function DriverDashboard() {
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 font-bold">เบอร์ติดต่อ</p>
-                  <p className="text-sm font-bold text-gray-900">-</p>
+                  <p className="text-sm font-bold text-gray-900">{todaysTrip.requester?.phone || '-'}</p>
                 </div>
               </div>
 

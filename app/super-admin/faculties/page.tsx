@@ -2,11 +2,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getFaculties } from "@/app/actions/superadmin";
+import { getFaculties, deleteFaculty } from "@/app/actions/superadmin";
 import { 
   Building2, Users, Bus, UserCheck, Plus, MoreVertical, X,
   Phone, Mail, MapPin, Edit, UserCog, History, ChevronLeft, ChevronRight,
-  CheckCircle2
+  CheckCircle2, Trash2
 } from "lucide-react";
 
 interface FacultyItem {
@@ -39,6 +39,7 @@ export default function SuperAdminFaculties() {
   const [editingFaculty, setEditingFaculty] = useState<FacultyItem | null>(null);
   const [changeAdminFaculty, setChangeAdminFaculty] = useState<FacultyItem | null>(null);
   const [historyFaculty, setHistoryFaculty] = useState<FacultyItem | null>(null);
+  const [deleteConfirmFaculty, setDeleteConfirmFaculty] = useState<FacultyItem | null>(null);
 
   const [faculties, setFaculties] = useState<FacultyItem[]>([]);
 
@@ -78,6 +79,24 @@ export default function SuperAdminFaculties() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleDeleteFaculty = async (faculty: FacultyItem) => {
+    try {
+      const result = await deleteFaculty(faculty.id);
+      if (result.success) {
+        showToast(result.message);
+        setFaculties(faculties.filter(f => f.id !== faculty.id));
+        if (selectedFacultyId === faculty.id) setSelectedFacultyId(null);
+      } else {
+        showToast(result.message);
+      }
+    } catch (error) {
+      console.error("Failed to delete faculty", error);
+      showToast("เกิดข้อผิดพลาดในการลบคณะ");
+    } finally {
+      setDeleteConfirmFaculty(null);
+    }
   };
 
   const totalFaculties = faculties.length;
@@ -247,12 +266,20 @@ export default function SuperAdminFaculties() {
                             ใช้งานอยู่
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3 px-3 text-center flex items-center justify-center gap-1">
                           <button 
                             onClick={(e) => { e.stopPropagation(); setEditingFaculty(f); }}
                             className="p-1.5 text-gray-400 hover:text-[#311171] rounded-lg"
+                            title="แก้ไข"
                           >
                             <MoreVertical size={16} />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmFaculty(f); }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"
+                            title="ลบ"
+                          >
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>
@@ -492,11 +519,13 @@ export default function SuperAdminFaculties() {
             <div className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-gray-700 block mb-1">เบอร์ติดต่อ:</label>
-                <input type="text" defaultValue={editingFaculty.phone} className="w-full p-3 border border-gray-200 rounded-xl outline-none" />
-              </div>
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">อีเมลคณะ:</label>
-                <input type="email" defaultValue={editingFaculty.email} className="w-full p-3 border border-gray-200 rounded-xl outline-none" />
+                <input 
+                  type="text" 
+                  maxLength={10}
+                  defaultValue={editingFaculty.phone} 
+                  onChange={(e) => setEditingFaculty({...editingFaculty, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                  className="w-full p-3 border border-gray-200 rounded-xl outline-none" 
+                />
               </div>
             </div>
             <div className="flex gap-2 pt-2">
@@ -523,6 +552,35 @@ export default function SuperAdminFaculties() {
               </div>
             </div>
             <button onClick={() => setHistoryFaculty(null)} className="w-full bg-gray-100 py-2.5 rounded-xl font-bold text-xs">ปิด</button>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Modal: ยืนยันการลบคณะ */}
+      {deleteConfirmFaculty && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 space-y-4 text-center">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-2">
+              <Trash2 size={32} />
+            </div>
+            <h3 className="text-xl font-black text-gray-900">ยืนยันการลบคณะ?</h3>
+            <p className="text-sm text-gray-500 font-medium">
+              คุณแน่ใจหรือไม่ว่าต้องการลบ <strong className="text-gray-900">{deleteConfirmFaculty.name}</strong>ออกจากระบบ? ข้อมูลที่เกี่ยวข้องอาจได้รับผลกระทบ
+            </p>
+            <div className="flex gap-2 pt-4">
+              <button 
+                onClick={() => setDeleteConfirmFaculty(null)} 
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-bold text-sm transition-all"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={() => handleDeleteFaculty(deleteConfirmFaculty)} 
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm shadow-md transition-all"
+              >
+                ลบข้อมูล
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -163,21 +163,41 @@ export default function DriverRecords() {
       
       const meRes = await fetch('/api/driver/me');
       const meData = await meRes.json();
+      let driverVanIdStr = "null";
+      let driverLegacyVanId = "v-ict";
+      let driverVanIdFormatted = "van-null";
       let currentDriverId = null;
-      if (meData.success && meData.driverData && meData.driverData.id) {
+
+      if (meData.success && meData.driverData) {
+        const actualVanId = meData.driverData.assignedVanId || meData.driverData.facultyVanId;
+        driverVanIdStr = String(actualVanId);
+        driverLegacyVanId = meData.driverData.legacyVanId;
+        driverVanIdFormatted = `van-${driverVanIdStr.padStart(3, '0')}`;
+        
         currentDriverId = meData.driverData.id;
         setDriverId(currentDriverId);
       }
 
+      let dbMapped: AssignedBooking[] = [];
+      let driverFacName = "คณะเทคโนโลยีสารสนเทศและการสื่อสาร";
+
+      const now = new Date();
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(now);
+
       if (currentDriverId) {
         const res = await getAssignedBookings(currentDriverId); 
         if (res.success && res.bookings) {
-          const available = res.bookings.filter((b: AssignedBooking) => !b.driverLog);
-          setAssignedBookings(available);
-        if (available.length > 0) {
-          setSelectedBookingId(available[0].id);
+          dbMapped = res.bookings.filter((b: AssignedBooking) => {
+            // Only unfinished trips for today
+            if (b.driverLog) return false;
+            
+            const dateObj = new Date(b.departureDate);
+            const tripDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(dateObj);
+            return tripDate === todayStr;
+          });
         }
         if (res.driverFacultyName) {
+          driverFacName = res.driverFacultyName;
           setDriverFaculty(res.driverFacultyName);
           setEndTrip(s => ({ ...s, location: res.driverFacultyName }));
         }
@@ -186,9 +206,64 @@ export default function DriverRecords() {
           setStartTrip(s => ({ ...s, mileage: mileageStr }));
         }
       }
+
+      // Fetch Calendar Events
+      let calMapped: AssignedBooking[] = [];
+      try {
+        const calRes = await fetch('/api/calendar-events');
+        if (calRes.ok) {
+          const calData = await calRes.json();
+          if (calData && calData.rawEvents && Array.isArray(calData.rawEvents)) {
+            calMapped = calData.rawEvents
+              .filter((e: any) => {
+                if (e.status === 'rejected' || e.status === 'cancelled') return false;
+                // Only include true Google Calendar events, not DB bookings that were synced to calendar
+                if (e.id && String(e.id).startsWith('bk-')) return false;
+                
+                const eventVanId = String(e.vanId);
+                const matchesVan = eventVanId === driverVanIdStr || eventVanId === driverLegacyVanId || eventVanId === driverVanIdFormatted;
+                if (!matchesVan) return false;
+                
+                const sDate = e.date ? (e.date.includes('T') ? e.date : `${e.date}T08:30:00`) : new Date().toISOString();
+                const dateObj = new Date(sDate);
+                const tripDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(dateObj);
+                return tripDate === todayStr;
+              })
+              .map((e: any) => {
+                const sDate = e.date ? (e.date.includes('T') ? e.date : `${e.date}T08:30:00`) : new Date().toISOString();
+                const rDate = e.returnDate ? (e.returnDate.includes('T') ? e.returnDate : `${e.returnDate}T16:30:00`) : sDate;
+
+                return {
+                  id: String(e.id || `cal-${Date.now()}`),
+                  destination: e.destination || 'ไม่ระบุสถานที่',
+                  departureDate: sDate,
+                  returnDate: rDate,
+                  objective: e.purpose || 'ภารกิจใช้รถตู้',
+                  requester: {
+                    name: e.requester || 'ผู้ขอใช้บริการ',
+                    faculty: {
+                      nameTh: e.bookingFaculty || driverFacName
+                    }
+                  },
+                  passengersCount: Number(e.passengers || 1)
+                };
+              });
+          }
+        }
+      } catch (calErr) {
+        console.warn("Failed to load calendar events for driver records:", calErr);
+      }
+
+      const existingIds = new Set(dbMapped.map(b => String(b.id)));
+      const uniqueCal = calMapped.filter(b => !existingIds.has(String(b.id)));
+      const combined = [...dbMapped, ...uniqueCal];
+
+      setAssignedBookings(combined);
+      if (combined.length > 0) {
+        setSelectedBookingId(String(combined[0].id));
+      }
       setIsLoadingBookings(false);
     }
-  }
     loadBookings();
     
     // Init date
@@ -198,7 +273,7 @@ export default function DriverRecords() {
     setEndTrip(s => ({ ...s, date: isoDate, time: "17:00" }));
   }, []);
 
-  const selectedBooking = assignedBookings.find(b => b.id === selectedBookingId);
+  const selectedBooking = assignedBookings.find(b => String(b.id) === String(selectedBookingId));
 
   useEffect(() => {
     if (selectedBooking) {
@@ -206,10 +281,11 @@ export default function DriverRecords() {
       const retDate = new Date(selectedBooking.returnDate);
       
       const formatTime = (d: Date) => {
+        if (isNaN(d.getTime())) return "08:30";
         return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       };
       
-      const isAdhoc = selectedBooking.id.includes("UP-ADHOC") || selectedBooking.requester?.name === "คนขับ (นอกแผน)";
+      const isAdhoc = String(selectedBooking.id).includes("UP-ADHOC") || selectedBooking.requester?.name === "คนขับ (นอกแผน)";
       const pickupLocation = isAdhoc 
         ? driverFaculty 
         : (selectedBooking.requester?.faculty?.nameTh || "มหาวิทยาลัยพะเยา");

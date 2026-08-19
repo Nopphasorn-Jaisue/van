@@ -6,12 +6,18 @@ export type NetworkCalendarEvent = {
   facultyId: string;
   title: string;
   destination: string;
+  purpose?: string;
+  requester?: string;
+  phone?: string;
+  timeStr?: string;
+  bookingFacultyName?: string;
   vanCode: string;
   start: string;
   end: string;
   status: NetworkCalendarEventStatus;
   scope: NetworkCalendarScope;
   vansInUse: number;
+  ownerFacultyName?: string;
 };
 
 export type TodayBooking = {

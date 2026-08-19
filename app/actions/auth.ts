@@ -36,10 +36,51 @@ export async function getAuthUser() {
   const { data: { user } } = await supabase.auth.getUser();
   
   if (user && user.email) {
-    const dbUser = await prisma.user.findUnique({
+    let dbUser = await prisma.user.findUnique({
       where: { email: user.email },
       include: { faculty: true }
     });
+
+    // Auto-provisioning Logic (วิธีที่ 1: ดึงจาก Department Claim ของ Microsoft)
+    if (!dbUser) {
+      // 1. อ่านค่าคณะ/แผนก จากข้อมูลที่ Microsoft ส่งมาให้ผ่าน Supabase
+      const department = user.user_metadata?.department || user.user_metadata?.custom_claims?.department;
+      
+      let facultyId: number;
+      
+      if (department) {
+        // ค้นหาว่ามีคณะนี้ในระบบเราหรือยัง
+        let facultyRecord = await prisma.faculty.findFirst({
+           where: { nameTh: { contains: department } } 
+        });
+        
+        // ถ้ายังไม่มีคณะนี้ ให้สร้างใหม่ในระบบอัตโนมัติ
+        if (!facultyRecord) {
+           facultyRecord = await prisma.faculty.create({ data: { nameTh: department } });
+        }
+        facultyId = facultyRecord.id;
+      } else {
+        // ถ้า Microsoft ไม่ได้ส่งข้อมูลคณะมา ให้จัดเข้า "ส่วนกลาง" ชั่วคราวไปก่อน
+        let fallbackFaculty = await prisma.faculty.findFirst({ where: { nameTh: 'ศูนย์จัดการระบบส่วนกลาง' } });
+        if (!fallbackFaculty) {
+          fallbackFaculty = await prisma.faculty.create({ data: { nameTh: 'ศูนย์จัดการระบบส่วนกลาง' } });
+        }
+        facultyId = fallbackFaculty.id;
+      }
+
+      // 2. สร้างบัญชีผู้ใช้ใหม่ในระบบ (ยัดเข้าคณะที่ดึงมาได้อัตโนมัติ)
+      dbUser = await prisma.user.create({
+        data: {
+          email: user.email,
+          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
+          role: 'USER',
+          facultyId: facultyId,
+          avatar: user.user_metadata?.avatar_url || null
+        },
+        include: { faculty: true }
+      });
+    }
+
     if (dbUser) return dbUser;
   }
   
@@ -57,17 +98,26 @@ export async function getAuthUser() {
 
   const mockRole = cookieStore.get("mock_role")?.value;
   if (mockRole) {
-    return {
-      id: "mock-id",
-      name: mockRole === 'DRIVER' ? "พนักงานขับรถ ทดสอบ" : "ผู้ดูแลระบบ ทดสอบ",
-      email: "test@up.ac.th",
-      role: mockRole,
-      facultyId: null,
-      avatar: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      faculty: { nameTh: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร" }
-    };
+    // Find a real user with this role in the DB to ensure IDs match Prisma relations
+    const mockEmail = `mock.${mockRole.toLowerCase()}@up.ac.th`;
+    let dbUser = await prisma.user.findUnique({
+      where: { email: mockEmail },
+      include: { faculty: true }
+    });
+    
+    if (!dbUser) {
+      const fallbackFaculty = await prisma.faculty.findFirst() || await prisma.faculty.create({ data: { nameTh: 'ศูนย์จัดการระบบส่วนกลาง' } });
+      dbUser = await prisma.user.create({
+        data: {
+          email: mockEmail,
+          name: mockRole === 'DRIVER' ? "พนักงานขับรถ ทดสอบ" : mockRole === 'USER' ? "ผู้ใช้งานทั่วไป ทดสอบ" : "ผู้ดูแลระบบ ทดสอบ",
+          role: mockRole as import("@prisma/client").Role,
+          facultyId: fallbackFaculty.id,
+        },
+        include: { faculty: true }
+      });
+    }
+    return dbUser;
   }
   
   return null;

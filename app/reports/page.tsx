@@ -1,19 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 
-import { FacultyTripStats, DriverWorkload, FleetStatus, WeeklyDensity, CrossFacultyUsage } from '@/app/actions/reports';
-
-export interface ReportsData {
-  role: string;
-  facultyTripStats: FacultyTripStats;
-  driverWorkload: DriverWorkload[];
-  fleetStatus: FleetStatus[];
-  weeklyDensity: WeeklyDensity[];
-  crossFacultyUsage: CrossFacultyUsage[];
-}
+import { DriverWorkload, FleetStatus, WeeklyDensity, CrossFacultyUsage, ReportsData } from '@/app/types/reports';
 
 
 import { getDashboardReports } from '@/app/actions/reports';

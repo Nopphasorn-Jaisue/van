@@ -10,6 +10,7 @@ const ROLE_RULES: Array<{ startsWith: string; allowed: AppRole[] }> = [
   { startsWith: "/driver", allowed: ["DRIVER", "SUPER_ADMIN"] },
   { startsWith: "/super-admin", allowed: ["SUPER_ADMIN"] },
   { startsWith: "/reports", allowed: ["FACULTY_ADMIN", "EXECUTIVE", "SUPER_ADMIN"] },
+  { startsWith: "/user", allowed: ["USER", "SUPER_ADMIN"] },
 ];
 
 function normalizeRole(value: unknown): AppRole {
@@ -83,9 +84,12 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const matchedRule = ROLE_RULES.find((rule) => pathname.startsWith(rule.startsWith));
   if (matchedRule && !matchedRule.allowed.includes(role)) {
-    const deniedUrl = request.nextUrl.clone();
-    deniedUrl.pathname = "/login";
-    return NextResponse.redirect(deniedUrl);
+    // Let Server Actions handle their own auth to avoid throwing 'unexpected response' due to HTML redirects
+    if (!request.headers.has("next-action")) {
+      const deniedUrl = request.nextUrl.clone();
+      deniedUrl.pathname = "/login";
+      return NextResponse.redirect(deniedUrl);
+    }
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

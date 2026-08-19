@@ -26,21 +26,16 @@ export async function handleListMaintenance() {
     });
 
     const now = new Date();
-    const firstDayOfYear = new Date(now.getFullYear(), 0, 1);
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [maintenanceYtd, taxInsYtd] = await Promise.all([
-      prisma.maintenanceRecord.aggregate({
-        _sum: { amount: true },
-        where: { type: 'MAINTENANCE', date: { gte: firstDayOfYear }, ...recordWhere }
-      }),
-      prisma.maintenanceRecord.aggregate({
-        _sum: { amount: true },
-        where: { type: { in: ['TAX', 'INSURANCE'] }, date: { gte: firstDayOfYear }, ...recordWhere }
+    const [inspectionsThisMonth] = await Promise.all([
+      prisma.maintenanceRecord.count({
+        where: { type: 'MAINTENANCE', date: { gte: firstDayOfMonth }, ...recordWhere }
       })
     ]);
 
-    const kpiCostYTD = maintenanceYtd._sum.amount || 0;
-    const kpiTaxInsYTD = taxInsYtd._sum.amount || 0;
+    const kpiCostYTD = inspectionsThisMonth;
+    const kpiTaxInsYTD = 0;
 
     const pendingRepairs = records
       .filter(r => r.type === 'MAINTENANCE' && r.amount === 0)
@@ -52,28 +47,19 @@ export async function handleListMaintenance() {
       }));
 
     const maintenanceHistory = records
-      .filter(r => !(r.type === 'MAINTENANCE' && r.amount === 0))
+      .filter(r => r.type === 'MAINTENANCE')
       .map(r => {
-      let typeStr = "ซ่อมบำรุง";
-      let typeColor = "bg-blue-50 text-blue-600 border-blue-100";
-      if (r.type === "TAX") {
-        typeStr = "ต่อภาษี";
-        typeColor = "bg-emerald-50 text-emerald-600 border-emerald-100";
-      } else if (r.type === "INSURANCE") {
-        typeStr = "ประกันภัย";
-        typeColor = "bg-purple-50 text-purple-600 border-purple-100";
-      }
+      const typeStr = "ตรวจสภาพ";
+      const typeColor = "bg-blue-50 text-blue-600 border-blue-100";
 
       return {
         id: `M-${r.id.toString().padStart(3, '0')}`,
-        date: r.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }),
+        date: r.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) + " " + r.date.toLocaleTimeString('th-TH', { hour: '2-digit', minute:'2-digit' }),
         van: r.van.plate,
         province: "พะเยา", // Mock for now
         type: typeStr,
         typeColor,
         detail: r.detail,
-        amount: r.amount.toLocaleString(),
-        garage: r.garage || "-",
       };
     });
 

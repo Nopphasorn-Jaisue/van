@@ -84,6 +84,23 @@ export default function VansPage() {
     insExp: ""
   });
 
+  // Custom Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmColor: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "ยืนยัน",
+    confirmColor: "bg-[#311171]",
+    onConfirm: () => {}
+  });
+
   const loadVans = async () => {
     try {
       const res = await fetch('/api/vans');
@@ -165,15 +182,31 @@ export default function VansPage() {
     }
   };
 
-  const deleteVan = async (id: string) => {
-    if (confirm('คุณต้องการลบรถตู้คันนี้ใช่หรือไม่?')) {
-      try {
-        await fetch(`/api/vans/${id}`, { method: 'DELETE' });
-        loadVans();
-      } catch (err) {
-        console.error("Failed to delete van", err);
+  const deleteVan = (van: Van) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "ยืนยันการลบข้อมูลรถตู้",
+      message: `คุณต้องการลบรถตู้ทะเบียน "${van.plate}" (${van.vanName}) ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+      confirmText: "ลบข้อมูล",
+      confirmColor: "bg-red-500 hover:bg-red-600",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/vans/${van.id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showToast('ลบข้อมูลรถตู้เรียบร้อยแล้ว', 'success');
+            loadVans();
+          } else {
+            showToast('เกิดข้อผิดพลาดในการลบ: ' + (data.error || ''), 'error');
+          }
+        } catch (err) {
+          console.error("Failed to delete van", err);
+          showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
       }
-    }
+    });
   };
 
   const toggleShareStatus = async (van: Van) => {
@@ -336,7 +369,7 @@ export default function VansPage() {
                           <Edit size={14} /> แก้ไขข้อมูล
                         </button>
                         <button 
-                          onClick={() => deleteVan(van.id)}
+                          onClick={() => deleteVan(van)}
                           className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-colors"
                         >
                           <Trash2 size={14} />
@@ -534,6 +567,40 @@ export default function VansPage() {
             <X size={20} className="text-red-500" />
           )}
           <span className="text-sm font-bold">{toastMessage.msg}</span>
+        </div>
+      )}
+      {/* Custom Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div 
+          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-red-100 text-red-500 mx-auto flex items-center justify-center mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h2 className="text-xl font-black text-gray-900 mb-2">{confirmModal.title}</h2>
+              <p className="text-sm text-gray-500">{confirmModal.message}</p>
+            </div>
+            <div className="p-4 bg-gray-50 flex gap-3">
+              <button 
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 py-2.5 text-sm font-bold text-gray-600 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={confirmModal.onConfirm}
+                className={`flex-1 py-2.5 text-white text-sm font-bold rounded-xl transition-colors shadow-sm ${confirmModal.confirmColor}`}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>

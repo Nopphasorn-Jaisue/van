@@ -1,9 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
-prisma.van.findMany({
-  include: { faculty: { include: { drivers: { include: { user: true } } } } }
-}).then(v => {
-  console.log(JSON.stringify(v, null, 2));
+import { prisma } from './lib/prisma';
+prisma.faculty.findMany().then(v => {
+  console.log(JSON.stringify(v.map(f => ({id: f.id, nameTh: f.nameTh})), null, 2));
 }).catch(e => {
   console.error(e);
 }).finally(() => {

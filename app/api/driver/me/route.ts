@@ -18,6 +18,11 @@ export async function GET() {
           include: {
             assignedVan: true,
           }
+        },
+        faculty: {
+          include: {
+            vans: true
+          }
         }
       }
     });
@@ -32,6 +37,7 @@ export async function GET() {
 
     const driver = user.driverProfile;
     const assignedVan = driver.assignedVan;
+    const facultyVan = user.faculty?.vans?.[0];
 
     return NextResponse.json({
       success: true,
@@ -42,9 +48,17 @@ export async function GET() {
         avatar: driver.avatar,
         contractStart: driver.contractStart,
         assignedVanId: driver.assignedVanId,
-        vanAssigned: assignedVan?.name || 'ไม่ระบุ',
-        plate: assignedVan?.plate || '-',
-        vanPlate: assignedVan?.plate || null, // Keeping for backward compatibility
+        facultyVanId: facultyVan?.id || null,
+        vanAssigned: assignedVan?.name || facultyVan?.name || 'ไม่ระบุ',
+        plate: assignedVan?.plate || facultyVan?.plate || '-',
+        vanPlate: assignedVan?.plate || facultyVan?.plate || null,
+        facultyId: user.facultyId,
+        legacyVanId: user.faculty?.nameTh?.includes('เภสัช') ? 'v-pharm' 
+                   : user.faculty?.nameTh?.includes('สารสนเทศ') || user.faculty?.nameTh?.includes('ICT') ? 'v-ict'
+                   : user.faculty?.nameTh?.includes('วิทย') ? 'v-sci'
+                   : user.faculty?.nameTh?.includes('เกษตร') ? 'v-agri'
+                   : user.faculty?.nameTh?.includes('พลังงาน') ? 'v-seen'
+                   : 'v-ict'
       }
     });
 

@@ -26,15 +26,15 @@ export const facultyVansList: UnifiedVanInfo[] = [
     vanImage: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80"
   },
   {
-    id: "v-ict",
-    facultyId: "ict",
+    id: "1",
+    facultyId: "1",
     facultyName: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
     shortFacultyName: "ICT",
-    vanName: "รถตู้ ICT 01",
-    plate: "ทะเบียน นข 6789 พะเยา",
-    driverName: "นายอนุชา คำมี",
-    driverPhone: "086-345-6789",
-    driverImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&q=80",
+    vanName: "ICT",
+    plate: "นก 4515 พะเยา",
+    driverName: "นาย",
+    driverPhone: "0812345678",
+    driverImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
     vanImage: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80"
   },
   {

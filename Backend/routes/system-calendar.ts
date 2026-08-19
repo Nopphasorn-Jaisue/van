@@ -12,7 +12,6 @@ import { getGoogleCalendarClient } from "@/Backend/services/google-calendar";
 import { prisma } from "@/lib/prisma";
 import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
 import { getAuthUser } from "@/app/actions/auth";
-import { createClient } from "@/lib/supabase/server";
 
 interface GoogleCalendarCache {
   events: CalendarEventRecord[];
@@ -20,6 +19,12 @@ interface GoogleCalendarCache {
 }
 const gcalCache: Record<string, GoogleCalendarCache> = {};
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+export const FACULTY_CALENDARS = {
+  ICT: 'e9735a3152fcec368b15ac7f64dd21046a923cc5c4d3f9aafac8f706285a40a8@group.calendar.google.com',
+  PHARM: 'afa36bd97fd57a882373e89ff4c9c5d6a532296de29bdf15caced34a4e7e2b8c@group.calendar.google.com',
+  SCI: '280eacd5718c2e5c941b02395a80926cdb097721dd2de39cc3c01f3c6183075c@group.calendar.google.com'
+};
 
 async function resolveCalendarId(vanId?: string): Promise<string | undefined> {
   const defaultCalendarId = process.env.GOOGLE_CALENDAR_ID;
@@ -31,8 +36,11 @@ async function resolveCalendarId(vanId?: string): Promise<string | undefined> {
       where: { id: vanIdNum },
       include: { faculty: true }
     });
-    if (van && van.faculty && van.faculty.googleCalendarId) {
-      return van.faculty.googleCalendarId;
+    if (van && van.faculty) {
+      if (van.faculty.googleCalendarId) return van.faculty.googleCalendarId;
+      if (van.faculty.nameTh.includes('เภสัช')) return FACULTY_CALENDARS.PHARM;
+      if (van.faculty.nameTh.includes('วิทยาศาสตร์')) return FACULTY_CALENDARS.SCI;
+      if (van.faculty.nameTh.includes('สารสนเทศ') || van.faculty.nameTh.includes('ICT')) return FACULTY_CALENDARS.ICT;
     }
   } else {
     let facultyName = '';
@@ -41,6 +49,11 @@ async function resolveCalendarId(vanId?: string): Promise<string | undefined> {
     else if (vanId === 'v-sci') facultyName = 'คณะวิทยาศาสตร์';
     else if (vanId === 'v-agr') facultyName = 'คณะเกษตรศาสตร์';
     else if (vanId === 'v-ener') facultyName = 'คณะพลังงานและสิ่งแวดล้อม';
+    else if (vanId === 'v-pharm') facultyName = 'คณะเภสัชศาสตร์';
+    
+    if (vanId === 'v-pharm') return FACULTY_CALENDARS.PHARM;
+    if (vanId === 'v-sci') return FACULTY_CALENDARS.SCI;
+    if (vanId === 'v-ict') return FACULTY_CALENDARS.ICT;
     
     if (facultyName) {
       const fac = await prisma.faculty.findFirst({ where: { nameTh: facultyName } });
@@ -60,11 +73,11 @@ export async function handleSystemCalendarEvents(request: Request) {
 
   // Merge live bookings from Database/System Bookings
   try {
-    const user = await getAuthUser();
+    await getAuthUser();
     let facultyId: number | undefined;
-    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
-      facultyId = user.facultyId;
-    }
+    // We intentionally DO NOT filter by facultyId here. The system calendar 
+    // is meant to be a global view so faculties can see each other's schedules 
+    // for cross-faculty borrowing. The client-side handles filtering.
 
     const dbBookings = await listBookings(undefined, facultyId);
     const dbEvents: CalendarEventRecord[] = dbBookings.map(b => {
@@ -77,7 +90,7 @@ export async function handleSystemCalendarEvents(request: Request) {
       return {
         id: `bk-${b.id}`,
         vanId: b.assignedVanId || "v-ict",
-        facultyId: String((b as any).requesterFacultyId || "ict"),
+        facultyId: b.requesterFacultyId ? String(b.requesterFacultyId) : "ict",
         bookingFaculty: b.requesterFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
         destination: b.destination,
         purpose: b.purpose,
@@ -91,6 +104,7 @@ export async function handleSystemCalendarEvents(request: Request) {
         status: (b.status === "APPROVED" || b.status === "COMPLETED") ? "approved" : "pending",
         statusText: b.status === "APPROVED" ? "อนุมัติแล้ว" : (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "รอการอนุมัติ"),
         statusTime: "ระบบการจอง",
+        tripType: (b.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || "ในจังหวัดพะเยา",
         createdAt: b.submittedAt || new Date().toISOString()
       };
     });
@@ -120,7 +134,7 @@ export async function handleSystemCalendarEvents(request: Request) {
         const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar.readonly']);
         
         // Determine which calendars to fetch
-        let allGoogleCalendarIds: { id: string, facultyName: string, facultyId: string }[] = [];
+        const allGoogleCalendarIds: Array<{ id: string; facultyName: string; facultyId: string }> = [];
         try {
           const faculties = await prisma.faculty.findMany({
             where: { googleCalendarId: { not: null } }
@@ -146,6 +160,19 @@ export async function handleSystemCalendarEvents(request: Request) {
             facultyName: 'คณะรวม (Central)',
             facultyId: 'central'
           });
+        }
+
+        // Add specific faculty calendars if not already in DB
+        const extraCalendars = [
+          { id: FACULTY_CALENDARS.PHARM, facultyName: 'คณะเภสัชศาสตร์', facultyId: 'pharm' },
+          { id: FACULTY_CALENDARS.ICT, facultyName: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร', facultyId: 'ict' },
+          { id: FACULTY_CALENDARS.SCI, facultyName: 'คณะวิทยาศาสตร์', facultyId: 'sci' }
+        ];
+
+        for (const extraCal of extraCalendars) {
+          if (!allGoogleCalendarIds.find(c => c.id === extraCal.id)) {
+            allGoogleCalendarIds.push(extraCal);
+          }
         }
 
         const fetchPromises = allGoogleCalendarIds.map(async (cal) => {
@@ -187,16 +214,25 @@ export async function handleSystemCalendarEvents(request: Request) {
               else { facultyName = 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร'; facultyId = 'ict'; }
             }
 
+            let cleanSummary = summary;
+            const match = summary.match(/^\[.*?\]\s*(.*)$/);
+            if (match && match[1]) {
+              cleanSummary = match[1];
+            }
+
+            const vanMatch = facultyVansList.find(v => v.facultyName === facultyName || v.facultyId === facultyId);
+            const correctVanId = vanMatch ? vanMatch.id : (facultyId === 'pharm' ? 'v-pharm' : 'v-ict');
+
             return {
               id: `gcal-${item.id || index}`,
               gcalId: item.id || undefined,
-              vanId: 'v-ict',
+              vanId: correctVanId,
               facultyId,
               date: startDate.slice(0, 10),
               returnDate: (item.end?.dateTime || item.end?.date || startDate).slice(0, 10),
               time: new Date(startDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.',
-              destination: summary,
-              purpose: summary,
+              destination: cleanSummary,
+              purpose: cleanSummary,
               passengers: 10,
               status: 'approved' as const,
               bookingFaculty: facultyName,
@@ -243,54 +279,35 @@ export async function handleSystemCalendarEvents(request: Request) {
     });
   }
 
-  const eventsByDate = events.reduce<Record<string, Array<{ time: string; title: string; color: string }>>>(
-    (result, event) => {
-      const dateKey = event.date.slice(0, 10);
-      if (!result[dateKey]) {
-        result[dateKey] = [];
-      }
-
-      const color = event.status === "approved" || event.status === "completed"
-        ? "bg-green-200 text-green-800 border-green-300"
-        : "bg-yellow-200 text-yellow-800 border-yellow-300";
-
-      const vanInfo = facultyVansList.find(v => v.id === event.vanId);
-      const plate = vanInfo ? vanInfo.plate : event.vanId;
-
-      result[dateKey].push({
-        time: event.time,
-        title: `${event.destination} (${plate}) - ${event.bookingFaculty}`,
-        color,
-      });
-
-      return result;
-    },
-    {},
-  );
-
   // Fetch real vans from database
   let realVansList: UnifiedVanInfo[] = [];
   try {
     const realVans = await prisma.van.findMany({
       include: {
-        faculty: true,
+        faculty: {
+          include: {
+            drivers: {
+              include: { user: true }
+            }
+          }
+        },
         assignedDrivers: {
           include: { user: true }
         }
       }
     });
     realVansList = realVans.map(v => {
-      const driver = v.assignedDrivers[0];
+      const driver = v.assignedDrivers[0] || (v.faculty?.drivers && v.faculty.drivers.length > 0 ? v.faculty.drivers[0] : null);
       return {
         id: v.id.toString(),
         facultyId: v.facultyId.toString(),
         facultyName: v.faculty?.nameTh || "คณะ",
         shortFacultyName: v.faculty?.nameTh?.replace('คณะ', '') || "คณะ",
-        vanName: v.name || `รถตู้ (ID: ${v.id})`,
+        vanName: v.name || `รถตู้ ${v.faculty?.nameTh || ''} ${v.plate}`,
         plate: v.plate || "ไม่ระบุทะเบียน",
         driverName: driver?.user?.name || "ยังไม่มีคนขับ",
         driverPhone: driver?.phone || "-",
-        driverImage: driver?.avatar || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=100&q=80",
+        driverImage: driver?.user?.avatar || driver?.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
         vanImage: v.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80"
       };
     });
@@ -298,7 +315,76 @@ export async function handleSystemCalendarEvents(request: Request) {
     console.warn("Failed to fetch real vans:", err);
   }
 
-  const allVans = [...realVansList, ...facultyVansList];
+  const allVans = [...realVansList];
+  facultyVansList.forEach(fv => {
+    if (!realVansList.some(rv => rv.facultyName === fv.facultyName || rv.shortFacultyName === fv.shortFacultyName)) {
+      allVans.push(fv);
+    }
+  });
+  const eventsByDate = events.reduce<Record<string, Array<{
+    id: string;
+    time: string;
+    title: string;
+    destination: string;
+    purpose: string;
+    requester: string;
+    phone: string;
+    bookingFaculty: string;
+    vanPlate: string;
+    date: string;
+    returnDate: string;
+    status: string;
+    tripType?: string;
+    color: string;
+    ownerFacultyName?: string;
+  }>>>(
+    (result, event) => {
+      const startDate = new Date(event.date.slice(0, 10));
+      const endDate = event.returnDate ? new Date(event.returnDate.slice(0, 10)) : new Date(startDate);
+      
+      if (isNaN(startDate.getTime())) return result;
+      const validEndDate = isNaN(endDate.getTime()) ? new Date(startDate) : endDate;
+
+      const color = event.status === "approved" || event.status === "completed"
+        ? "bg-green-200 text-green-800 border-green-300"
+        : "bg-yellow-200 text-yellow-800 border-yellow-300";
+
+      const vanInfo = allVans.find(v => v.id === event.vanId);
+      const plate = vanInfo ? vanInfo.plate : event.vanId;
+      const itemTitle = `${event.destination} (${plate}) - ${event.bookingFaculty}`;
+
+      for (let d = new Date(startDate); d <= validEndDate; d.setDate(d.getDate() + 1)) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${y}-${m}-${day}`;
+
+        if (!result[dateKey]) {
+          result[dateKey] = [];
+        }
+        result[dateKey].push({
+          id: event.id,
+          time: event.time,
+          title: itemTitle,
+          destination: event.destination,
+          purpose: event.purpose || event.destination,
+          requester: event.requester || '',
+          phone: event.phone || '',
+          bookingFaculty: event.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+          vanPlate: plate,
+          date: event.date,
+          returnDate: event.returnDate || event.date,
+          status: event.status,
+          tripType: event.tripType,
+          color,
+          ownerFacultyName: vanInfo ? vanInfo.facultyName : undefined
+        });
+      }
+
+      return result;
+    },
+    {},
+  );
 
   return NextResponse.json({ 
     success: true,
@@ -310,9 +396,9 @@ export async function handleSystemCalendarEvents(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const authUser = await getAuthUser();
+
+    if (!authUser) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -337,7 +423,7 @@ export async function POST(request: Request) {
             calendarId: targetCalendarId,
             requestBody: {
               summary: `[${created.bookingFaculty || 'คณะ'}] ${created.destination || 'ภารกิจใช้รถตู้'}`,
-              description: `ผู้ขอใช้บริการ: ${created.requester || '-'}\nหน่วยงาน: ${created.bookingFaculty || '-'}\nวัตถุประสงค์: ${created.purpose || '-'}\nผู้โดยสาร: ${created.passengers || 1} คน`,
+              description: `ผู้ขอใช้บริการ: ${created.requester || '-'}\nหน่วยงาน: ${created.bookingFaculty || '-'}\nวัตถุประสงค์: ${created.purpose || '-'}\nขอบเขตการเดินทาง: ${created.tripType || 'ในจังหวัดพะเยา'}\nผู้โดยสาร: ${created.passengers || 1} คน`,
               start: { dateTime: startDateTime, timeZone: 'Asia/Bangkok' },
               end: { dateTime: endDateTime, timeZone: 'Asia/Bangkok' },
             },
@@ -353,6 +439,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // Invalidate Google Calendar cache
+    Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
+
     return NextResponse.json({ success: true, event: created });
   } catch (error) {
     console.error(error);
@@ -362,9 +451,9 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const authUser = await getAuthUser();
+
+    if (!authUser) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -375,7 +464,7 @@ export async function PATCH(request: Request) {
     const updated = updateStoredCalendarEvent(id, fields);
 
     // Sync update to Google Calendar
-    const targetGcalId = gcalId || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
+    const targetGcalId = gcalId || (updated?.gcalId) || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
 
     if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
@@ -393,9 +482,12 @@ export async function PATCH(request: Request) {
           });
         }
       } catch (gcalErr) {
-        console.warn("Google Calendar Push Patch Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
+        console.warn("Google Calendar Push Update Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
       }
     }
+
+    // Invalidate Google Calendar cache
+    Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
 
     return NextResponse.json({ success: true, event: updated });
   } catch (error) {
@@ -436,7 +528,7 @@ export async function DELETE(request: Request) {
     deleteStoredCalendarEvent(id);
 
     // Sync delete to Google Calendar
-    const targetGcalId = gcalId || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
+    const targetGcalId = gcalId || (storedEvent?.gcalId) || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
 
     if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
@@ -454,6 +546,9 @@ export async function DELETE(request: Request) {
         console.warn("Google Calendar Push Delete Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
       }
     }
+
+    // Invalidate Google Calendar cache
+    Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

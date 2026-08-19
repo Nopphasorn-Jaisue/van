@@ -1,14 +1,22 @@
 import { NextResponse } from 'next/server';
 import { getGoogleCalendarClient } from '@/Backend/services/google-calendar';
+import { FACULTY_CALENDARS } from '@/Backend/routes/system-calendar';
 
 export async function handleCreateBooking(request: Request) {
     try {
-        const calendarId = process.env.GOOGLE_CALENDAR_ID;
+        const { faculty, destination, startDate, endDate, requester } = await request.json();
+
+        let calendarId = process.env.GOOGLE_CALENDAR_ID;
+        
+        if (faculty) {
+            if (faculty.includes('เภสัช')) calendarId = FACULTY_CALENDARS.PHARM;
+            else if (faculty.includes('วิทยาศาสตร์')) calendarId = FACULTY_CALENDARS.SCI;
+            else if (faculty.includes('สารสนเทศ') || faculty.includes('ICT')) calendarId = FACULTY_CALENDARS.ICT;
+        }
+
         if (!calendarId) {
             throw new Error('Google Calendar ID is not configured in environment variables.');
         }
-
-        const { faculty, destination, startDate, endDate, requester } = await request.json();
 
         if (!faculty || !destination || !startDate || !endDate || !requester) {
             return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });

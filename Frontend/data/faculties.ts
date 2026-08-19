@@ -68,7 +68,7 @@ export const facultiesList: FacultyDirectory[] = [
     availableVans: 1,
     homeBase: 'ศูนย์เครื่องมือวิทย์',
     focus: 'วิจัยและห้องปฏิบัติการ',
-    palette: { surface: 'bg-[#FBBC39]/10', border: 'border-[#FBBC39]/30', accent: 'text-[#FBBC39]', chip: 'bg-[#FBBC39]', muted: 'text-[#FBBC39]/80', accentRgb: '#FBBC39' },
+    palette: { surface: 'bg-[#EAB308]/10', border: 'border-[#EAB308]/30', accent: 'text-[#EAB308]', chip: 'bg-[#EAB308]', muted: 'text-[#EAB308]/80', accentRgb: '#EAB308' },
   },
   {
     id: 'pharm',

@@ -14,11 +14,6 @@ type RecentTrip = {
   status: string;
 };
 
-type TripType = {
-  label: string;
-  val: string;
-  col: string;
-};
 
 type ExpenseBreakdown = {
   category: string;
@@ -67,7 +62,6 @@ export default function Page() {
 
   const [topDestinations, setTopDestinations] = useState<{name: string, count: number, percentage: number}[]>([]);
   const [recentTrips, setRecentTrips] = useState<RecentTrip[]>([]);
-  const [tripTypes, setTripTypes] = useState<TripType[]>([]);
   const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseBreakdown[]>([]);
   const [totalExpense, setTotalExpense] = useState(0);
   const [driverSummary, setDriverSummary] = useState<DriverSummary[]>([]);
@@ -104,7 +98,6 @@ export default function Page() {
             })));
           }
           if (data.topDestinations) setTopDestinations(data.topDestinations);
-          if (data.tripTypes) setTripTypes(data.tripTypes);
           if (data.expenseBreakdown) setExpenseBreakdown(data.expenseBreakdown);
           if (data.totalExpense !== undefined) setTotalExpense(data.totalExpense);
           if (data.driverSummary) setDriverSummary(data.driverSummary);
@@ -182,33 +175,8 @@ export default function Page() {
         {/* Scrollable Bottom Area with HIDDEN SCROLLBAR */}
         <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           
-          {/* Row 1: 3 Balanced Analytics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* 1. สัดส่วนประเภทการเดินทาง */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
-              <h3 className="text-sm font-bold text-slate-800 mb-4">สัดส่วนประเภทการเดินทาง</h3>
-              <div className="flex flex-col items-center justify-center gap-4 my-auto">
-                <div className="relative w-32 h-32 shrink-0 mx-auto">
-                  <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f1f5f9" strokeWidth="20" />
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#6366f1" strokeWidth="20" strokeDasharray="113.1 138.1" strokeDashoffset="0" />
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f59e0b" strokeWidth="20" strokeDasharray="62.8 188.4" strokeDashoffset="-113.1" />
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#0ea5e9" strokeWidth="20" strokeDasharray="50.2 201" strokeDashoffset="-175.9" />
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f97316" strokeWidth="20" strokeDasharray="25.1 226.1" strokeDashoffset="-226.1" />
-                  </svg>
-                  <div className="absolute inset-0 rounded-full bg-white scale-[0.65] shadow-inner"></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 w-full pt-2">
-                  {tripTypes.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded-lg">
-                      <div className="flex items-center gap-1.5"><div className={`w-2.5 h-2.5 rounded-full ${item.col}`}></div><span className="text-slate-600 font-medium text-[11px]">{item.label}</span></div>
-                      <span className="font-bold text-slate-800 text-[11px]">{item.val}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+          {/* Row 1: 2 Balanced Analytics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* 2. ค่าใช้จ่ายแยกตามประเภท */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">

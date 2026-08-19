@@ -118,7 +118,7 @@ export default function SuperAdminLogs() {
                     </div>
                   </td>
                   <td className="py-4 px-6 align-middle text-gray-600">
-                    {log.user ? `${log.user.name} (${log.user.role})` : '-'}
+                    {log.user ? `${log.user.name} (${log.user.role})` : 'ระบบ (System)'}
                   </td>
                   <td className="py-4 px-6 align-middle text-gray-600">
                     {log.target || '-'}

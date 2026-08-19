@@ -17,7 +17,9 @@ const formatTime = (dateStr: string) => {
 
 import { SystemBooking } from "@/lib/booking-system-types";
 
-export default function PrintBookingForm() {
+import { Suspense } from "react";
+
+function PrintBookingFormContent() {
   const params = useParams();
   const id = params?.id as string;
   const [booking, setBooking] = useState<SystemBooking | null>(null);
@@ -329,5 +331,13 @@ export default function PrintBookingForm() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function PrintBookingForm() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">กำลังโหลดแบบฟอร์ม...</div>}>
+      <PrintBookingFormContent />
+    </Suspense>
   );
 }

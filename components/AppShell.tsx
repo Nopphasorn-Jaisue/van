@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, User, BarChart3, Clock, LayoutDashboard, Wrench,
-  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus, FileSpreadsheet
+  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus, FileSpreadsheet, Menu
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 import { getNotifications, markNotificationAsRead } from '@/app/actions/notifications';
@@ -20,6 +20,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [displayName, setDisplayName] = useState('ผู้ใช้งานระบบ');
   const [facultyName, setFacultyName] = useState<string>('');
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   useEffect(() => {
     const fetchUser = async () => {
@@ -86,16 +87,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-[#f3f4f7] overflow-hidden">
       
       {/* 1. เรียกใช้งาน Sidebar พร้อมส่ง Role ไปควบคุมการเปิด/ปิดเมนู */}
-      <Sidebar userRole={userRole} facultyName={facultyName} isAuthLoading={isAuthLoading} />
+      <Sidebar 
+        userRole={userRole} 
+        facultyName={facultyName} 
+        isAuthLoading={isAuthLoading} 
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+      />
 
       {/* 2. พื้นที่ด้านขวา */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 flex flex-col h-full overflow-hidden w-full">
         
         {/* แถบหัวบน (Top Navbar) */}
-        <nav className="bg-white px-6 py-3 border-b border-gray-200 flex items-center justify-between shadow-sm z-10">
+        <nav className="bg-white px-4 md:px-6 py-3 border-b border-gray-200 flex items-center justify-between shadow-sm z-10 w-full">
           <div className="flex items-center gap-3 md:hidden">
-            <UpLogo compact className="w-8 h-8" />
-            <h1 className="font-bold text-gray-900">Van Booking</h1>
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Menu size={24} />
+            </button>
+            <UpLogo compact className="w-8 h-8 hidden sm:block" />
+            <h1 className="font-bold text-gray-900 text-lg">Van Booking</h1>
           </div>
           
           <div className="hidden md:flex items-center text-sm">
@@ -169,7 +182,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 await clearSession();
                 window.location.href = '/'; 
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-600 hover:text-red-600 rounded-lg transition-colors text-sm font-medium border border-gray-200"
+              className="hidden md:flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-600 hover:text-red-600 rounded-lg transition-colors text-sm font-medium border border-gray-200"
             >
               <LogOut size={18} />
               <span className="hidden sm:inline">ออกจากระบบ</span>
@@ -189,7 +202,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               { icon: LayoutDashboard, label: "แดชบอร์ด", href: "/driver/dashboard" },
               { icon: CalendarDays, label: "ตารางงาน", href: "/driver/schedule" },
               { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-              { icon: Wrench, label: "แจ้งซ่อม/ตรวจสภาพ", href: "/driver/inspection" },
+              { icon: FileSpreadsheet, label: "รายงานการใช้งาน", href: "/driver/usage-report" },
+              { icon: Wrench, label: "ตรวจสภาพ", href: "/driver/inspection" },
               { icon: FileText, label: "รถและสัญญา", href: "/driver/contract" },
             ].map((item, idx) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -309,7 +323,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 // ==========================================
 // 🛠️ SUB-COMPONENT: เมนูด้านซ้าย (Sidebar ฉบับแก้ไขสิทธิ์)
 // ==========================================
-function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, facultyName: string, isAuthLoading: boolean }) {
+function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { userRole: string, facultyName: string, isAuthLoading: boolean, isOpen: boolean, onClose: () => void }) {
   const pathname = usePathname(); 
 
   // 🌟 โครงสร้างเมนูตาม Role ที่กำหนด
@@ -321,7 +335,7 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
         { icon: CalendarDays, label: "ตารางการใช้รถตู้", href: "/faculty-admin/calendar" },
         { icon: FileSignature, label: "คำขอที่ต้องอนุมัติ", href: "/faculty-admin/approvals" },
         { icon: CarFront, label: "จัดการรถประจำคณะ", href: "/faculty-admin/vans" },
-        { icon: Wrench, label: "ซ่อมบำรุง ", href: "/faculty-admin/maintenance" },
+        { icon: Wrench, label: "ประวัติการตรวจสภาพรถตู้", href: "/faculty-admin/maintenance" },
         { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
         { icon: FileSignature, label: "บันทึกการเดินทางคนขับประจำคณะ", href: "/faculty-admin/driver-records" },
         { icon: FilePlus, label: "เบิกค่าใช้จ่ายรายทริป", href: "/faculty-admin/trip-expenses" },
@@ -337,6 +351,7 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
     if (role === "EXECUTIVE") {
       return [
         { icon: LayoutDashboard, label: "แดชบอร์ดคณบดี", href: "/executive/dashboard" },
+        { icon: BarChart3, label: "รายงานการจองรถตู้", href: "/executive/reports" },
         { icon: User, label: "บัญชีผู้ใช้", href: "/executive/profile" },
       ];
     }
@@ -347,7 +362,8 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
         { icon: LayoutDashboard, label: "แดชบอร์ดคนขับ", href: "/driver/dashboard" },
         { icon: CalendarDays, label: "ตารางงานของฉัน", href: "/driver/schedule" },
         { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
-        { icon: Wrench, label: "แจ้งซ่อม/ตรวจสภาพรถ", href: "/driver/inspection" },
+        { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/driver/usage-report" },
+        { icon: Wrench, label: "ตรวจสภาพรถ", href: "/driver/inspection" },
         { icon: FileText, label: "ข้อมูลรถและสัญญา", href: "/driver/contract" },
       ];
     }
@@ -355,6 +371,7 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
     if (role === "SUPER_ADMIN") {
       return [
         { icon: LayoutDashboard, label: "แดชบอร์ดส่วนกลาง", href: "/super-admin/dashboard" },
+        { icon: FileSpreadsheet, label: "จัดการรายชื่อคณะ", href: "/super-admin/faculties" },
         { icon: Users, label: "จัดการผู้ใช้งานระบบ", href: "/super-admin/users" },
         { icon: Bus, label: "จัดการรถตู้ทั้งหมด", href: "/super-admin/vans" },
         { icon: CarFront, label: "จัดการคนขับ", href: "/super-admin/drivers" },
@@ -363,9 +380,18 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
       ];
     }
 
+    if (role === "USER") {
+      return [
+        { icon: CalendarDays, label: "ปฏิทินจองรถตู้", href: "/user/calendar" },
+        { icon: Clock, label: "ติดตามสถานะ", href: "/user/tracking" },
+        { icon: FileSignature, label: "ประวัติการจอง", href: "/user/history" },
+        { icon: User, label: "บัญชีผู้ใช้", href: "/user/profile" },
+      ];
+    }
+
     // Fallback: หากไม่มี Role ที่ตรงกัน ให้แสดงเมนูพื้นฐาน
     return [
-      { icon: LayoutDashboard, label: "แดชบอร์ดคณะ", href: "/faculty-admin/dashboard" },
+      { icon: CalendarDays, label: "ปฏิทินจองรถตู้", href: "/user/calendar" },
     ];
   };
 
@@ -383,9 +409,22 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
   const userFaculty = facultyName;
 
   return (
-    <aside className="w-64 bg-gradient-to-b from-[#2a0c63] via-[#2f0f6f] to-[#240a58] text-white hidden md:flex flex-col h-full shadow-xl z-20 shrink-0">
-      <div className="p-5 border-b border-white/10">
-        <div>
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar Content */}
+      <aside className={`
+        fixed md:static inset-y-0 left-0 w-[280px] md:w-64 bg-gradient-to-b from-[#2a0c63] via-[#2f0f6f] to-[#240a58] text-white flex flex-col h-full shadow-2xl md:shadow-xl z-50 shrink-0 transform transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
+        <div className="p-5 border-b border-white/10 flex items-center justify-between">
+          <div>
           {isAuthLoading ? (
             <>
               <div className="h-6 bg-white/10 rounded w-3/4 animate-pulse mb-1"></div>
@@ -422,6 +461,11 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
               <Link 
                 key={idx}
                 href={item.href}
+                onClick={() => {
+                  if (window.innerWidth < 768) {
+                    onClose();
+                  }
+                }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold mb-1 ${
                   isActive 
                     ? 'bg-white text-[#311171] shadow-md border-l-4 border-green-400 font-black' 
@@ -445,12 +489,9 @@ function Sidebar({ userRole, facultyName, isAuthLoading }: { userRole: string, f
         <p className="mt-1">@vanbooking.up</p>
       </div>
     </aside>
+    </>
   );
 }
-
-
-// "use client";
-// import React, { useState, useEffect, useRef } from 'react';
 // import Link from 'next/link';
 // import { usePathname } from 'next/navigation';
 // import { 

@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import ThaiDatePicker from "@/components/ThaiDatePicker";
-import { Wrench, CheckCircle2, AlertCircle, Send, CarFront, Info, Plus, XCircle } from "lucide-react";
-import { submitRepairNotification } from "@/app/actions/driver";
+import { Wrench, CheckCircle2, AlertCircle, Send, CarFront, Info, XCircle } from "lucide-react";
+import { submitInspectionRecord } from "@/app/actions/driver";
 
 
 export default function DriverInspectionPage() {
@@ -13,16 +13,8 @@ export default function DriverInspectionPage() {
   const [driverId, setDriverId] = useState<number | null>(null);
   const [vanId, setVanId] = useState<number | null>(null);
 
-  // Maintenance Modal State
-  const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = useState(false);
-  const [maintenanceForm, setMaintenanceForm] = useState({
-    vanId: '',
-    date: '', // Initialize empty to avoid SSR hydration mismatch
-
-    detail: '',
-    amount: '',
-    garage: ''
-  });
+  const [inspectionDate, setInspectionDate] = useState("");
+  const [inspectionTime, setInspectionTime] = useState("");
 
   // สถานะของ Checklists
   const [checks, setChecks] = useState({
@@ -48,11 +40,9 @@ export default function DriverInspectionPage() {
   }, [checks, repairDetail, needsRepair]);
 
   useEffect(() => {
-    // Set initial date after mount to avoid hydration mismatch
-    setMaintenanceForm(prev => ({
-      ...prev,
-      date: new Date().toISOString().split('T')[0]
-    }));
+    const now = new Date();
+    setInspectionDate(now.toISOString().split('T')[0]);
+    setInspectionTime(now.toTimeString().split(' ')[0].substring(0, 5));
 
     // Fetch current driver
     fetch('/api/driver/me')
@@ -62,50 +52,14 @@ export default function DriverInspectionPage() {
           setDriverId(data.driverData.id);
           if (data.driverData.assignedVanId) {
             setVanId(data.driverData.assignedVanId);
-            setMaintenanceForm(prev => ({
-              ...prev,
-              vanId: data.driverData.assignedVanId.toString()
-            }));
+            setVanId(data.driverData.assignedVanId);
           }
         }
       })
       .catch(err => console.error("Error fetching driver:", err));
   }, []);
 
-  const handleMaintenanceSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!maintenanceForm.vanId || !maintenanceForm.amount || !maintenanceForm.detail) {
-      alert("กรุณากรอกข้อมูลให้ครบถ้วน");
-      return;
-    }
-    try {
-      const res = await fetch('/api/maintenance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...maintenanceForm,
-          type: 'MAINTENANCE'
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("บันทึกประวัติการซ่อมบำรุงเรียบร้อยแล้ว");
-        setIsMaintenanceModalOpen(false);
-        setMaintenanceForm(prev => ({
-          ...prev,
-          date: new Date().toISOString().split('T')[0],
-          detail: '',
-          amount: '',
-          garage: ''
-        }));
-      } else {
-        alert("เกิดข้อผิดพลาด: " + data.error);
-      }
-    } catch (err) {
-      console.error("Maintenance save error:", err);
-      alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
-    }
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,15 +72,15 @@ export default function DriverInspectionPage() {
     setError(null);
 
     try {
-      if (needsRepair) {
-        if (!driverId || !vanId) {
-          throw new Error("ไม่พบข้อมูลคนขับหรือรถตู้ประจำตัว โปรดติดต่อแอดมิน");
-        }
-        // ถ้ารถมีปัญหา ส่งแจ้งซ่อม
-        const res = await submitRepairNotification(driverId, vanId, repairDetail);
-        if (!res.success) {
-          throw new Error(res.error || "เกิดข้อผิดพลาดในการส่งแจ้งซ่อม");
-        }
+      if (!driverId || !vanId) {
+        throw new Error("ไม่พบข้อมูลคนขับหรือรถตู้ประจำตัว โปรดติดต่อแอดมิน");
+      }
+      
+      const inspectionDateTime = new Date(`${inspectionDate}T${inspectionTime}`);
+      
+      const res = await submitInspectionRecord(driverId, vanId, repairDetail, needsRepair, inspectionDateTime);
+      if (!res.success) {
+        throw new Error(res.error || "เกิดข้อผิดพลาดในการบันทึก");
       }
       
       setSuccess(true);
@@ -180,18 +134,12 @@ export default function DriverInspectionPage() {
           <div>
             <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
               <Wrench className="text-purple-400" size={28} />
-              แจ้งซ่อมและตรวจสภาพรถ
+              ตรวจสภาพรถ
             </h1>
             <p className="text-sm font-bold text-gray-500 mt-1">
-              ตรวจสอบความพร้อมของรถก่อนออกเดินทาง หรือแจ้งซ่อมเมื่อพบปัญหา
+              ตรวจสอบความพร้อมของรถก่อนออกเดินทาง
             </p>
           </div>
-          <button 
-            onClick={() => setIsMaintenanceModalOpen(true)}
-            className="flex items-center gap-2 bg-[#582be8] hover:bg-[#4820c9] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all"
-          >
-            บันทึกประวัติการเข้าซ่อม
-          </button>
         </div>
 
         {error && (
@@ -214,6 +162,26 @@ export default function DriverInspectionPage() {
             <div className="flex items-center gap-2 pb-4 border-b border-gray-100">
               <CarFront className="text-[#311171]" size={20} />
               <h2 className="text-lg font-black text-gray-900">เช็คความพร้อมก่อนเดินทาง</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">วันที่ตรวจสอบ</label>
+                <ThaiDatePicker 
+                  value={inspectionDate}
+                  onChange={(val) => setInspectionDate(val)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">เวลาที่ตรวจสอบ</label>
+                <input 
+                  type="time" 
+                  value={inspectionTime}
+                  onChange={(e) => setInspectionTime(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-[#582be8] outline-none" 
+                  required
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -274,89 +242,7 @@ export default function DriverInspectionPage() {
 
       </div>
 
-      {/* Modal for Record New Repair Item */}
-      {isMaintenanceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                <Plus className="w-4 h-4 text-[#582be8]" /> บันทึกรายการใหม่
-              </h2>
-            </div>
-            <div className="p-6 max-h-[80vh] overflow-y-auto">
-              <form className="space-y-6" onSubmit={handleMaintenanceSubmit}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-2">วันที่ทำรายการ</label>
-                    <ThaiDatePicker 
-                      value={maintenanceForm.date}
-                      onChange={(val) => setMaintenanceForm({...maintenanceForm, date: val})}
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">ประเภทรายการ</label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <label className="cursor-pointer">
-                      <input type="radio" className="peer sr-only" checked readOnly />
-                      <div className="rounded-xl border border-purple-600 bg-purple-50 text-purple-700 p-3.5 flex flex-col items-center justify-center gap-2 transition-all shadow-sm">
-                        <Wrench className="w-5 h-5" />
-                        <span className="text-xs font-bold">ซ่อมบำรุง</span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">รายละเอียดรายการ</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={maintenanceForm.detail}
-                    onChange={(e) => setMaintenanceForm({...maintenanceForm, detail: e.target.value})}
-                    placeholder="ระบุรายละเอียด เช่น เปลี่ยนถ่ายน้ำมันเครื่อง..." 
-                    className="w-full rounded-xl border border-gray-200 p-3 text-xs focus:ring-2 focus:ring-[#582be8] outline-none" 
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-2">จำนวนเงิน (บาท)</label>
-                    <input 
-                      type="number" 
-                      required
-                      value={maintenanceForm.amount}
-                      onChange={(e) => setMaintenanceForm({...maintenanceForm, amount: e.target.value})}
-                      placeholder="0.00" 
-                      className="w-full rounded-xl border border-gray-200 p-3 text-sm font-bold focus:ring-2 focus:ring-[#582be8] outline-none" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-2">สถานที่ / อู่ / ตัวแทน</label>
-                    <input 
-                      type="text" 
-                      value={maintenanceForm.garage}
-                      onChange={(e) => setMaintenanceForm({...maintenanceForm, garage: e.target.value})}
-                      placeholder="ชื่ออู่ซ่อมรถ..." 
-                      className="w-full rounded-xl border border-gray-200 p-3 text-xs focus:ring-2 focus:ring-[#582be8] outline-none" 
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4 flex justify-end gap-3">
-                  <button type="button" onClick={() => setIsMaintenanceModalOpen(false)} className="px-5 py-2.5 rounded-xl font-bold text-xs text-gray-600 hover:bg-gray-100 transition-colors">
-                    ยกเลิก
-                  </button>
-                  <button type="submit" className="px-6 py-2.5 bg-[#582be8] hover:bg-[#4820c9] text-white rounded-xl font-bold text-xs transition-colors shadow-sm flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" /> บันทึกข้อมูล
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </AppShell>
   );
 }

@@ -29,6 +29,7 @@ interface Trip {
   status: string;
   isAdhoc?: boolean;
   rawDate?: string;
+  rawReturnDate?: string;
   rawStartTime?: string;
   rawEndTime?: string;
   actualData?: {
@@ -39,6 +40,22 @@ interface Trip {
     lastMileage?: string | null;
     startMileage?: string | null;
   };
+}
+
+interface RawCalendarEvent {
+  id?: string | number;
+  vanId?: string;
+  facultyId?: string | number;
+  phone?: string;
+  date?: string;
+  returnDate?: string;
+  time?: string;
+  destination?: string;
+  purpose?: string;
+  passengers?: number | string;
+  requester?: string;
+  bookingFaculty?: string;
+  status?: string;
 }
 
 interface BookingData {
@@ -198,6 +215,7 @@ export default function DriverSchedule() {
               id: b.id,
               date: new Date(b.departureDate).toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }),
               rawDate: new Date(b.departureDate).toISOString().split('T')[0],
+              rawReturnDate: new Date(b.returnDate).toISOString().split('T')[0],
               destination: b.destination,
               time: `${new Date(b.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
               passengers: b.passengersCount,
@@ -212,7 +230,73 @@ export default function DriverSchedule() {
           });
         }
 
-        const combined = [...mapped];
+        // 2. Fetch Calendar Events (from system-calendar / calendar-store API)
+        let calMapped: Trip[] = [];
+        try {
+          const calRes = await fetch('/api/calendar-events');
+          if (calRes.ok) {
+            const calData = await calRes.json();
+            if (calData && calData.rawEvents && Array.isArray(calData.rawEvents)) {
+              const actualVanId = meData.driverData.assignedVanId || meData.driverData.facultyVanId;
+              const driverVanIdStr = String(actualVanId);
+              const driverLegacyVanId = meData.driverData.legacyVanId;
+
+              calMapped = calData.rawEvents
+                .filter((e: RawCalendarEvent) => {
+                  if (e.status === 'rejected' || e.status === 'cancelled') return false;
+                  const eventVanId = String(e.vanId);
+                  const driverVanIdFormatted = `van-${driverVanIdStr.padStart(3, '0')}`;
+                  
+                  const eventFacultyId = String(e.facultyId);
+                  const driverFacultyId = String(meData.driverData.facultyId);
+                  
+                  const isVanMatch = eventVanId === driverVanIdStr || eventVanId === driverLegacyVanId || eventVanId === driverVanIdFormatted;
+                  
+                  const isFacultyMatch = eventFacultyId === driverFacultyId 
+                                      || (eventFacultyId === 'ict' && driverLegacyVanId === 'v-ict')
+                                      || (eventFacultyId === 'pharm' && driverLegacyVanId === 'v-pharm')
+                                      || (eventFacultyId === 'sci' && driverLegacyVanId === 'v-sci')
+                                      || (eventFacultyId === 'agr' && driverLegacyVanId === 'v-agri')
+                                      || (eventFacultyId === 'ener' && driverLegacyVanId === 'v-seen')
+                                      || (eventFacultyId === 'eng' && driverLegacyVanId === 'v-eng');
+
+                  return isVanMatch || isFacultyMatch;
+                })
+                .map((e: RawCalendarEvent) => {
+                  const startRaw = e.date ? String(e.date).slice(0, 10) : new Date().toISOString().split('T')[0];
+                  const returnRaw = e.returnDate ? String(e.returnDate).slice(0, 10) : startRaw;
+
+                  const dDate = new Date(startRaw.includes('T') ? startRaw : `${startRaw}T00:00:00`);
+                  const displayDate = !isNaN(dDate.getTime())
+                    ? dDate.toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+                    : startRaw;
+
+                  return {
+                    id: String(e.id || `cal-${Date.now()}`),
+                    date: displayDate,
+                    rawDate: startRaw,
+                    rawReturnDate: returnRaw,
+                    destination: e.destination || 'ไม่ระบุสถานที่',
+                    time: e.time || '08:30 - 16:30 น.',
+                    passengers: Number(e.passengers || 1),
+                    requester: e.requester || 'ผู้ขอใช้บริการ',
+                    phone: e.phone || '-',
+                    pickup: e.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+                    van: 'รถตู้ประจำคณะ',
+                    project: e.purpose || 'ภารกิจใช้รถตู้',
+                    status: 'ASSIGNED',
+                  };
+                });
+            }
+          }
+        } catch (calErr) {
+          console.warn("Failed to load calendar events for driver:", calErr);
+        }
+
+        const existingIds = new Set(mapped.map(t => String(t.id)));
+        const uniqueCalMapped = calMapped.filter(t => !existingIds.has(String(t.id)));
+        const combined = [...mapped, ...uniqueCalMapped];
+
         setUpcomingTrips(combined.filter((b: Trip) => b.status === "ASSIGNED"));
         setPastTrips(combined.filter((b: Trip) => b.status === "COMPLETED"));
         }
@@ -245,7 +329,12 @@ export default function DriverSchedule() {
     const d = new Date(startOfWeek);
     d.setDate(startOfWeek.getDate() + i);
     const isoDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    const hasJob = [...upcomingTrips, ...pastTrips].some(trip => trip.rawDate === isoDate);
+    const hasJob = [...upcomingTrips, ...pastTrips].some(trip => {
+      if (!trip.rawDate) return false;
+      const tStart = trip.rawDate;
+      const tEnd = trip.rawReturnDate || trip.rawDate;
+      return isoDate >= tStart && isoDate <= tEnd;
+    });
     return { 
       day: ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"][i], 
       date: d.getDate(), 
@@ -336,18 +425,18 @@ export default function DriverSchedule() {
           {calendarMode === "week" ? (
             <div className="flex justify-between items-center">
               {weekDays.map((d, i) => {
-                const today = new Date();
-                const isToday = today.getDate() === d.date && today.getMonth() === d.fullDate.getMonth() && today.getFullYear() === d.fullDate.getFullYear();
+                const isSelected = selectedFullDate && selectedFullDate.getDate() === d.date && selectedFullDate.getMonth() === d.fullDate.getMonth() && selectedFullDate.getFullYear() === d.fullDate.getFullYear();
                 return (
                   <div 
                     key={i} 
-                    className={`flex flex-col items-center justify-center w-11 h-16 rounded-2xl transition-all ${
-                      isToday ? "bg-[#311171] text-white shadow-md scale-105" : "bg-transparent text-gray-600"
+                    onClick={() => setSelectedFullDate(d.fullDate)}
+                    className={`flex flex-col items-center justify-center w-11 h-16 rounded-2xl transition-all cursor-pointer ${
+                      isSelected ? "bg-[#311171] text-white shadow-md scale-105" : "bg-transparent text-gray-600 hover:bg-gray-100"
                     }`}
                   >
-                    <span className={`text-[10px] font-bold ${isToday ? "text-purple-200" : "text-gray-400"}`}>{d.day}</span>
+                    <span className={`text-[10px] font-bold ${isSelected ? "text-purple-200" : "text-gray-400"}`}>{d.day}</span>
                     <span className="text-base font-black mt-0.5">{d.date}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${d.hasJob ? (isToday ? "bg-white" : "bg-orange-500") : "bg-transparent"}`} />
+                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${d.hasJob ? (isSelected ? "bg-white" : "bg-orange-500") : "bg-transparent"}`} />
                   </div>
                 )
               })}
@@ -363,21 +452,25 @@ export default function DriverSchedule() {
                   
                   const d = new Date(currentYear, currentMonth, day);
                   const isoDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-                  const hasJob = [...upcomingTrips, ...pastTrips].some(trip => trip.rawDate === isoDate);
-                  
-                  const today = new Date();
-                  const isToday = today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
+                  const hasJob = [...upcomingTrips, ...pastTrips].some(trip => {
+                    if (!trip.rawDate) return false;
+                    const tStart = trip.rawDate;
+                    const tEnd = trip.rawReturnDate || trip.rawDate;
+                    return isoDate >= tStart && isoDate <= tEnd;
+                  });
+                  const isSelected = selectedFullDate && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
 
                   return (
                     <div
                       key={i}
-                      className={`relative flex justify-center items-center h-10 w-full rounded-xl transition-all ${
-                        isToday ? 'bg-[#311171] text-white font-bold shadow-md' : 'text-gray-600'
+                      onClick={() => setSelectedFullDate(d)}
+                      className={`relative flex justify-center items-center h-10 w-full rounded-xl transition-all cursor-pointer ${
+                        isSelected ? 'bg-[#311171] text-white font-bold shadow-md' : 'text-gray-600 hover:bg-gray-100'
                       }`}
                     >
                       {day}
-                      {hasJob && !isToday && <div className="absolute bottom-1.5 w-1 h-1 bg-orange-500 rounded-full"></div>}
-                      {hasJob && isToday && <div className="absolute bottom-1.5 w-1 h-1 bg-white rounded-full"></div>}
+                      {hasJob && !isSelected && <div className="absolute bottom-1.5 w-1 h-1 bg-orange-500 rounded-full"></div>}
+                      {hasJob && isSelected && <div className="absolute bottom-1.5 w-1 h-1 bg-white rounded-full"></div>}
                     </div>
                   );
                 })}
@@ -415,8 +508,29 @@ export default function DriverSchedule() {
             </div>
           ) : (
             <>
-              {displayTrips.map(trip => (
-                <div key={trip.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 transition-all hover:shadow-md hover:border-purple-200 group">
+              {(() => {
+                const selectedIso = selectedFullDate 
+                  ? new Date(selectedFullDate.getTime() - (selectedFullDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
+                  : null;
+
+                const currentDisplayTrips = displayTrips.filter(trip => {
+                  if (!selectedIso || !trip.rawDate) return true;
+                  const tStart = trip.rawDate;
+                  const tEnd = trip.rawReturnDate || trip.rawDate;
+                  return selectedIso >= tStart && selectedIso <= tEnd;
+                });
+
+                if (currentDisplayTrips.length === 0) {
+                  return (
+                    <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-gray-100 border-dashed">
+                      <CalendarIcon size={48} className="mx-auto mb-4 text-gray-200" />
+                      <p className="font-bold">ไม่มีข้อมูลภารกิจในหมวดหมู่นี้</p>
+                    </div>
+                  );
+                }
+
+                return currentDisplayTrips.map(trip => (
+                  <div key={trip.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 transition-all hover:shadow-md hover:border-purple-200 group">
                   <div className="flex justify-between items-start mb-3 border-b border-gray-50 pb-3">
                     <div className="flex items-center gap-2 text-[#311171]">
                       <CalendarIcon size={18} />
@@ -506,14 +620,8 @@ export default function DriverSchedule() {
                     </button>
                   </div>
                 </div>
-              ))}
-              
-              {displayTrips.length === 0 && (
-                <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-gray-100 border-dashed">
-                  <CalendarIcon size={48} className="mx-auto mb-4 text-gray-200" />
-                  <p className="font-bold">ไม่มีข้อมูลภารกิจในหมวดหมู่นี้</p>
-                </div>
-              )}
+              ));
+              })()}
             </>
           )}
         </div>

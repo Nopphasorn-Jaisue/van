@@ -15,7 +15,7 @@ interface UserItem {
   role: "SUPER_ADMIN" | "FACULTY_ADMIN" | "EXECUTIVE" | "DRIVER" | "USER";
   email: string;
   status: "ACTIVE" | "SUSPENDED" | "PENDING";
-  lastLogin: string;
+  lastLogin?: string;
 }
 
 export default function SuperAdminUsers() {
@@ -69,7 +69,7 @@ export default function SuperAdminUsers() {
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
-    role: "USER" as UserItem["role"],
+    role: "FACULTY_ADMIN" as UserItem["role"],
     faculty: "คณะเภสัชฯ"
   });
 
@@ -91,7 +91,7 @@ export default function SuperAdminUsers() {
       
       if (res.ok) {
         setIsAddUserOpen(false);
-        setNewUser({ name: "", email: "", role: "USER", faculty: "คณะเภสัชฯ" });
+        setNewUser({ name: "", email: "", role: "FACULTY_ADMIN", faculty: "คณะเภสัชฯ" });
         showToast(`เพิ่มผู้ใช้งาน ${newUser.name} เรียบร้อยแล้ว`);
         fetchUsers();
       } else {
@@ -178,6 +178,8 @@ export default function SuperAdminUsers() {
         return <span className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-amber-100 text-amber-700 border border-amber-200">ผู้บริหาร</span>;
       case "DRIVER":
         return <span className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200">พนักงานขับรถ</span>;
+      case "USER":
+        return <span className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">ผู้ใช้งานทั่วไป (นิสิต/บุคลากร)</span>;
       default:
         return <span className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-gray-100 text-gray-600 border border-gray-200">{role}</span>;
     }
@@ -282,6 +284,8 @@ export default function SuperAdminUsers() {
                   <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
+                  <option value="DRIVER">พนักงานขับรถ</option>
+                  <option value="USER">ผู้ใช้งานทั่วไป (นิสิต/บุคลากร)</option>
                 </select>
               </div>
 
@@ -306,20 +310,19 @@ export default function SuperAdminUsers() {
                     <th className="py-3 px-3">บทบาท</th>
                     <th className="py-3 px-3">อีเมล</th>
                     <th className="py-3 px-3">สถานะ</th>
-                    <th className="py-3 px-3">เข้าใช้งานล่าสุด</th>
                     <th className="py-3 px-4 text-center">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-gray-500 font-bold">
+                      <td colSpan={6} className="py-10 text-center text-gray-500 font-bold">
                         กำลังโหลดข้อมูลผู้ใช้งาน...
                       </td>
                     </tr>
                   ) : paginatedUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-gray-500 font-bold">
+                      <td colSpan={6} className="py-10 text-center text-gray-500 font-bold">
                         ไม่พบข้อมูลผู้ใช้งาน
                       </td>
                     </tr>
@@ -335,7 +338,6 @@ export default function SuperAdminUsers() {
                       <td className="py-3 px-3 whitespace-nowrap">{getRoleBadge(user.role)}</td>
                       <td className="py-3 px-3 font-mono text-gray-600 text-[11px]">{user.email}</td>
                       <td className="py-3 px-3 whitespace-nowrap">{getStatusBadge(user.status)}</td>
-                      <td className="py-3 px-3 text-gray-500 font-medium whitespace-nowrap text-[11px]">{user.lastLogin}</td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -465,6 +467,7 @@ export default function SuperAdminUsers() {
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
                   <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
+                  <option value="USER">ผู้ใช้งานทั่วไป (นิสิต/บุคลากร)</option>
                 </select>
               </div>
 
@@ -674,6 +677,7 @@ export default function SuperAdminUsers() {
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
                   <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
+                  <option value="USER">ผู้ใช้งานทั่วไป (นิสิต/บุคลากร)</option>
                 </select>
               </div>
 

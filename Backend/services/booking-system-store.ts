@@ -4,7 +4,7 @@ import {
   SystemBookingStatus,
 } from "@/lib/booking-system-types";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { BookingStatus, Prisma } from "@prisma/client";
 
 type CalendarRow = {
   id: string;
@@ -68,7 +68,7 @@ const seedBookings: SeedBooking[] = [
     startAt: "2026-07-21T08:30:00+07:00",
     endAt: "2026-07-21T18:30:00+07:00",
     status: "WAITING_EXEC",
-    assignedDriverName: "นายอนุชา คำมี",
+    assignedDriverName: "นายชูชาติ สุขใจ",
   },
   {
     id: "UPV-2569-0067",
@@ -95,7 +95,7 @@ function normalizeRole(rawRole: unknown): string {
 }
 
 function mapStatus(status: string): SystemBookingStatus {
-  return status as unknown as SystemBookingStatus;
+  return status as SystemBookingStatus;
 }
 
 function makeDriverCode(id: number) {
@@ -245,9 +245,9 @@ async function toBookingDto(row: BookingWithRelations) {
 export async function listBookings(status?: SystemBookingStatus, facultyId?: number) {
   await ensureSeedData();
 
-  const where: any = {};
+  const where: Prisma.BookingWhereInput = {};
   if (status) {
-    where.status = status;
+    where.status = status === "COMPLETED" ? BookingStatus.APPROVED : (status as BookingStatus);
   }
   if (facultyId) {
     where.requester = { facultyId };
@@ -347,7 +347,7 @@ function detectAvailability(driverId: number, bookings: Array<{ assignedDriverId
 export async function listDrivers(date?: string, facultyId?: number) {
   await ensureSeedData();
 
-  const where: any = {};
+  const where: Prisma.DriverWhereInput = {};
   if (facultyId) {
     where.facultyId = facultyId;
   }
@@ -398,6 +398,8 @@ export async function listDrivers(date?: string, facultyId?: number) {
       phone: driver.phone,
       avatar: driver.avatar || `https://i.pravatar.cc/150?u=${driver.id}`,
       faculty: driver.faculty.nameTh,
+      facultyId: driver.facultyId,
+      assignedVanId: driver.assignedVanId,
       vanId: driver.assignedVan?.id ? `van-${driver.assignedVan.id.toString().padStart(3, "0")}` : (driver.faculty.vans?.[0] ? `van-${driver.faculty.vans[0].id.toString().padStart(3, "0")}` : ""),
       vanPlate: driver.assignedVan?.plate || driver.faculty.vans?.[0]?.plate || "ยังไม่ผูกทะเบียน",
       contractStart: driver.contractStart ? driver.contractStart.toISOString().split('T')[0] : "2024-01-01",
@@ -432,6 +434,18 @@ export async function assignDriver(bookingId: string, driverCode: string) {
     throw new Error("DRIVER_NOT_FOUND");
   }
 
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId }
+  });
+
+  if (!booking) {
+    throw new Error("BOOKING_NOT_FOUND");
+  }
+
+  if (driver.facultyId !== booking.targetFacultyId) {
+    throw new Error("DRIVER_FACULTY_MISMATCH");
+  }
+
   const row = await prisma.booking.update({
     where: { id: bookingId },
     data: {
@@ -450,12 +464,12 @@ export async function assignDriver(bookingId: string, driverCode: string) {
 export async function updateBookingStatus(bookingId: string, status: SystemBookingStatus, reason?: string) {
   await ensureSeedData();
 
-  const dbStatus = status === "COMPLETED" ? "APPROVED" : status;
+  const dbStatus: BookingStatus = status === "COMPLETED" ? BookingStatus.APPROVED : (status as BookingStatus);
 
   const row = await prisma.booking.update({
     where: { id: bookingId },
     data: {
-      status: dbStatus as never,
+      status: dbStatus,
       rejectReason: status === "REJECTED" ? reason || "ไม่ผ่านการอนุมัติ" : null,
     },
     include: {
@@ -567,7 +581,7 @@ export async function getDriverDashboard(driverCode: string) {
     },
     todayTrip,
     upcoming,
-    logs: logs.map((log: any) => ({
+    logs: logs.map((log) => ({
       id: `log-${log.id}`,
       bookingId: log.bookingId,
       driverId: makeDriverCode(log.driverId),
