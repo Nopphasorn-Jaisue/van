@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import DashboardLoader from '@/components/DashboardLoader';
-import { Calendar as CalendarIcon, Clock, Users, ChevronRight, ChevronLeft, CalendarDays, MapPin, Phone, User, Car, X, Hourglass, History, Plus, Trash2, Edit, AlertTriangle } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Users, ChevronRight, ChevronLeft, CalendarDays, MapPin, Phone, User, Car, X, Hourglass, History, Plus, Trash2, Edit, AlertTriangle, CheckCircle } from 'lucide-react';
 import { getAssignedBookings, createAdhocBooking, updateAdhocBooking, deleteAdhocBooking } from '@/app/actions/driver';
 import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ThaiTimePicker from '@/components/ThaiTimePicker';

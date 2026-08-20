@@ -26,6 +26,22 @@ export interface AssignedBooking {
   driverLog?: unknown;
 }
 
+export interface RawCalendarEvent {
+  id?: string | number;
+  vanId?: string;
+  facultyId?: string | number;
+  phone?: string;
+  date?: string;
+  returnDate?: string;
+  time?: string;
+  destination?: string;
+  purpose?: string;
+  passengers?: number | string;
+  requester?: string;
+  bookingFaculty?: string;
+  status?: string;
+}
+
 type ChecklistStatus = 'normal' | 'issue' | 'unchecked';
 
 interface ChecklistItem {
@@ -188,7 +204,7 @@ export default function DriverRecords() {
       if (currentDriverId) {
         const res = await getAssignedBookings(currentDriverId); 
         if (res.success && res.bookings) {
-          allDbBookingIds = new Set(res.bookings.map((b: any) => String(b.id)));
+          allDbBookingIds = new Set(res.bookings.map((b: AssignedBooking) => String(b.id)));
           dbMapped = res.bookings.filter((b: AssignedBooking) => {
             // Only unfinished trips for today
             if (b.driverLog) return false;
@@ -217,7 +233,7 @@ export default function DriverRecords() {
           const calData = await calRes.json();
           if (calData && calData.rawEvents && Array.isArray(calData.rawEvents)) {
             calMapped = calData.rawEvents
-              .filter((e: any) => {
+              .filter((e: RawCalendarEvent) => {
                 if (e.status === 'rejected' || e.status === 'cancelled') return false;
                 // Only include true Google Calendar events, not DB bookings that were synced to calendar
                 if (e.id && String(e.id).startsWith('bk-')) return false;
@@ -234,7 +250,7 @@ export default function DriverRecords() {
                 const tripDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(dateObj);
                 return tripDate === todayStr;
               })
-              .map((e: any) => {
+              .map((e: RawCalendarEvent) => {
                 const sDate = e.date ? (e.date.includes('T') ? e.date : `${e.date}T08:30:00`) : new Date().toISOString();
                 const rDate = e.returnDate ? (e.returnDate.includes('T') ? e.returnDate : `${e.returnDate}T16:30:00`) : sDate;
 
