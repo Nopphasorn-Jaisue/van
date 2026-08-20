@@ -20,6 +20,7 @@ type Trip = {
 type RawCalendarEvent = {
   id?: string | number;
   vanId?: string;
+  facultyId?: string | number;
   phone?: string;
   date?: string;
   returnDate?: string;
