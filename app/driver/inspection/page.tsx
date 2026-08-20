@@ -50,9 +50,9 @@ export default function DriverInspectionPage() {
       .then(data => {
         if (data.success && data.driverData) {
           setDriverId(data.driverData.id);
-          if (data.driverData.assignedVanId) {
-            setVanId(data.driverData.assignedVanId);
-            setVanId(data.driverData.assignedVanId);
+          const driverVanId = data.driverData.assignedVanId || data.driverData.facultyVanId;
+          if (driverVanId) {
+            setVanId(driverVanId);
           }
         }
       })

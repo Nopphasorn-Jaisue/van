@@ -59,6 +59,7 @@ export type SystemDriverLog = {
 };
 
 export type CreateBookingPayload = {
+  requesterId?: number;
   requester: string;
   requesterFaculty: string;
   destination: string;

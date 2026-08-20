@@ -178,36 +178,25 @@ export default function Page() {
           {/* Row 1: 2 Balanced Analytics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-            {/* 2. ค่าใช้จ่ายแยกตามประเภท */}
+            {/* 2. วันที่คนนิยมเดินทาง */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
-              <h3 className="text-sm font-bold text-slate-800 mb-4">ค่าใช้จ่ายแยกตามประเภท</h3>
-              <div className="space-y-4 my-auto">
-                {expenseBreakdown.map((exp, i) => {
-                  const Icon = exp.icon === 'Fuel' ? Fuel : (exp.icon === 'MapPin' ? MapPin : AlertCircle);
-                  return (
-                    <div key={i}>
-                      <div className="flex justify-between items-center mb-1.5 text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className={`p-1.5 ${exp.bgClass} rounded-lg ${exp.textClass}`}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <span className="font-semibold text-slate-700">{exp.category}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800">{exp.amount.toLocaleString()} ฿</span>
-                          <span className="text-slate-400 font-medium text-[11px]">{exp.percentage}%</span>
-                        </div>
-                      </div>
-                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={`h-full ${exp.colorClass} rounded-full`} style={{ width: `${exp.percentage}%` }}></div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center gap-2 mb-4">
+                <CalendarDays className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-800">วันที่คนนิยมเดินทาง</h3>
               </div>
-              <div className="pt-3 border-t border-slate-100 flex justify-between items-center mt-4">
-                <span className="text-xs font-bold text-slate-700">รวมค่าใช้จ่าย</span>
-                <span className="text-lg font-black text-slate-900">{totalExpense.toLocaleString()} <span className="text-xs font-bold text-slate-500">บาท</span></span>
+              <div className="space-y-4 my-auto">
+                {/* Mock data for travel dates */}
+                {[
+                  { date: "ทุกวันศุกร์", count: 12 },
+                  { date: "ทุกวันจันทร์", count: 9 },
+                  { date: "ช่วงสิ้นเดือน", count: 7 },
+                  { date: "วันหยุดนักขัตฤกษ์", count: 4 }
+                ].map((item, i) => (
+                  <div key={i} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
+                    <span className="font-semibold text-slate-700 text-xs">{item.date}</span>
+                    <span className="text-indigo-600 font-bold text-xs bg-indigo-50 px-2 py-1 rounded-md">{item.count} เที่ยว</span>
+                  </div>
+                ))}
               </div>
             </div>
 

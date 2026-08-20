@@ -122,7 +122,7 @@ export default function ApprovalsPage() {
     const { id, type: actionType } = pendingAction;
     
     let dbStatus = '';
-    if (actionType === 'อนุมัติ' || actionType === 'อนุญาตให้ยืม') dbStatus = 'APPROVED';
+    if (actionType === 'อนุมัติ' || actionType === 'อนุญาตให้ยืม') dbStatus = 'WAITING_EXEC';
     if (actionType === 'ปฏิเสธ') dbStatus = 'REJECTED';
 
     if (dbStatus) {

@@ -100,7 +100,7 @@ export default function SuperAdminDashboard() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 relative z-10">
+        <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={() => router.push('/super-admin/users')}
             className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-bold text-xs sm:text-sm rounded-2xl transition-all border border-gray-200 shadow-sm"

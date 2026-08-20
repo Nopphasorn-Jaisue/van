@@ -290,7 +290,10 @@ export async function createBooking(payload: CreateBookingPayload) {
     (await prisma.faculty.findFirst({ where: { nameTh: payload.requesterFaculty } })) ||
     (await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } }));
 
-  let requester = await prisma.user.findFirst({ where: { name: payload.requester } });
+  let requester = payload.requesterId 
+    ? await prisma.user.findUnique({ where: { id: payload.requesterId } })
+    : await prisma.user.findFirst({ where: { name: payload.requester } });
+  
   if (!requester) {
     requester = await prisma.user.create({
       data: {

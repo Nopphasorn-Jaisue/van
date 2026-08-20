@@ -27,7 +27,9 @@ export async function handleListBookings(request: Request) {
 export async function handleCreateSystemBooking(request: Request) {
   try {
     const body = await request.json();
+    const user = await getAuthUser();
     const booking = await createBooking({
+      requesterId: user ? Number(user.id) : undefined,
       requester: body.requester || "ผู้ใช้งานระบบ",
       requesterFaculty: body.requesterFaculty || "ไม่ระบุ",
       destination: body.destination,
