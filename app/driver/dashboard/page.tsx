@@ -15,7 +15,7 @@ type Trip = {
   passengersCount?: number;
   requester?: { name: string; phone?: string };
   targetFaculty?: { nameTh: string };
-  driverLog?: any;
+  driverLog?: Record<string, unknown>;
 };
 
 type RawCalendarEvent = {
@@ -44,6 +44,17 @@ export default function DriverDashboard() {
   const [availabilityType, setAvailabilityType] = useState<AvailabilityStatus>('SICK_LEAVE');
   const [availabilityDetail, setAvailabilityDetail] = useState('');
   const [isSubmittingAvailability, setIsSubmittingAvailability] = useState(false);
+  
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<'success' | 'warning'>('success');
+
+  const showNotification = (msg: string, type: 'success' | 'warning' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
   
   const [dashboardData, setDashboardData] = useState<{
     driver?: { name: string; faculty: string; vanPlate: string };
@@ -158,8 +169,8 @@ export default function DriverDashboard() {
 
   const handleAvailabilitySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (availabilityType !== 'READY' && !availabilityDetail) {
-      alert("กรุณาระบุรายละเอียดเพิ่มเติม/เหตุผล");
+    if (availabilityType !== 'READY' && !availabilityDetail.trim()) {
+      showNotification("กรุณาระบุรายละเอียดเพิ่มเติม/เหตุผล", "warning");
       return;
     }
     setIsSubmittingAvailability(true);
@@ -167,7 +178,7 @@ export default function DriverDashboard() {
     try {
       const driverId = parseInt(localStorage.getItem('current_driver_id') || '0');
       if (!driverId) {
-        alert("ไม่พบข้อมูลคนขับ โปรดลองรีเฟรชหน้าเว็บ");
+        showNotification("ไม่พบข้อมูลคนขับ โปรดลองรีเฟรชหน้าเว็บ", "warning");
         setIsSubmittingAvailability(false);
         return;
       }
@@ -179,15 +190,15 @@ export default function DriverDashboard() {
         availabilityDetail
       );
       if (res.success) {
-        alert("ส่งข้อมูลเปลี่ยนสถานะเรียบร้อยแล้ว");
+        showNotification("ส่งข้อมูลเปลี่ยนสถานะเรียบร้อยแล้ว", "success");
         setShowAvailabilityModal(false);
         setAvailabilityDetail('');
       } else {
-        alert("เกิดข้อผิดพลาด: " + res.error);
+        showNotification("เกิดข้อผิดพลาด: " + res.error, "warning");
       }
     } catch (err) {
       console.error(err);
-      alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+      showNotification("เกิดข้อผิดพลาดในการเชื่อมต่อ", "warning");
     } finally {
       setIsSubmittingAvailability(false);
     }
@@ -231,6 +242,18 @@ export default function DriverDashboard() {
 
   return (
     <AppShell>
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="bg-white px-4 py-3 rounded-full shadow-xl border border-gray-100 flex items-center gap-3">
+            <div className={`p-1.5 rounded-full ${toastType === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'}`}>
+              {toastType === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+            </div>
+            <span className="text-sm font-bold text-gray-700">{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
       <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-20 relative">
         
         {/* Sticky Fixed Top Header Section */}

@@ -82,6 +82,17 @@ export default function DriverSchedule() {
   const [pastTrips, setPastTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<'success' | 'warning'>('success');
+
+  const showNotification = (msg: string, type: 'success' | 'warning' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
   // Adhoc form state
   const [isAdhocModalOpen, setIsAdhocModalOpen] = useState(false);
   const [adhocForm, setAdhocForm] = useState({
@@ -142,7 +153,7 @@ export default function DriverSchedule() {
     // Call server action to actually save to DB
     const driverId = parseInt(localStorage.getItem('current_driver_id') || '0');
     if (!driverId) {
-      alert("ไม่พบข้อมูลพนักงานขับรถ");
+      showNotification("ไม่พบข้อมูลพนักงานขับรถ", "warning");
       return;
     }
 
@@ -179,8 +190,9 @@ export default function DriverSchedule() {
         setUpcomingTrips(prev => [newTrip, ...prev]);
       }
       setIsAdhocModalOpen(false);
+      showNotification("บันทึกข้อมูลเรียบร้อยแล้ว", "success");
     } else {
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+      showNotification("เกิดข้อผิดพลาดในการบันทึกข้อมูล", "warning");
     }
   };
 
@@ -385,6 +397,18 @@ export default function DriverSchedule() {
 
   return (
     <AppShell>
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="bg-white px-4 py-3 rounded-full shadow-xl border border-gray-100 flex items-center gap-3">
+            <div className={`p-1.5 rounded-full ${toastType === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'}`}>
+              {toastType === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+            </div>
+            <span className="text-sm font-bold text-gray-700">{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-20">
         
         {/* Sticky Fixed Top Header Section */}

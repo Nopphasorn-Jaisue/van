@@ -96,7 +96,7 @@ export default function DriverRecords() {
     e.preventDefault();
     setIsAdhocModalOpen(false);
     if (!driverId) {
-      alert("ไม่พบข้อมูลพนักงานขับรถ");
+      showNotification("ไม่พบข้อมูลพนักงานขับรถ", "warning");
       return;
     }
     const res = await createAdhocBooking(driverId, adhocForm);
@@ -113,7 +113,7 @@ export default function DriverRecords() {
       setSelectedBookingId(newBooking.id);
       showNotification("สร้างรายการใช้รถนอกแผนสำเร็จ! กรุณากรอกข้อมูลการเดินทางด้านล่าง");
     } else {
-      alert(res.error || "ไม่สามารถสร้างรายการได้");
+      showNotification(res.error || "ไม่สามารถสร้างรายการได้", "warning");
     }
     setIsCreatingAdhoc(false);
   };
@@ -411,7 +411,7 @@ export default function DriverRecords() {
     };
 
     if (!driverId) {
-      alert("ไม่พบข้อมูลคนขับ");
+      showNotification("ไม่พบข้อมูลคนขับ", "warning");
       setIsSubmitting(false);
       return;
     }
@@ -422,7 +422,7 @@ export default function DriverRecords() {
     if (res.success) {
       setSuccess(true);
     } else {
-      alert(res.error || "เกิดข้อผิดพลาดในการบันทึก");
+      showNotification(res.error || "เกิดข้อผิดพลาดในการบันทึก", "warning");
     }
   };
 
