@@ -15,6 +15,7 @@ type Trip = {
   passengersCount?: number;
   requester?: { name: string; phone?: string };
   targetFaculty?: { nameTh: string };
+  driverLog?: any;
 };
 
 type RawCalendarEvent = {
