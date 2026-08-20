@@ -84,8 +84,20 @@ export default function DriverDashboard() {
                 const eventVanId = String(e.vanId);
                 const driverVanIdFormatted = `van-${driverVanIdStr.padStart(3, '0')}`;
                 
-                // Check if the event matches the driver's database van ID, formatted ID, or legacy van ID
-                return eventVanId === driverVanIdStr || eventVanId === driverLegacyVanId || eventVanId === driverVanIdFormatted;
+                const eventFacultyId = String(e.facultyId);
+                const driverFacultyId = String(meData.driverData.facultyId);
+                
+                const isVanMatch = eventVanId === driverVanIdStr || eventVanId === driverLegacyVanId || eventVanId === driverVanIdFormatted;
+                
+                const isFacultyMatch = eventFacultyId === driverFacultyId 
+                                    || (eventFacultyId === 'ict' && driverLegacyVanId === 'v-ict')
+                                    || (eventFacultyId === 'pharm' && driverLegacyVanId === 'v-pharm')
+                                    || (eventFacultyId === 'sci' && driverLegacyVanId === 'v-sci')
+                                    || (eventFacultyId === 'agr' && driverLegacyVanId === 'v-agri')
+                                    || (eventFacultyId === 'ener' && driverLegacyVanId === 'v-seen')
+                                    || (eventFacultyId === 'eng' && driverLegacyVanId === 'v-eng');
+
+                return isVanMatch || isFacultyMatch;
               });
               
               const now = new Date();
@@ -291,8 +303,8 @@ export default function DriverDashboard() {
             <div className="bg-[#311171] p-5 text-white">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <span className="px-2.5 py-1 bg-white/20 rounded-full text-xs font-bold">
-                    รอออกเดินทาง
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${todaysTrip.driverLog ? 'bg-green-500/20 text-green-100' : 'bg-white/20'}`}>
+                    {todaysTrip.driverLog ? 'เสร็จสิ้นภารกิจ' : 'รอออกเดินทาง'}
                   </span>
                 </div>
                 <span className="text-xs font-bold opacity-80">{todaysTrip.id}</span>

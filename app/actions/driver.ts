@@ -395,7 +395,7 @@ import { getAuthUser } from "@/app/actions/auth";
 export async function getAllFacultyBookingsWithLogs() {
   try {
     const userRoleInfo = await getAuthUser();
-    if (!userRoleInfo || !['SUPER_ADMIN', 'FACULTY_ADMIN'].includes(userRoleInfo.role)) {
+    if (!userRoleInfo || !['SUPER_ADMIN', 'FACULTY_ADMIN', 'DRIVER'].includes(userRoleInfo.role)) {
       return { success: false, error: "Unauthorized" };
     }
 

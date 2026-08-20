@@ -179,6 +179,7 @@ export default function DriverRecords() {
       }
 
       let dbMapped: AssignedBooking[] = [];
+      let allDbBookingIds = new Set<string>();
       let driverFacName = "คณะเทคโนโลยีสารสนเทศและการสื่อสาร";
 
       const now = new Date();
@@ -187,6 +188,7 @@ export default function DriverRecords() {
       if (currentDriverId) {
         const res = await getAssignedBookings(currentDriverId); 
         if (res.success && res.bookings) {
+          allDbBookingIds = new Set(res.bookings.map((b: any) => String(b.id)));
           dbMapped = res.bookings.filter((b: AssignedBooking) => {
             // Only unfinished trips for today
             if (b.driverLog) return false;
@@ -223,6 +225,9 @@ export default function DriverRecords() {
                 const eventVanId = String(e.vanId);
                 const matchesVan = eventVanId === driverVanIdStr || eventVanId === driverLegacyVanId || eventVanId === driverVanIdFormatted;
                 if (!matchesVan) return false;
+
+                const eventId = String(e.id);
+                if (eventId && allDbBookingIds.has(eventId)) return false;
                 
                 const sDate = e.date ? (e.date.includes('T') ? e.date : `${e.date}T08:30:00`) : new Date().toISOString();
                 const dateObj = new Date(sDate);
