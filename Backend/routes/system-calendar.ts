@@ -199,7 +199,8 @@ export async function handleSystemCalendarEvents(request: Request) {
           if (!res || !res.items || res.items.length === 0) return;
           
           const mapped: CalendarEventRecord[] = res.items.map((item, index) => {
-            const startDate = item.start?.dateTime || item.start?.date || new Date().toISOString();
+            const isAllDay = !!(item.start?.date && !item.start?.dateTime);
+            const rawStart = item.start?.dateTime || item.start?.date || new Date().toISOString();
             const summary = item.summary || 'ภารกิจใช้รถตู้';
             const description = item.description || '';
             
@@ -224,14 +225,36 @@ export async function handleSystemCalendarEvents(request: Request) {
             const vanMatch = facultyVansList.find(v => v.facultyName === facultyName || v.facultyId === facultyId);
             const correctVanId = vanMatch ? vanMatch.id : (facultyId === 'pharm' ? 'v-pharm' : 'v-ict');
 
+            const startDateStr = rawStart.slice(0, 10);
+            let returnDateStr = startDateStr;
+
+            if (isAllDay && item.end?.date) {
+              // Google Calendar all-day event end.date is exclusive (e.g. 2026-09-02 for a 1-day event on 2026-09-01)
+              const parsedEnd = new Date(item.end.date);
+              parsedEnd.setDate(parsedEnd.getDate() - 1);
+              const prevDayStr = parsedEnd.toISOString().slice(0, 10);
+              if (prevDayStr >= startDateStr) {
+                returnDateStr = prevDayStr;
+              }
+            } else if (item.end?.dateTime) {
+              const endDateTime = new Date(item.end.dateTime);
+              if (endDateTime.getHours() === 0 && endDateTime.getMinutes() === 0 && endDateTime.getSeconds() === 0) {
+                endDateTime.setDate(endDateTime.getDate() - 1);
+              }
+              const parsedEndStr = endDateTime.toISOString().slice(0, 10);
+              if (parsedEndStr >= startDateStr) {
+                returnDateStr = parsedEndStr;
+              }
+            }
+
             return {
               id: `gcal-${item.id || index}`,
               gcalId: item.id || undefined,
               vanId: correctVanId,
               facultyId,
-              date: startDate.slice(0, 10),
-              returnDate: (item.end?.dateTime || item.end?.date || startDate).slice(0, 10),
-              time: new Date(startDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.',
+              date: startDateStr,
+              returnDate: returnDateStr,
+              time: isAllDay ? 'ตลอดวัน' : new Date(rawStart).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.',
               destination: cleanSummary,
               purpose: cleanSummary,
               passengers: 10,
@@ -243,7 +266,7 @@ export async function handleSystemCalendarEvents(request: Request) {
               routeDetail: summary,
               statusText: 'ซิงค์จาก Google Calendar',
               statusTime: 'Live Data',
-              createdAt: startDate,
+              createdAt: rawStart,
             };
           });
           googleEventsMapped = [...googleEventsMapped, ...mapped];
