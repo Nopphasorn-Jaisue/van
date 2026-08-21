@@ -15,6 +15,7 @@ export async function proxy(request: NextRequest) {
     path === '/auth/callback' ||
     path === '/' ||
     path === '/landing' ||
+    (request.method === 'GET' && path === '/api/calendar-events') ||
     path.startsWith('/_next') ||
     path.startsWith('/static');
 
