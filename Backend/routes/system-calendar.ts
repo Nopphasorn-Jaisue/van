@@ -532,46 +532,80 @@ export async function DELETE(request: Request) {
     const gcalId = searchParams.get("gcalId");
     if (!id) return NextResponse.json({ success: false, error: "Missing ID" }, { status: 400 });
 
-    // Authorization check for FACULTY_ADMIN
+    // 1. Delete from local JSON stored events if applicable
     const allEvents = getStoredCalendarEvents();
     const storedEvent = allEvents.find(e => String(e.id) === String(id));
     
-    if (authUser.role === 'FACULTY_ADMIN' && storedEvent) {
-      const adminFacultyId = String(authUser.facultyId || '');
-      const adminFacultyName = authUser.faculty?.nameTh || '';
-      
-      // Allow if the event's faculty matches the admin's faculty
-      const matchesId = storedEvent.facultyId === adminFacultyId;
-      const matchesName = storedEvent.bookingFaculty === adminFacultyName;
-      
-      if (!matchesId && !matchesName) {
-         return NextResponse.json({ success: false, error: "Forbidden: ท่านสามารถลบได้เฉพาะตารางงานของคณะตนเองเท่านั้น" }, { status: 403 });
+    if (storedEvent) {
+      if (authUser.role === 'FACULTY_ADMIN') {
+        const adminFacultyId = String(authUser.facultyId || '');
+        const adminFacultyName = authUser.faculty?.nameTh || '';
+        const matchesId = storedEvent.facultyId === adminFacultyId;
+        const matchesName = storedEvent.bookingFaculty === adminFacultyName;
+        
+        if (!matchesId && !matchesName) {
+          return NextResponse.json({ success: false, error: "Forbidden: ท่านสามารถลบได้เฉพาะตารางงานของคณะตนเองเท่านั้น" }, { status: 403 });
+        }
+      }
+      deleteStoredCalendarEvent(id);
+    }
+
+    // 2. Delete from Prisma Database booking if id starts with bk-
+    if (String(id).startsWith("bk-")) {
+      const bookingId = String(id).replace("bk-", "");
+      try {
+        await prisma.booking.delete({ where: { id: bookingId } });
+      } catch (dbErr) {
+        console.warn("Notice: Booking already deleted or not found in DB:", dbErr);
       }
     }
 
-    deleteStoredCalendarEvent(id);
-
-    // Sync delete to Google Calendar
+    // 3. Sync delete to Google Calendar
     const targetGcalId = gcalId || (storedEvent?.gcalId) || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
 
     if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
-        // We already found storedEvent above, use it to get vanId
-        const targetCalendarId = await resolveCalendarId(storedEvent?.vanId);
+        const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
 
-        if (targetCalendarId) {
-          const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
-          await calendar.events.delete({
-            calendarId: targetCalendarId,
-            eventId: targetGcalId,
+        // Collect all potential calendar IDs to search and delete
+        const candidateCalendars = new Set<string>();
+        if (process.env.GOOGLE_CALENDAR_ID) candidateCalendars.add(process.env.GOOGLE_CALENDAR_ID);
+        if (FACULTY_CALENDARS.ICT) candidateCalendars.add(FACULTY_CALENDARS.ICT);
+        if (FACULTY_CALENDARS.PHARM) candidateCalendars.add(FACULTY_CALENDARS.PHARM);
+        if (FACULTY_CALENDARS.SCI) candidateCalendars.add(FACULTY_CALENDARS.SCI);
+
+        try {
+          const dbFaculties = await prisma.faculty.findMany({ where: { googleCalendarId: { not: null } } });
+          dbFaculties.forEach(f => {
+            if (f.googleCalendarId) candidateCalendars.add(f.googleCalendarId);
           });
+        } catch {
+          // ignore DB error
         }
+
+        // Delete from all candidate calendars in parallel
+        await Promise.all(
+          Array.from(candidateCalendars).map(async (calId) => {
+            try {
+              await calendar.events.delete({
+                calendarId: calId,
+                eventId: targetGcalId,
+              });
+            } catch {
+              // Not in this particular calendar or already deleted
+            }
+          })
+        );
       } catch (gcalErr) {
         console.warn("Google Calendar Push Delete Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
       }
     }
 
-    // Invalidate Google Calendar cache
+    // 4. Invalidate Google Calendar cache immediately
+    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
+    if (globalCacheObj.gcalCache) {
+      globalCacheObj.gcalCache = {};
+    }
     Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
 
     return NextResponse.json({ success: true });
