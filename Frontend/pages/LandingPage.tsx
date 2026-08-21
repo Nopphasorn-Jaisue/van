@@ -276,6 +276,20 @@ export default function LandingPage() {
     const now = new Date();
     setCurrentDate(now);
     setToday(now);
+
+    // Instant load from client cache if available
+    try {
+      const cached = sessionStorage.getItem('cached_landing_calendar_events');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setNetworkEvents(parsed);
+          setIsLoading(false);
+        }
+      }
+    } catch {
+      // ignore storage error
+    }
   }, []);
 
   useEffect(() => {
@@ -283,17 +297,11 @@ export default function LandingPage() {
       return;
     }
 
-    // ปรับปรุง: สร้างข้อมูลสำรองให้สมจริงขึ้น โดยมีโอกาสเกิดหลายคิวในหนึ่งวัน
-    const fallbackEvents = buildFallbackNetworkEvents(
-      currentDate
-    );
+    const fallbackEvents = buildFallbackNetworkEvents(currentDate);
 
     const fetchEvents = async () => {
-      setIsLoading(true);
-
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
-     
 
       try {
         const response = await fetch(`/api/calendar-events?year=${year}&month=${month}`);
@@ -305,8 +313,14 @@ export default function LandingPage() {
         const mappedEvents = mapApiEventsToNetwork(data.events || {});
         const finalEvents = mappedEvents;
         setNetworkEvents(finalEvents);
+
+        try {
+          sessionStorage.setItem('cached_landing_calendar_events', JSON.stringify(finalEvents));
+        } catch {
+          // ignore storage quota error
+        }
       } catch {
-        setNetworkEvents(fallbackEvents);
+        setNetworkEvents((prev) => (prev.length > 0 ? prev : fallbackEvents));
       } finally {
         setIsLoading(false);
       }

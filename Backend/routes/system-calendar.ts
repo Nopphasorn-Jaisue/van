@@ -184,26 +184,13 @@ export async function handleSystemCalendarEvents(request: Request) {
         
         const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar.readonly']);
         
-        // Determine which calendars to fetch
-        const allGoogleCalendarIds: Array<{ id: string; facultyName: string; facultyId: string }> = [];
-        try {
-          const faculties = await prisma.faculty.findMany({
-            where: { googleCalendarId: { not: null } }
-          });
-          faculties.forEach(f => {
-            if (f.googleCalendarId) {
-              allGoogleCalendarIds.push({
-                id: f.googleCalendarId,
-                facultyName: f.nameTh,
-                facultyId: f.id.toString()
-              });
-            }
-          });
-        } catch (err) {
-          console.warn("Failed to fetch faculties for calendar IDs", err);
-        }
+        // Determine which calendars to fetch (Static list + optional DB additions)
+        const allGoogleCalendarIds: Array<{ id: string; facultyName: string; facultyId: string }> = [
+          { id: FACULTY_CALENDARS.ICT, facultyName: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร', facultyId: 'ict' },
+          { id: FACULTY_CALENDARS.PHARM, facultyName: 'คณะเภสัชศาสตร์', facultyId: 'pharm' },
+          { id: FACULTY_CALENDARS.SCI, facultyName: 'คณะวิทยาศาสตร์', facultyId: 'sci' }
+        ];
 
-        // Fallback to central calendar if no specific ones are configured or as an addition
         const centralCalendarId = process.env.GOOGLE_CALENDAR_ID;
         if (centralCalendarId && !allGoogleCalendarIds.find(c => c.id === centralCalendarId)) {
           allGoogleCalendarIds.push({
@@ -213,32 +200,25 @@ export async function handleSystemCalendarEvents(request: Request) {
           });
         }
 
-        // Add specific faculty calendars if not already in DB
-        const extraCalendars = [
-          { id: FACULTY_CALENDARS.PHARM, facultyName: 'คณะเภสัชศาสตร์', facultyId: 'pharm' },
-          { id: FACULTY_CALENDARS.ICT, facultyName: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร', facultyId: 'ict' },
-          { id: FACULTY_CALENDARS.SCI, facultyName: 'คณะวิทยาศาสตร์', facultyId: 'sci' }
-        ];
-
-        for (const extraCal of extraCalendars) {
-          if (!allGoogleCalendarIds.find(c => c.id === extraCal.id)) {
-            allGoogleCalendarIds.push(extraCal);
-          }
-        }
-
         const fetchPromises = allGoogleCalendarIds.map(async (cal) => {
           try {
-            const response = await calendar.events.list({
-              calendarId: cal.id,
-              timeMin,
-              timeMax,
-              maxResults: 2500,
-              singleEvents: true,
-              orderBy: 'startTime',
-            });
+            // Protect against slow Google API network lags with a 2.5s timeout
+            const fetchWithTimeout = Promise.race([
+              calendar.events.list({
+                calendarId: cal.id,
+                timeMin,
+                timeMax,
+                maxResults: 2500,
+                singleEvents: true,
+                orderBy: 'startTime',
+              }),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500))
+            ]);
+
+            const response = await fetchWithTimeout;
             return { items: response.data.items, meta: cal };
           } catch (err) {
-            console.warn(`Failed to fetch calendar ${cal.id}`, err);
+            console.warn(`Notice: Google Calendar fetch completed/bypassed for ${cal.id}`);
             return null;
           }
         });
@@ -465,6 +445,10 @@ export async function handleSystemCalendarEvents(request: Request) {
     events: eventsByDate, 
     rawEvents: events,
     vans: allVans
+  }, {
+    headers: {
+      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120'
+    }
   });
 }
 
