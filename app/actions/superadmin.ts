@@ -149,29 +149,27 @@ export async function getDrivers() {
 }
 
 export async function getDashboardStats() {
-  const totalVans = await prisma.van.count({ where: { isActive: true } });
-  
-  // Total unique faculties with active vans
-  const facultiesWithVans = await prisma.van.groupBy({
-    by: ['facultyId'],
-    where: { isActive: true },
-  });
-  const totalFaculties = facultiesWithVans.length;
-
-  // Active Missions Today
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const activeMissions = await prisma.booking.count({
-    where: {
-      status: 'APPROVED',
-      departureDate: { lte: tomorrow }, // departure is before the end of today
-      returnDate: { gte: today }, // return is after the start of today
-    }
-  });
+  const [totalVans, facultiesWithVans, activeMissions] = await Promise.all([
+    prisma.van.count({ where: { isActive: true } }),
+    prisma.van.groupBy({
+      by: ['facultyId'],
+      where: { isActive: true },
+    }),
+    prisma.booking.count({
+      where: {
+        status: 'APPROVED',
+        departureDate: { lte: tomorrow },
+        returnDate: { gte: today },
+      }
+    })
+  ]);
 
+  const totalFaculties = facultiesWithVans.length;
   const utilizationPercent = totalVans > 0 ? Math.round((activeMissions / totalVans) * 100) : 0;
 
   // 3. Maintenance Alerts

@@ -84,7 +84,8 @@ const seedBookings: SeedBooking[] = [
   },
 ];
 
-let seeded = false;
+const globalForSeed = globalThis as unknown as { seeded?: boolean };
+let seeded = globalForSeed.seeded ?? (process.env.NODE_ENV === "production");
 
 function normalizeRole(rawRole: unknown): string {
   const role = String(rawRole || "USER").toUpperCase();
@@ -118,6 +119,7 @@ async function ensureSeedData() {
   const hasRows = await prisma.faculty.count();
   if (hasRows > 0) {
     seeded = true;
+    globalForSeed.seeded = true;
     return;
   }
 

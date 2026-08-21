@@ -48,23 +48,21 @@ export default function FacultyAdminDashboard() {
   const [readyVansCount, setReadyVansCount] = useState(0);
   const [driversCount, setDriversCount] = useState(0);
   const [activeDriversCount, setActiveDriversCount] = useState(0);
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [reqRes, vanRes, drvRes, calRes] = await Promise.all([
+        const [reqRes, vanRes, drvRes] = await Promise.all([
           fetch('/api/bookings?status=WAITING_ADMIN'),
           fetch('/api/vans'),
-          fetch('/api/drivers'),
-          fetch('/api/calendar-events')
+          fetch('/api/drivers')
         ]);
         
         const reqData = await reqRes.json();
         const vanData = await vanRes.json();
         const drvData = await drvRes.json();
-        const calData = await calRes.json();
         
         const formatThaiDateTime = (dateStr: string) => {
           const d = new Date(dateStr);
@@ -90,8 +88,6 @@ export default function FacultyAdminDashboard() {
         const drivers = drvData.drivers || [];
         setDriversCount(drivers.length);
         setActiveDriversCount(drivers.filter((d: Driver) => !d.isLocked).length);
-
-        setCalendarEvents(Array.isArray(calData.rawEvents) ? calData.rawEvents : []);
 
       } catch (err) {
         console.error(err);
