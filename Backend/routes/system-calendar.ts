@@ -17,8 +17,9 @@ interface GoogleCalendarCache {
   events: CalendarEventRecord[];
   timestamp: number;
 }
-const gcalCache: Record<string, GoogleCalendarCache> = {};
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const globalForGcal = globalThis as unknown as { gcalCache?: Record<string, GoogleCalendarCache> };
+const gcalCache: Record<string, GoogleCalendarCache> = globalForGcal.gcalCache ?? (globalForGcal.gcalCache = {});
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 
 export const FACULTY_CALENDARS = {
   ICT: 'e9735a3152fcec368b15ac7f64dd21046a923cc5c4d3f9aafac8f706285a40a8@group.calendar.google.com',

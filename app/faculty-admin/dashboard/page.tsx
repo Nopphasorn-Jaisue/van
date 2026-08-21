@@ -48,21 +48,23 @@ export default function FacultyAdminDashboard() {
   const [readyVansCount, setReadyVansCount] = useState(0);
   const [driversCount, setDriversCount] = useState(0);
   const [activeDriversCount, setActiveDriversCount] = useState(0);
-  const [calendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [reqRes, vanRes, drvRes] = await Promise.all([
+        const [reqRes, vanRes, drvRes, calRes] = await Promise.all([
           fetch('/api/bookings?status=WAITING_ADMIN'),
           fetch('/api/vans'),
-          fetch('/api/drivers')
+          fetch('/api/drivers'),
+          fetch('/api/calendar-events')
         ]);
         
         const reqData = await reqRes.json();
         const vanData = await vanRes.json();
         const drvData = await drvRes.json();
+        const calData = await calRes.json();
         
         const formatThaiDateTime = (dateStr: string) => {
           const d = new Date(dateStr);
@@ -88,6 +90,22 @@ export default function FacultyAdminDashboard() {
         const drivers = drvData.drivers || [];
         setDriversCount(drivers.length);
         setActiveDriversCount(drivers.filter((d: Driver) => !d.isLocked).length);
+
+        const flattenedCalEvents: CalendarEvent[] = [];
+        if (calData && calData.events) {
+          Object.entries(calData.events).forEach(([dateKey, eventList]) => {
+            if (Array.isArray(eventList)) {
+              eventList.forEach((ev: { id?: string; date?: string; status?: string }) => {
+                flattenedCalEvents.push({
+                  id: ev.id,
+                  startAt: `${ev.date || dateKey}T08:30:00`,
+                  status: ev.status === 'approved' ? 'APPROVED' : 'WAITING_ADMIN'
+                });
+              });
+            }
+          });
+        }
+        setCalendarEvents(flattenedCalEvents);
 
       } catch (err) {
         console.error(err);
