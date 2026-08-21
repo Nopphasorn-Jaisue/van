@@ -63,6 +63,8 @@ export async function handleAssignDriverToBooking(request: Request, bookingId: s
   }
 }
 
+import { pushBookingToGoogleCalendar } from "./system-calendar";
+
 export async function handleBookingStatusUpdate(request: Request, bookingId: string) {
   try {
     const body = await request.json();
@@ -73,6 +75,16 @@ export async function handleBookingStatusUpdate(request: Request, bookingId: str
     }
 
     const booking = await updateBookingStatus(bookingId, status, body.reason);
+
+    // If Dean/Executive approved the booking, push to Google Calendar
+    if (status === 'APPROVED' && booking) {
+      try {
+        await pushBookingToGoogleCalendar(booking);
+      } catch (gcalErr) {
+        console.warn("Failed to auto-push booking to Google Calendar:", gcalErr);
+      }
+    }
+
     return NextResponse.json({ success: true, booking });
   } catch (error) {
     const message = error instanceof Error ? error.message : "STATUS_UPDATE_FAILED";

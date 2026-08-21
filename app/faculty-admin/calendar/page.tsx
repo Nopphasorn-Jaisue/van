@@ -964,7 +964,7 @@ function CalendarContent() {
                                 <div className="flex flex-col">
                                   <div className="flex items-center justify-between gap-1">
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                      <div className={`w-1 h-1 rounded-full shrink-0 ${b.status && b.status.includes('pending') ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${(b.status === 'APPROVED' || b.status === 'approved' || b.status === 'COMPLETED' || b.status === 'completed') ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                                       <span className={`font-bold truncate text-[9px] 2xl:text-[10px] leading-[10px] ${displayStyle.textColor || 'text-amber-700'}`}>
                                         {displayStyle.shortName}
                                       </span>
@@ -1576,7 +1576,7 @@ function CalendarContent() {
                   >
                     <div className="flex flex-col truncate pr-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <div className={`w-1 h-1 rounded-full shrink-0 ${b.status && b.status.includes('pending') ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${(b.status === 'APPROVED' || b.status === 'approved' || b.status === 'COMPLETED' || b.status === 'completed') ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                         <span className={`font-bold text-xs truncate ${displayStyle.textColor || 'text-amber-700'}`}>
                           {displayStyle.shortName}
                         </span>

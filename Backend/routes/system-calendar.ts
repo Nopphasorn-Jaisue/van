@@ -27,7 +27,7 @@ export const FACULTY_CALENDARS = {
   SCI: '280eacd5718c2e5c941b02395a80926cdb097721dd2de39cc3c01f3c6183075c@group.calendar.google.com'
 };
 
-async function resolveCalendarId(vanId?: string): Promise<string | undefined> {
+export async function resolveCalendarId(vanId?: string): Promise<string | undefined> {
   const defaultCalendarId = process.env.GOOGLE_CALENDAR_ID;
   if (!vanId) return defaultCalendarId;
   
@@ -65,6 +65,52 @@ async function resolveCalendarId(vanId?: string): Promise<string | undefined> {
   return defaultCalendarId;
 }
 
+export async function pushBookingToGoogleCalendar(booking: {
+  assignedVanId?: string;
+  requesterFaculty?: string;
+  destination: string;
+  purpose?: string;
+  tripType?: string;
+  passengers?: number;
+  requester?: string;
+  assignedDriverName?: string;
+  startAt: string;
+  endAt: string;
+}) {
+  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) return null;
+  try {
+    const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
+    const targetCalendarId = await resolveCalendarId(booking.assignedVanId);
+    if (!targetCalendarId) return null;
+
+    const startDateRaw = booking.startAt ? booking.startAt.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const endDateRaw = booking.endAt ? booking.endAt.slice(0, 10) : startDateRaw;
+
+    const startDateTime = booking.startAt && booking.startAt.includes('T') ? booking.startAt : `${startDateRaw}T08:30:00+07:00`;
+    const endDateTime = booking.endAt && booking.endAt.includes('T') ? booking.endAt : `${endDateRaw}T16:30:00+07:00`;
+
+    const gcalResponse = await calendar.events.insert({
+      calendarId: targetCalendarId,
+      requestBody: {
+        summary: `[${booking.requesterFaculty || 'คณะ'}] ${booking.destination || 'ภารกิจใช้รถตู้'}`,
+        description: `ผู้ขอใช้บริการ: ${booking.requester || '-'}\nหน่วยงาน: ${booking.requesterFaculty || '-'}\nวัตถุประสงค์: ${booking.purpose || '-'}\nขอบเขตการเดินทาง: ${booking.tripType || 'ในจังหวัดพะเยา'}\nผู้โดยสาร: ${booking.passengers || 1} คน\nคนขับ: ${booking.assignedDriverName || '-'}`,
+        start: { dateTime: startDateTime, timeZone: 'Asia/Bangkok' },
+        end: { dateTime: endDateTime, timeZone: 'Asia/Bangkok' },
+      },
+    });
+
+    // Invalidate Google Calendar cache
+    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
+    if (globalCacheObj.gcalCache) {
+      globalCacheObj.gcalCache = {};
+    }
+    return gcalResponse.data.id;
+  } catch (err) {
+    console.warn("Failed to push approved booking to Google Calendar:", err);
+    return null;
+  }
+}
+
 export async function handleSystemCalendarEvents(request: Request) {
   const { searchParams } = new URL(request.url);
   const yearParam = searchParams.get("year");
@@ -76,18 +122,21 @@ export async function handleSystemCalendarEvents(request: Request) {
   try {
     await getAuthUser();
     let facultyId: number | undefined;
-    // We intentionally DO NOT filter by facultyId here. The system calendar 
-    // is meant to be a global view so faculties can see each other's schedules 
-    // for cross-faculty borrowing. The client-side handles filtering.
+    // Global view for cross-faculty borrowing. The client-side handles filtering.
 
-    const dbBookings = await listBookings(undefined, facultyId);
-    const dbEvents: CalendarEventRecord[] = dbBookings.map(b => {
+    const allDbBookings = await listBookings(undefined, facultyId);
+    // Filter out REJECTED bookings so rejected ones are NEVER shown on the calendar!
+    const activeDbBookings = allDbBookings.filter(b => b.status !== 'REJECTED');
+
+    const dbEvents: CalendarEventRecord[] = activeDbBookings.map(b => {
       const startDate = new Date(b.startAt);
       const endDate = new Date(b.endAt);
       
       const startTime = isNaN(startDate.getTime()) ? "08:30" : startDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
       const endTime = isNaN(endDate.getTime()) ? "16:30" : endDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
       
+      const isApproved = b.status === "APPROVED" || b.status === "COMPLETED";
+
       return {
         id: `bk-${b.id}`,
         vanId: b.assignedVanId || "v-ict",
@@ -98,12 +147,13 @@ export async function handleSystemCalendarEvents(request: Request) {
         purposeDetail: b.purpose,
         routeDetail: b.destination,
         date: b.startAt ? b.startAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        returnDate: b.endAt ? b.endAt.slice(0, 10) : (b.startAt ? b.startAt.slice(0, 10) : new Date().toISOString().slice(0, 10)),
         time: `${startTime} - ${endTime} น.`,
         passengers: b.passengers || 1,
         requester: b.requester || "ผู้ขอใช้รถ",
         department: "ระบบจองรถตู้",
-        status: (b.status === "APPROVED" || b.status === "COMPLETED") ? "approved" : "pending",
-        statusText: b.status === "APPROVED" ? "อนุมัติแล้ว" : (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "รอการอนุมัติ"),
+        status: isApproved ? "approved" : "pending",
+        statusText: isApproved ? (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "อนุมัติแล้ว") : "รอดำเนินการ",
         statusTime: "ระบบการจอง",
         tripType: (b.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || "ในจังหวัดพะเยา",
         createdAt: b.submittedAt || new Date().toISOString()
@@ -427,10 +477,15 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const created = addStoredCalendarEvent(body);
+    // Default new calendar bookings to pending (waiting for Dean approval)
+    const initialStatus = body.status === 'approved' ? 'approved' : 'pending';
+    const created = addStoredCalendarEvent({
+      ...body,
+      status: initialStatus,
+    });
 
-    // Push new event to Google Calendar API if configured
-    if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    // ONLY push to Google Calendar if status is explicitly approved (e.g. Dean approval)
+    if (created.status === 'approved' && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
         const targetCalendarId = await resolveCalendarId(created.vanId);
 
@@ -464,6 +519,10 @@ export async function POST(request: Request) {
     }
 
     // Invalidate Google Calendar cache
+    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
+    if (globalCacheObj.gcalCache) {
+      globalCacheObj.gcalCache = {};
+    }
     Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
 
     return NextResponse.json({ success: true, event: created });
@@ -487,23 +546,48 @@ export async function PATCH(request: Request) {
 
     const updated = updateStoredCalendarEvent(id, fields);
 
-    // Sync update to Google Calendar
+    // Sync update or insert to Google Calendar if approved
+    const isNowApproved = (fields.status === 'approved' || updated?.status === 'approved');
     const targetGcalId = gcalId || (updated?.gcalId) || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
 
-    if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
         const targetCalendarId = await resolveCalendarId(updated?.vanId || fields.vanId);
 
         if (targetCalendarId) {
           const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
-          await calendar.events.patch({
-            calendarId: targetCalendarId,
-            eventId: targetGcalId,
-            requestBody: {
-              summary: fields.destination ? `[${fields.bookingFaculty || 'คณะ'}] ${fields.destination}` : undefined,
-              description: fields.purpose ? `วัตถุประสงค์: ${fields.purpose}` : undefined,
-            },
-          });
+
+          if (targetGcalId) {
+            await calendar.events.patch({
+              calendarId: targetCalendarId,
+              eventId: targetGcalId,
+              requestBody: {
+                summary: fields.destination ? `[${fields.bookingFaculty || updated?.bookingFaculty || 'คณะ'}] ${fields.destination}` : undefined,
+                description: fields.purpose ? `วัตถุประสงค์: ${fields.purpose}` : undefined,
+              },
+            });
+          } else if (isNowApproved && updated) {
+            // Newly approved event: insert to Google Calendar
+            const startDateRaw = updated.date ? updated.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
+            const endDateRaw = updated.returnDate ? updated.returnDate.slice(0, 10) : startDateRaw;
+
+            const startDateTime = `${startDateRaw}T08:30:00+07:00`;
+            const endDateTime = `${endDateRaw}T16:30:00+07:00`;
+
+            const gcalResponse = await calendar.events.insert({
+              calendarId: targetCalendarId,
+              requestBody: {
+                summary: `[${updated.bookingFaculty || 'คณะ'}] ${updated.destination || 'ภารกิจใช้รถตู้'}`,
+                description: `ผู้ขอใช้บริการ: ${updated.requester || '-'}\nหน่วยงาน: ${updated.bookingFaculty || '-'}\nวัตถุประสงค์: ${updated.purpose || '-'}\nขอบเขตการเดินทาง: ${updated.tripType || 'ในจังหวัดพะเยา'}\nผู้โดยสาร: ${updated.passengers || 1} คน`,
+                start: { dateTime: startDateTime, timeZone: 'Asia/Bangkok' },
+                end: { dateTime: endDateTime, timeZone: 'Asia/Bangkok' },
+              },
+            });
+
+            if (gcalResponse.data.id) {
+              updateStoredCalendarEvent(updated.id, { gcalId: gcalResponse.data.id });
+            }
+          }
         }
       } catch (gcalErr) {
         console.warn("Google Calendar Push Update Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
@@ -511,6 +595,10 @@ export async function PATCH(request: Request) {
     }
 
     // Invalidate Google Calendar cache
+    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
+    if (globalCacheObj.gcalCache) {
+      globalCacheObj.gcalCache = {};
+    }
     Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
 
     return NextResponse.json({ success: true, event: updated });

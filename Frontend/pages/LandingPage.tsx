@@ -860,7 +860,7 @@ function CalendarMonthCell({
         <div className="flex flex-col">
           <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1.5 min-w-0">
-              <div className={`w-1 h-1 rounded-full shrink-0 ${event.status === 'pending' || event.status === 'shared' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${(event.status === 'approved' || event.status === 'on-trip') ? 'bg-emerald-500' : 'bg-amber-400'}`} />
               <span className={`font-bold truncate text-[9px] 2xl:text-[10px] ${faculty?.palette.accent ?? 'text-slate-800'}`}>
                 {faculty?.shortName ?? 'อื่นๆ'}
               </span>
