@@ -121,16 +121,16 @@ export async function handleSystemCalendarEvents(request: Request) {
   if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
     try {
       const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
-      const month = monthParam ? parseInt(monthParam, 10) : new Date().getMonth() + 1;
-      const cacheKey = `${year}-${month}`;
+      const cacheKey = `year-${year}`;
       
       let googleEventsMapped: CalendarEventRecord[] = [];
 
       if (gcalCache[cacheKey] && (Date.now() - gcalCache[cacheKey].timestamp < CACHE_TTL_MS)) {
         googleEventsMapped = gcalCache[cacheKey].events;
       } else {
-        const timeMin = new Date(year, month - 1, 1).toISOString();
-        const timeMax = new Date(year, month, 0, 23, 59, 59).toISOString();
+        // Fetch full year (Jan 1 - Dec 31) so navigating between any months is instant
+        const timeMin = new Date(year, 0, 1, 0, 0, 0).toISOString();
+        const timeMax = new Date(year, 11, 31, 23, 59, 59).toISOString();
         
         const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar.readonly']);
         
@@ -182,7 +182,7 @@ export async function handleSystemCalendarEvents(request: Request) {
               calendarId: cal.id,
               timeMin,
               timeMax,
-              maxResults: 250,
+              maxResults: 2500,
               singleEvents: true,
               orderBy: 'startTime',
             });
