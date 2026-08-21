@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import {
   assignDriver,
   createBooking,
@@ -32,6 +33,8 @@ export async function handleCreateSystemBooking(request: Request) {
       requesterId: user ? Number(user.id) : undefined,
       requester: body.requester || "ผู้ใช้งานระบบ",
       requesterFaculty: body.requesterFaculty || "ไม่ระบุ",
+      phone: body.phone,
+      passengerNames: body.passengerNames,
       destination: body.destination,
       purpose: body.purpose || "ไม่ระบุ",
       passengers: Number(body.passengers || 1),
@@ -39,6 +42,7 @@ export async function handleCreateSystemBooking(request: Request) {
       endAt: body.endAt,
       tripType: body.tripType,
       budgetSource: body.budgetSource,
+      status: user?.role === 'FACULTY_ADMIN' ? 'WAITING_EXEC' : 'WAITING_ADMIN'
     });
 
     return NextResponse.json({ success: true, booking }, { status: 201 });
@@ -82,4 +86,22 @@ export async function handleGetBookingDetail(_request: Request, bookingId: strin
     return NextResponse.json({ success: false, message: "BOOKING_NOT_FOUND" }, { status: 404 });
   }
   return NextResponse.json({ success: true, booking });
+}
+
+export async function handleUpdateSystemBooking(request: Request, bookingId: string) {
+  try {
+    const body = await request.json();
+    const updated = await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        destination: body.destination,
+        objective: body.purpose,
+        passengersCount: body.passengers ? Number(body.passengers) : undefined,
+      }
+    });
+    return NextResponse.json({ success: true, booking: updated });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UPDATE_FAILED";
+    return NextResponse.json({ success: false, message }, { status: 400 });
+  }
 }

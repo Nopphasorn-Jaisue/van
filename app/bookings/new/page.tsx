@@ -36,6 +36,8 @@ function BookingFormContent() {
     endTime: "",
     purpose: "",
     passengers: "",
+    passengerNames: "",
+    phone: "",
     budgetSource: "",
     tripType: "ในจังหวัดพะเยา",
   });
@@ -71,13 +73,40 @@ function BookingFormContent() {
     setAttachments((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setTimeout(() => {
+    
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requester: userProfile.name,
+          requesterFaculty: userProfile.faculty,
+          destination: form.destination,
+          purpose: form.purpose,
+          passengers: form.passengers,
+          passengerNames: form.passengerNames,
+          phone: form.phone,
+          startAt: `${form.startDate}T${form.startTime}:00`,
+          endAt: `${form.endDate}T${form.endTime}:00`,
+          tripType: form.tripType,
+          budgetSource: form.budgetSource
+        })
+      });
+
+      if (res.ok) {
+        setSuccess(true);
+      } else {
+        alert("Failed to submit booking");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred while submitting.");
+    } finally {
       setIsSubmitting(false);
-      setSuccess(true);
-    }, 1500);
+    }
   };
 
   if (success) {
@@ -363,6 +392,28 @@ function BookingFormContent() {
                 <option value="งบประมาณอื่นๆ">งบประมาณอื่นๆ</option>
               </select>
             </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-xs font-bold text-gray-700 mb-1">ชื่อ-สกุล ผู้โดยสารทั้งหมด <span className="text-red-500">*</span></label>
+            <textarea 
+              rows={2}
+              required
+              value={form.passengerNames}
+              onChange={e => setForm({...form, passengerNames: e.target.value})}
+              placeholder="เช่น 1. นาย ก (อาจารย์), 2. นางสาว ข (นิสิต)..." 
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium resize-none"
+            />
+          </div>
+          <div className="mt-4">
+            <label className="block text-xs font-bold text-gray-700 mb-1">เบอร์โทรศัพท์สำหรับติดต่อ <span className="text-red-500">*</span></label>
+            <input 
+              type="tel"
+              required
+              value={form.phone}
+              onChange={e => setForm({...form, phone: e.target.value})}
+              placeholder="08X-XXX-XXXX" 
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium"
+            />
           </div>
         </div>
 

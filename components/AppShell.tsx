@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, User, BarChart3, Clock, LayoutDashboard, Wrench,
-  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FilePlus, FileSpreadsheet, Menu
+  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FileSpreadsheet, Menu
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 import { getNotifications, markNotificationAsRead } from '@/app/actions/notifications';
@@ -337,8 +337,7 @@ function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { us
         { icon: CarFront, label: "จัดการรถประจำคณะ", href: "/faculty-admin/vans" },
         { icon: Wrench, label: "ประวัติการตรวจสภาพรถตู้", href: "/faculty-admin/maintenance" },
         { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
-        { icon: FileSignature, label: "บันทึกการเดินทางคนขับประจำคณะ", href: "/faculty-admin/driver-records" },
-        { icon: FilePlus, label: "เบิกค่าใช้จ่ายรายทริป", href: "/faculty-admin/trip-expenses" },
+
         { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/faculty-admin/usage-report" },
         { icon: BarChart3, label: "รายงานและสถิติ", href: "/faculty-admin/reports" },
         { icon: User, label: "บัญชีผู้ใช้", href: "/faculty-admin/profile" },

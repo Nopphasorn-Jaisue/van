@@ -62,6 +62,8 @@ export type CreateBookingPayload = {
   requesterId?: number;
   requester: string;
   requesterFaculty: string;
+  phone?: string;
+  passengerNames?: string;
   destination: string;
   purpose: string;
   passengers: number;
@@ -69,4 +71,5 @@ export type CreateBookingPayload = {
   endAt: string;
   tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
   budgetSource?: string;
+  status?: SystemBookingStatus;
 };

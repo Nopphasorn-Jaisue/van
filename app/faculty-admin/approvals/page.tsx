@@ -5,7 +5,7 @@ import {
   FileText, Search, Filter,
   CheckCircle2, XCircle, Info, Calendar,
   MapPin, Users, User, Clock, 
-  X, Download
+  X, Download, Edit
 } from 'lucide-react';
 import type { SystemBooking } from '@/lib/booking-system-types';
 
@@ -528,7 +528,13 @@ export default function ApprovalsPage() {
               </div>
 
               {/* Sidebar Actions */}
-              <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-4 gap-2">
+              <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-5 gap-2">
+                <button 
+                  onClick={() => alert('ฟีเจอร์แก้ไขคำขอกำลังอยู่ในช่วงพัฒนาและจะพร้อมใช้งานเร็วๆนี้ (Backend API /api/bookings/[id] รองรับแล้ว)')}
+                  className="py-2.5 px-2 bg-white hover:bg-orange-50 border border-orange-200 text-orange-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Edit size={14} /> แก้ไข
+                </button>
                 <a
                   href={`/faculty-admin/approvals/${selectedRequest.id}/print`}
                   target="_blank"

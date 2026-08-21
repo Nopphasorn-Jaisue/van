@@ -319,9 +319,11 @@ export async function createBooking(payload: CreateBookingPayload) {
       departureDate: new Date(payload.startAt),
       returnDate: new Date(payload.endAt),
       passengersCount: payload.passengers,
+      phone: payload.phone || null,
+      passengerNames: payload.passengerNames || null,
       budgetSource: payload.budgetSource || "งบส่วนกลางของคณะ",
       tripType: payload.tripType || "ในจังหวัดพะเยา",
-      status: "WAITING_ADMIN",
+      status: (payload.status as BookingStatus) || "WAITING_ADMIN",
     },
     include: {
       requester: { include: { faculty: true } },
@@ -329,7 +331,7 @@ export async function createBooking(payload: CreateBookingPayload) {
     },
   });
 
-  return toBookingDto(row);
+  return toBookingDto(row as unknown as BookingWithRelations);
 }
 
 function detectAvailability(driverId: number, bookings: Array<{ assignedDriverId: number | null; status: string; departureDate: Date; returnDate: Date }>): DriverAvailability {

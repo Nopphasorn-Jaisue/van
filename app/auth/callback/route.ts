@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { type NextRequest } from "next/server";
+import { setMockSession } from "@/app/actions/auth";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -64,6 +65,11 @@ export async function GET(request: NextRequest) {
               });
             }
           }
+        }
+        
+        // Issue JWT cookie if user exists
+        if (user) {
+          await setMockSession(user.role, user.email);
         }
 
         // นำทางไปยัง Dashboard ตาม Role ของผู้ใช้

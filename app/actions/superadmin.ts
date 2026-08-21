@@ -198,6 +198,11 @@ export async function getDashboardStats() {
 
 export async function deleteFaculty(facultyId: number) {
   try {
+    const user = await getAuthUser();
+    if (!user || user.role !== "SUPER_ADMIN") {
+      return { success: false, message: "Unauthorized: คุณไม่มีสิทธิ์ในการลบข้อมูลคณะ" };
+    }
+
     // Check if the faculty has associated vans, drivers, or users
     const faculty = await prisma.faculty.findUnique({
       where: { id: facultyId },
@@ -223,12 +228,11 @@ export async function deleteFaculty(facultyId: number) {
       where: { id: facultyId }
     });
 
-    const user = await getAuthUser();
     await createAuditLog({
       action: `ลบข้อมูลคณะ`,
       target: `คณะ: ${faculty.nameTh}`,
       type: 'danger',
-      userId: typeof user?.id === 'number' ? user.id : undefined
+      userId: typeof user.id === 'number' ? user.id : undefined
     });
 
     return { success: true, message: "ลบคณะเรียบร้อยแล้ว" };

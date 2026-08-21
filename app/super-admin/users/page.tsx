@@ -466,12 +466,11 @@ export default function SuperAdminUsers() {
                 >
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
-                  <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
                   <option value="USER">ผู้ใช้งานทั่วไป (นิสิต/บุคลากร)</option>
                 </select>
               </div>
 
-              {newUser.role !== "SUPER_ADMIN" && (
+              {true && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-bold text-gray-700">คณะ / สังกัด:</label>
@@ -676,12 +675,11 @@ export default function SuperAdminUsers() {
                 >
                   <option value="FACULTY_ADMIN">ผู้ดูแลระดับคณะ</option>
                   <option value="EXECUTIVE">ผู้บริหาร</option>
-                  <option value="SUPER_ADMIN">ผู้ดูแลระบบสูงสุด</option>
                   <option value="USER">ผู้ใช้งานทั่วไป (นิสิต/บุคลากร)</option>
                 </select>
               </div>
 
-              {editingUser.role !== "SUPER_ADMIN" && (
+              {true && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-bold text-gray-700">คณะ / สังกัด:</label>

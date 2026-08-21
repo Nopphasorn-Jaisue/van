@@ -2,105 +2,41 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { SignJWT, jwtVerify } from "jose";
+
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "fallback-secret-key-for-development-only"
+);
+
+export async function signToken(payload: Record<string, unknown>) {
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("24h")
+    .sign(JWT_SECRET);
+}
+
+export async function verifyToken(token: string) {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 export async function setMockSession(role: string, email?: string) {
   const cookieStore = await cookies();
-  cookieStore.set("mock_role", role, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 // 1 day
-  });
-  if (email) {
-    cookieStore.set("mock_email", email, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24
-    });
-  }
-}
-
-export async function clearSession() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  const cookieStore = await cookies();
-  cookieStore.delete("mock_role");
-  cookieStore.delete("mock_email");
-}
-
-export async function getAuthUser() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
   
-  if (user && user.email) {
-    let dbUser = await prisma.user.findUnique({
-      where: { email: user.email },
-      include: { faculty: true }
-    });
+  let dbUser = email ? await prisma.user.findUnique({
+    where: { email },
+    include: { faculty: true }
+  }) : null;
 
-    // Auto-provisioning Logic (วิธีที่ 1: ดึงจาก Department Claim ของ Microsoft)
-    if (!dbUser) {
-      // 1. อ่านค่าคณะ/แผนก จากข้อมูลที่ Microsoft ส่งมาให้ผ่าน Supabase
-      const department = user.user_metadata?.department || user.user_metadata?.custom_claims?.department;
-      
-      let facultyId: number;
-      
-      if (department) {
-        // ค้นหาว่ามีคณะนี้ในระบบเราหรือยัง
-        let facultyRecord = await prisma.faculty.findFirst({
-           where: { nameTh: { contains: department } } 
-        });
-        
-        // ถ้ายังไม่มีคณะนี้ ให้สร้างใหม่ในระบบอัตโนมัติ
-        if (!facultyRecord) {
-           facultyRecord = await prisma.faculty.create({ data: { nameTh: department } });
-        }
-        facultyId = facultyRecord.id;
-      } else {
-        // ถ้า Microsoft ไม่ได้ส่งข้อมูลคณะมา ให้จัดเข้า "ส่วนกลาง" ชั่วคราวไปก่อน
-        let fallbackFaculty = await prisma.faculty.findFirst({ where: { nameTh: 'ศูนย์จัดการระบบส่วนกลาง' } });
-        if (!fallbackFaculty) {
-          fallbackFaculty = await prisma.faculty.create({ data: { nameTh: 'ศูนย์จัดการระบบส่วนกลาง' } });
-        }
-        facultyId = fallbackFaculty.id;
-      }
-
-      // 2. สร้างบัญชีผู้ใช้ใหม่ในระบบ (ยัดเข้าคณะที่ดึงมาได้อัตโนมัติ)
-      dbUser = await prisma.user.create({
-        data: {
-          email: user.email,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
-          role: 'USER',
-          facultyId: facultyId,
-          avatar: user.user_metadata?.avatar_url || null
-        },
-        include: { faculty: true }
-      });
-    }
-
-    if (dbUser) return dbUser;
-  }
-  
-  // Fallback to mock session for bypass login
-  const cookieStore = await cookies();
-  const mockEmail = cookieStore.get("mock_email")?.value;
-  
-  if (mockEmail) {
-    const dbUser = await prisma.user.findUnique({
-      where: { email: mockEmail },
-      include: { faculty: true }
-    });
-    if (dbUser) return dbUser;
-  }
-
-  const mockRole = cookieStore.get("mock_role")?.value;
-  if (mockRole) {
-    // Find a real user with this role in the DB to ensure IDs match Prisma relations
-    const mockEmail = `mock.${mockRole.toLowerCase()}@up.ac.th`;
-    let dbUser = await prisma.user.findUnique({
+  if (!dbUser) {
+    // If no email or user not found, create or find mock user
+    const mockEmail = email || `mock.${role.toLowerCase()}@up.ac.th`;
+    dbUser = await prisma.user.findUnique({
       where: { email: mockEmail },
       include: { faculty: true }
     });
@@ -110,14 +46,90 @@ export async function getAuthUser() {
       dbUser = await prisma.user.create({
         data: {
           email: mockEmail,
-          name: mockRole === 'DRIVER' ? "พนักงานขับรถ ทดสอบ" : mockRole === 'USER' ? "ผู้ใช้งานทั่วไป ทดสอบ" : "ผู้ดูแลระบบ ทดสอบ",
-          role: mockRole as import("@prisma/client").Role,
+          name: role === 'DRIVER' ? "พนักงานขับรถ ทดสอบ" : role === 'USER' ? "ผู้ใช้งานทั่วไป ทดสอบ" : "ผู้ดูแลระบบ ทดสอบ",
+          role: role as import("@prisma/client").Role,
           facultyId: fallbackFaculty.id,
         },
         include: { faculty: true }
       });
     }
-    return dbUser;
+  }
+
+  // Generate JWT token containing essential user info
+  const token = await signToken({
+    id: dbUser.id,
+    email: dbUser.email,
+    name: dbUser.name,
+    role: dbUser.role,
+    facultyId: dbUser.facultyId,
+    faculty: dbUser.faculty
+  });
+
+  // Set the token as a cookie
+  cookieStore.set("auth_token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 // 1 day
+  });
+
+  // Keep these for backward compatibility if needed temporarily
+  cookieStore.set("mock_role", role, { path: "/", maxAge: 60 * 60 * 24 });
+  if (email) {
+    cookieStore.set("mock_email", email, { path: "/", maxAge: 60 * 60 * 24 });
+  }
+}
+
+export async function clearSession() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  const cookieStore = await cookies();
+  cookieStore.delete("auth_token");
+  cookieStore.delete("mock_role");
+  cookieStore.delete("mock_email");
+}
+
+import { Prisma } from "@prisma/client";
+
+type AuthUserType = Prisma.UserGetPayload<{ include: { faculty: true } }>;
+
+export async function getAuthUser(): Promise<AuthUserType | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+
+  if (token) {
+    const payload = await verifyToken(token);
+    if (payload) {
+      // Fast path: return user from JWT without DB query
+      return payload as unknown as AuthUserType; // Cast to expected user type
+    }
+  }
+
+  // Fallback to Supabase logic if token is missing but user is logged in via Supabase directly
+  // This will happen if they logged in before we implemented JWT
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (user && user.email) {
+    const dbUser = await prisma.user.findUnique({
+      where: { email: user.email },
+      include: { faculty: true }
+    });
+
+    if (dbUser) {
+       // Migrate them to JWT for next time
+       const jwt = await signToken({
+         id: dbUser.id,
+         email: dbUser.email,
+         name: dbUser.name,
+         role: dbUser.role,
+         facultyId: dbUser.facultyId,
+         faculty: dbUser.faculty
+       });
+       cookieStore.set("auth_token", jwt, { path: "/", httpOnly: true, maxAge: 60 * 60 * 24 });
+       return dbUser;
+    }
   }
   
   return null;

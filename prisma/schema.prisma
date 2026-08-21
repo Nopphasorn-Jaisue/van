@@ -173,6 +173,8 @@ model Booking {
   departureDate   DateTime @map("departure_date")
   returnDate      DateTime @map("return_date")
   passengersCount Int      @map("passengers_count")
+  phone           String?
+  passengerNames  String?  @map("passenger_names") @db.Text
   budgetSource    String   @map("budget_source")
   tripType        String?  @map("trip_type")
 
