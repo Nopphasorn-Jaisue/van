@@ -144,10 +144,12 @@ export async function handleSystemCalendarEvents(request: Request) {
       
       const isApproved = b.status === "APPROVED" || b.status === "COMPLETED";
 
+      const vanIdentifier = b.assignedVanId ? String(b.assignedVanId) : (b.requesterFacultyId ? String(b.requesterFacultyId) : "1");
+
       return {
         id: `bk-${b.id}`,
-        vanId: b.assignedVanId || "v-ict",
-        facultyId: b.requesterFacultyId ? String(b.requesterFacultyId) : "ict",
+        vanId: vanIdentifier,
+        facultyId: b.requesterFacultyId ? String(b.requesterFacultyId) : "1",
         bookingFaculty: b.requesterFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
         destination: b.destination,
         purpose: b.purpose,
@@ -160,7 +162,7 @@ export async function handleSystemCalendarEvents(request: Request) {
         requester: b.requester || "ผู้ขอใช้รถ",
         department: "ระบบจองรถตู้",
         status: isApproved ? "approved" : "pending",
-        statusText: isApproved ? (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "อนุมัติแล้ว") : "รอดำเนินการ",
+        statusText: isApproved ? (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "อนุมัติแล้ว") : "รอดำเนินการ (รอคณบดีอนุมัติ)",
         statusTime: "ระบบการจอง",
         tripType: (b.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || "ในจังหวัดพะเยา",
         createdAt: b.submittedAt || new Date().toISOString()
@@ -332,7 +334,8 @@ export async function handleSystemCalendarEvents(request: Request) {
   }
 
   if (yearParam) {
-    const y = Number(yearParam);
+    let y = Number(yearParam);
+    if (y > 2400) y -= 543;
     events = events.filter(e => {
       const startD = new Date(e.date);
       const endD = e.returnDate ? new Date(e.returnDate) : startD;
@@ -526,11 +529,20 @@ export async function POST(request: Request) {
       const startDateTime = new Date(`${startDateRaw}T${startTime}+07:00`);
       const endDateTime = new Date(`${endDateRaw}T${endTime}+07:00`);
 
+      let targetFaculty = faculty;
+      if (body.vanId) {
+        const vanNum = parseInt(String(body.vanId).replace(/\D/g, ''));
+        if (!isNaN(vanNum)) {
+          const v = await prisma.van.findUnique({ where: { id: vanNum }, include: { faculty: true } });
+          if (v?.faculty) targetFaculty = v.faculty;
+        }
+      }
+
       await prisma.booking.create({
         data: {
           id: dbBookingId,
           requesterId: requester.id,
-          targetFacultyId: faculty.id,
+          targetFacultyId: targetFaculty.id,
           destination: body.destination || "ไม่ระบุสถานที่",
           objective: body.purpose || "ภารกิจใช้รถตู้",
           departureDate: isNaN(startDateTime.getTime()) ? new Date() : startDateTime,

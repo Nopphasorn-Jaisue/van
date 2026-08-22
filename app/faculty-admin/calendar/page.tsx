@@ -5,8 +5,7 @@ import {
   ChevronLeft, ChevronRight, 
   Search, RotateCcw, Plus,
   MapPin, Calendar, Clock, User, Phone, FileText, 
-  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles,
-  Download, Check, AlertTriangle
+  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles, Check, AlertTriangle
 } from 'lucide-react';
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
@@ -72,30 +71,6 @@ function CalendarContent() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const datePickerRef = useRef<HTMLInputElement>(null);
-  const returnDatePickerRef = useRef<HTMLInputElement>(null);
-
-  const openDatePicker = () => {
-    const pickerEl = datePickerRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
-    if (pickerEl) {
-      if (typeof pickerEl.showPicker === 'function') {
-        pickerEl.showPicker();
-      } else {
-        pickerEl.focus();
-      }
-    }
-  };
-
-  const openReturnDatePicker = () => {
-    const pickerEl = returnDatePickerRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
-    if (pickerEl) {
-      if (typeof pickerEl.showPicker === 'function') {
-        pickerEl.showPicker();
-      } else {
-        pickerEl.focus();
-      }
-    }
-  };
 
   const d = new Date();
   const initDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1335,25 +1310,17 @@ function CalendarContent() {
                       </div>
                     ) : (
                       <select 
+                        required
                         value={eventFormData.vanId}
                         onChange={e => setEventFormData({ ...eventFormData, vanId: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171] font-bold text-gray-800 bg-white"
                       >
-                        <option value="" disabled>-- เลือกรถตู้ต่างคณะ --</option>
+                        <option value="">-- กรุณาเลือกรถตู้ต่างคณะที่ต้องการยืม --</option>
                         {vansList
-                          .filter(v => {
-                            if (v.facultyName === eventFormData.bookingFaculty) return false;
-                            const isBooked = bookingsData.some(b => 
-                              b.vanId === v.id && 
-                              isSameDate(b.date, eventFormData.date) &&
-                              b.status !== 'rejected' &&
-                              b.status !== 'cancelled'
-                            );
-                            return !isBooked;
-                          })
+                          .filter(v => v.facultyName !== (currentUser?.faculty || eventFormData.bookingFaculty))
                           .map(v => (
-                          <option key={v.id} value={v.id} className="text-green-600 font-bold">
-                            {v.vanName} ({v.plate}) - {v.facultyName} (ว่าง)
+                          <option key={v.id} value={v.id} className="text-gray-800 font-bold">
+                            {v.vanName} ({v.plate}) - {v.facultyName}
                           </option>
                         ))}
                       </select>
@@ -1367,94 +1334,38 @@ function CalendarContent() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block font-bold text-gray-700 mb-1">วันที่เดินทาง (ออก)</label>
-                      <div className="relative flex items-center">
-                        <input 
-                          type="text"
-                          readOnly
-                          onClick={openDatePicker}
-                          value={(() => {
-                            if (!eventFormData.date) return '';
-                            const parts = eventFormData.date.split('-');
-                            if (parts.length !== 3) return eventFormData.date;
-                            const y = parseInt(parts[0], 10);
-                            const m = parseInt(parts[1], 10);
-                            const d = parseInt(parts[2], 10);
-                            if (!y || !m || !d) return eventFormData.date;
-                            const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-                            return `${d} ${thaiMonths[m - 1]} ${y + 543}`;
-                          })()}
-                          placeholder="เลือกวันที่เดินทาง"
-                          className="w-full pl-3 pr-8 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171] bg-white cursor-pointer font-bold text-gray-800"
-                        />
-                        <input 
-                          ref={datePickerRef}
-                          type="date"
-                          value={eventFormData.date}
-                          onChange={e => {
-                            if (e.target.value) {
-                              const newDepart = e.target.value;
-                              setEventFormData(prev => ({
-                                ...prev,
-                                date: newDepart,
-                                returnDate: prev.returnDate < newDepart ? newDepart : prev.returnDate
-                              }));
-                            }
-                          }}
-                          className="sr-only opacity-0 pointer-events-none absolute w-0 h-0"
-                        />
-                        <button 
-                          type="button"
-                          onClick={openDatePicker}
-                          className="absolute right-1.5 p-1 text-[#311171] hover:bg-purple-100 transition-colors rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center"
-                          title="คลิกเพื่อเลือกวันที่จากปฏิทิน"
-                        >
-                          <Calendar size={13} />
-                        </button>
-                      </div>
+                      <input 
+                        required
+                        type="date"
+                        value={eventFormData.date}
+                        onChange={e => {
+                          if (e.target.value) {
+                            const newDepart = e.target.value;
+                            setEventFormData(prev => ({
+                              ...prev,
+                              date: newDepart,
+                              returnDate: prev.returnDate < newDepart ? newDepart : prev.returnDate
+                            }));
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171] font-bold text-gray-800 bg-white cursor-pointer"
+                      />
                     </div>
 
                     <div>
                       <label className="block font-bold text-gray-700 mb-1">วันเดินทางกลับ</label>
-                      <div className="relative flex items-center">
-                        <input 
-                          type="text"
-                          readOnly
-                          onClick={openReturnDatePicker}
-                          value={(() => {
-                            if (!eventFormData.returnDate) return '';
-                            const parts = eventFormData.returnDate.split('-');
-                            if (parts.length !== 3) return eventFormData.returnDate;
-                            const y = parseInt(parts[0], 10);
-                            const m = parseInt(parts[1], 10);
-                            const d = parseInt(parts[2], 10);
-                            if (!y || !m || !d) return eventFormData.returnDate;
-                            const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-                            return `${d} ${thaiMonths[m - 1]} ${y + 543}`;
-                          })()}
-                          placeholder="เลือกวันเดินทางกลับ"
-                          className="w-full pl-3 pr-8 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171] bg-white cursor-pointer font-bold text-gray-800"
-                        />
-                        <input 
-                          ref={returnDatePickerRef}
-                          type="date"
-                          min={eventFormData.date}
-                          value={eventFormData.returnDate}
-                          onChange={e => {
-                            if (e.target.value) {
-                              setEventFormData(prev => ({ ...prev, returnDate: e.target.value }));
-                            }
-                          }}
-                          className="sr-only opacity-0 pointer-events-none absolute w-0 h-0"
-                        />
-                        <button 
-                          type="button"
-                          onClick={openReturnDatePicker}
-                          className="absolute right-1.5 p-1 text-[#311171] hover:bg-purple-100 transition-colors rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center"
-                          title="คลิกเพื่อเลือกวันกลับจากปฏิทิน"
-                        >
-                          <Calendar size={13} />
-                        </button>
-                      </div>
+                      <input 
+                        required
+                        type="date"
+                        min={eventFormData.date}
+                        value={eventFormData.returnDate}
+                        onChange={e => {
+                          if (e.target.value) {
+                            setEventFormData(prev => ({ ...prev, returnDate: e.target.value }));
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171] font-bold text-gray-800 bg-white cursor-pointer"
+                      />
                     </div>
                   </div>
 
