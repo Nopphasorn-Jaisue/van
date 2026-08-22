@@ -986,7 +986,7 @@ function EventDetailModal({ event, onClose }: { event: NetworkCalendarEvent | nu
   const isCrossFaculty = ownerFaculty && ownerFaculty.id !== faculty?.id;
 
   const detailItems = [
-    { label: 'ผู้ขอใช้บริการ', value: event.requester ? `${event.requester} ${event.phone ? `(📞 ${event.phone})` : ''}` : 'ไม่ระบุ' },
+    { label: 'ผู้ขอใช้บริการ', value: event.requester ? `${event.requester} ${event.phone ? `(${event.phone})` : ''}` : 'ไม่ระบุ' },
     { label: 'วัตถุประสงค์', value: event.purpose || event.title },
     { label: 'เดินทางไป', value: event.destination },
     { label: 'ช่วงเวลาเดินทาง', value: dateRangeDisplay },

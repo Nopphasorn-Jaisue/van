@@ -5,6 +5,7 @@ import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 
 import { DriverWorkload, FleetStatus, WeeklyDensity, CrossFacultyUsage, ReportsData } from '@/app/types/reports';
+import { AlertTriangle, Check } from 'lucide-react';
 
 
 import { getDashboardReports } from '@/app/actions/reports';
@@ -79,9 +80,15 @@ function FacultyAdminView({ data }: { data: ReportsData }) {
                     <p className="text-xs text-gray-500 mt-1">รับงานไปแล้ว {driver.trips} เที่ยว</p>
                   </div>
                   {isWarning ? (
-                    <span className="rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">⚠️ ใกล้เกินลิมิต</span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">
+                      <AlertTriangle size={11} className="text-red-600" />
+                      <span>ใกล้เกินลิมิต</span>
+                    </span>
                   ) : (
-                    <span className="rounded bg-green-100 px-2 py-1 text-[10px] font-bold text-green-700">✓ พักผ่อนเพียงพอ</span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-1 text-[10px] font-bold text-green-700">
+                      <Check size={11} strokeWidth={3} className="text-green-600" />
+                      <span>พักผ่อนเพียงพอ</span>
+                    </span>
                   )}
                   <div className="h-2.5 w-16 overflow-hidden rounded-full bg-gray-200">
                     <div 

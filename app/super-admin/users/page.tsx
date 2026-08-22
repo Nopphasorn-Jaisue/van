@@ -4,7 +4,8 @@
 import React, { useState, useEffect } from "react";
 import { 
   Search, Edit, Shield, Users, X, CheckCircle2,
-  ChevronLeft, ChevronRight, Trash2, Save, Briefcase, Crown
+  ChevronLeft, ChevronRight, Trash2, Save, Briefcase, Crown,
+  Check, Minus
 } from "lucide-react";
 
 interface UserItem {
@@ -607,10 +608,10 @@ export default function SuperAdminUsers() {
                   ].map((p, idx) => (
                     <tr key={idx} className="hover:bg-purple-50/20">
                       <td className="p-3 font-bold text-gray-800">{p.name}</td>
-                      <td className="p-3 text-center font-bold text-emerald-600">{p.fa ? "✓" : "-"}</td>
-                      <td className="p-3 text-center font-bold text-emerald-600">{p.ex ? "✓" : "-"}</td>
-                      <td className="p-3 text-center font-bold text-emerald-600">{p.dr ? "✓" : "-"}</td>
-                      <td className="p-3 text-center font-bold text-emerald-600">{p.sa ? "✓" : "-"}</td>
+                      <td className="p-3 text-center">{p.fa ? <Check size={14} className="mx-auto text-emerald-600 font-bold" /> : <Minus size={14} className="mx-auto text-gray-300" />}</td>
+                      <td className="p-3 text-center">{p.ex ? <Check size={14} className="mx-auto text-emerald-600 font-bold" /> : <Minus size={14} className="mx-auto text-gray-300" />}</td>
+                      <td className="p-3 text-center">{p.dr ? <Check size={14} className="mx-auto text-emerald-600 font-bold" /> : <Minus size={14} className="mx-auto text-gray-300" />}</td>
+                      <td className="p-3 text-center">{p.sa ? <Check size={14} className="mx-auto text-emerald-600 font-bold" /> : <Minus size={14} className="mx-auto text-gray-300" />}</td>
                     </tr>
                   ))}
                 </tbody>

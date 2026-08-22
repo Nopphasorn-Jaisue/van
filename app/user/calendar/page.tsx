@@ -5,7 +5,8 @@ import {
   ChevronLeft, ChevronRight, 
   Search, RotateCcw, Plus,
   MapPin, Calendar, Clock, User, Phone, FileText, 
-  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles
+  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles,
+  Download, Check, AlertTriangle
 } from 'lucide-react';
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
@@ -702,6 +703,16 @@ function CalendarContent() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="/api/calendar-events/export"
+              download="up-van-calendar.ics"
+              className="px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-full text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
+              title="ส่งออกปฏิทินไฟล์ .ics (สำหรับ Google Calendar, Outlook, Apple Calendar)"
+            >
+              <Download size={14} className="text-[#311171]" />
+              <span>ส่งออกปฏิทิน (.ics)</span>
+            </a>
+
             <button
               onClick={() => handleOpenAddModal()}
               className="px-4 py-2 bg-[#311171] hover:bg-[#230b54] text-white rounded-full text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
@@ -1287,7 +1298,7 @@ function CalendarContent() {
                     {eventFormData.vanType === 'BORROW' && (
                       <div className="p-2.5 mt-2 bg-red-50/80 rounded-xl border border-red-200 text-[10px] text-red-600 font-bold leading-relaxed">
                         <div className="flex items-start gap-1.5">
-                          <span className="text-xs">⚠️</span>
+                          <AlertTriangle size={13} className="text-red-500 shrink-0 mt-0.5" />
                           <span>
                             หน่วยงานอื่นไม่อนุญาตให้จองใช้รถตู้เกิน 3 วันเดินทาง จองล่วงหน้าได้ไม่เกิน 10 วัน และไม่อนุมัติข้ามเดือน
                           </span>
@@ -1574,13 +1585,23 @@ function CalendarContent() {
                                           vanType: 'BORROW'
                                         }));
                                       }}
-                                      className={`w-full py-1.5 px-2 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1 ${
+                                      className={`w-full py-1.5 px-2 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1.5 ${
                                         isSelected 
                                           ? 'bg-emerald-600 text-white shadow-xs' 
                                           : 'bg-[#311171] text-white hover:bg-[#250b57]'
                                       }`}
                                     >
-                                      {isSelected ? '✓ เลือกยืมรถคณะนี้แล้ว' : '+ เลือกยืมรถคณะนี้'}
+                                      {isSelected ? (
+                                        <>
+                                          <Check size={12} strokeWidth={3} className="text-white shrink-0" />
+                                          <span>เลือกยืมรถคณะนี้แล้ว</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Plus size={12} strokeWidth={2.5} className="shrink-0" />
+                                          <span>เลือกยืมรถคณะนี้</span>
+                                        </>
+                                      )}
                                     </button>
                                   </div>
                                 );

@@ -369,8 +369,14 @@ export default function SuperAdminFaculties() {
                 <div>
                   <p className="font-bold text-gray-900">{selectedFaculty.executiveName}</p>
                   <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.executiveTitle}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">📞 {selectedFaculty.executivePhone}</p>
-                  <p className="text-[10px] text-gray-400 font-mono">✉️ {selectedFaculty.executiveEmail}</p>
+                  <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
+                    <Phone size={11} className="text-gray-400" />
+                    <span>{selectedFaculty.executivePhone}</span>
+                  </p>
+                  <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
+                    <Mail size={11} className="text-gray-400" />
+                    <span>{selectedFaculty.executiveEmail}</span>
+                  </p>
                 </div>
               </div>
             </div>
@@ -387,8 +393,14 @@ export default function SuperAdminFaculties() {
                 <div>
                   <p className="font-bold text-gray-900">{selectedFaculty.adminName}</p>
                   <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.adminTitle}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">📞 {selectedFaculty.adminPhone}</p>
-                  <p className="text-[10px] text-gray-400 font-mono">✉️ {selectedFaculty.adminEmail}</p>
+                  <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
+                    <Phone size={11} className="text-gray-400" />
+                    <span>{selectedFaculty.adminPhone}</span>
+                  </p>
+                  <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
+                    <Mail size={11} className="text-gray-400" />
+                    <span>{selectedFaculty.adminEmail}</span>
+                  </p>
                 </div>
               </div>
             </div>

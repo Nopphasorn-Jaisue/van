@@ -4,7 +4,8 @@ import AppShell from '@/components/AppShell';
 import { 
   MapPin, Users, FileText, Send, 
   Paperclip, UploadCloud, X,
-  CheckCircle, ChevronLeft, ChevronRight, Check, Sparkles
+  CheckCircle, ChevronLeft, ChevronRight, Check, Sparkles,
+  AlertTriangle, Plus
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -239,7 +240,7 @@ function BookingFormContent() {
               {form.vanId === "borrow" || (form.vanId && form.vanId !== "" && form.vanId !== "v-ict") ? (
                 <div className="space-y-3 p-3.5 bg-red-50/80 rounded-xl border border-red-200 animate-in fade-in">
                   <div className="flex items-start gap-2 text-red-600 text-xs font-bold leading-relaxed">
-                    <span className="text-sm mt-0.5">⚠️</span>
+                    <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
                     <span>
                       หน่วยงานอื่นไม่อนุญาตให้จองใช้รถตู้เกิน 3 วัน<br/>
                       เดินทาง จองล่วงหน้าได้ไม่เกิน 10 วันจากวัน<br/>
@@ -467,13 +468,23 @@ function BookingFormContent() {
                                   e.stopPropagation();
                                   setForm(prev => ({ ...prev, vanId: rv.id }));
                                 }}
-                                className={`w-full py-1.5 px-2 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1 ${
+                                className={`w-full py-1.5 px-2 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1.5 ${
                                   isSelected 
                                     ? 'bg-emerald-600 text-white shadow-xs' 
                                     : 'bg-[#311171] text-white hover:bg-[#250b57]'
                                 }`}
                               >
-                                {isSelected ? '✓ เลือกยืมรถคณะนี้แล้ว' : '+ เลือกยืมรถคณะนี้'}
+                                {isSelected ? (
+                                  <>
+                                    <Check size={12} strokeWidth={3} className="text-white shrink-0" />
+                                    <span>เลือกยืมรถคณะนี้แล้ว</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus size={12} strokeWidth={2.5} className="shrink-0" />
+                                    <span>เลือกยืมรถคณะนี้</span>
+                                  </>
+                                )}
                               </button>
                             </div>
                           );
