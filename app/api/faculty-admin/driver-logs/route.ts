@@ -1,18 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from "@/lib/prisma";
 import { getStoredDriverLogs, addStoredDriverLog, deleteStoredDriverLog } from "@/Backend/services/records-store";
+import { getAuthUser } from "@/app/actions/auth";
 
 export async function GET() {
   try {
-    const facultyId = 1;
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'FACULTY_ADMIN' && user.role !== 'SUPER_ADMIN')) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const facultyId = user.role === 'SUPER_ADMIN' ? undefined : (user.facultyId || undefined);
 
     try {
+      const where = facultyId ? { driver: { facultyId } } : {};
       const logs = await prisma.driverLog.findMany({
-        where: {
-          driver: {
-            facultyId: facultyId
-          }
-        },
+        where,
         include: {
           driver: {
             include: {

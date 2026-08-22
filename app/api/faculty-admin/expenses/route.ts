@@ -1,20 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from "@/lib/prisma";
 import { getStoredExpenses, addStoredExpense, updateStoredExpenseStatus, deleteStoredExpense } from "@/Backend/services/records-store";
+import { getAuthUser } from "@/app/actions/auth";
 
 export async function GET() {
   try {
-    const facultyId = 1;
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'FACULTY_ADMIN' && user.role !== 'SUPER_ADMIN')) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const facultyId = user.role === 'SUPER_ADMIN' ? undefined : (user.facultyId || undefined);
 
     try {
+      const where = facultyId ? { driverLog: { driver: { facultyId } } } : {};
       const expenses = await prisma.expense.findMany({
-        where: {
-          driverLog: {
-            driver: {
-              facultyId: facultyId
-            }
-          }
-        },
+        where,
         include: {
           driverLog: {
             include: {
