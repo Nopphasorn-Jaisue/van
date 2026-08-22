@@ -67,11 +67,11 @@ export function saveStoredCalendarEvents(events: CalendarEventRecord[]): boolean
   }
 }
 
-export function addStoredCalendarEvent(newEvent: Omit<CalendarEventRecord, 'id' | 'createdAt'>): CalendarEventRecord {
+export function addStoredCalendarEvent(newEvent: Omit<CalendarEventRecord, 'id' | 'createdAt'> & { id?: string }): CalendarEventRecord {
   const events = getStoredCalendarEvents();
   const created: CalendarEventRecord = {
     ...newEvent,
-    id: `UP-2569-${String(Date.now()).slice(-4)}`,
+    id: newEvent.id || `UP-2569-${String(Date.now()).slice(-4)}`,
     createdAt: new Date().toISOString()
   };
   events.unshift(created);

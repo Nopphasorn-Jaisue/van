@@ -470,8 +470,74 @@ export async function POST(request: Request) {
     const body = await request.json();
     // Default new calendar bookings to pending (waiting for Dean approval)
     const initialStatus = body.status === 'approved' ? 'approved' : 'pending';
+
+    // 1. Persist directly to Prisma Database
+    let dbBookingId: string | null = null;
+    try {
+      const faculty = (await prisma.faculty.findFirst({
+        where: { nameTh: body.bookingFaculty || authUser.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร" }
+      })) || (await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } }));
+
+      let requester = authUser.id 
+        ? await prisma.user.findFirst({ where: { id: Number(authUser.id) } })
+        : null;
+
+      if (!requester && body.requester) {
+        requester = await prisma.user.findFirst({ where: { name: body.requester } });
+      }
+
+      if (!requester) {
+        requester = await prisma.user.create({
+          data: {
+            facultyId: faculty.id,
+            name: body.requester || authUser.name || "ผู้ขอใช้บริการ",
+            email: `${Date.now()}-user@example.local`,
+            role: authUser.role || "FACULTY_ADMIN"
+          }
+        });
+      }
+
+      const latest = await prisma.booking.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
+      const lastNumber = latest ? Number((latest.id.match(/(\d+)/)?.[1] || "0")) : 64;
+      dbBookingId = `UPV-2569-${(lastNumber + 1).toString().padStart(4, "0")}`;
+
+      const startDateRaw = body.date ? String(body.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+      const endDateRaw = body.returnDate ? String(body.returnDate).slice(0, 10) : startDateRaw;
+      
+      let startTime = "08:30:00";
+      let endTime = "16:30:00";
+      if (body.time) {
+        const parts = String(body.time).replace(/น\./g, '').split('-').map((s: string) => s.trim());
+        if (parts[0] && parts[0].includes(':')) startTime = `${parts[0]}:00`;
+        if (parts[1] && parts[1].includes(':')) endTime = `${parts[1]}:00`;
+      }
+
+      const startDateTime = new Date(`${startDateRaw}T${startTime}+07:00`);
+      const endDateTime = new Date(`${endDateRaw}T${endTime}+07:00`);
+
+      await prisma.booking.create({
+        data: {
+          id: dbBookingId,
+          requesterId: requester.id,
+          targetFacultyId: faculty.id,
+          destination: body.destination || "ไม่ระบุสถานที่",
+          objective: body.purpose || "ภารกิจใช้รถตู้",
+          departureDate: isNaN(startDateTime.getTime()) ? new Date() : startDateTime,
+          returnDate: isNaN(endDateTime.getTime()) ? new Date() : endDateTime,
+          passengersCount: Number(body.passengers || 1),
+          phone: body.phone || null,
+          budgetSource: "งบประมาณคณะ",
+          tripType: body.tripType || "ในจังหวัดพะเยา",
+          status: initialStatus === 'approved' ? 'APPROVED' : 'WAITING_EXEC',
+        }
+      });
+    } catch (dbErr) {
+      console.warn("Notice: Failed to persist calendar event to Prisma DB:", dbErr);
+    }
+
     const created = addStoredCalendarEvent({
       ...body,
+      id: dbBookingId ? `bk-${dbBookingId}` : undefined,
       status: initialStatus,
     });
 
@@ -538,6 +604,23 @@ export async function PATCH(request: Request) {
     if (!id) return NextResponse.json({ success: false, error: "Missing ID" }, { status: 400 });
 
     const updated = updateStoredCalendarEvent(id, fields);
+
+    // Sync updates to Prisma DB
+    if (String(id).startsWith("bk-")) {
+      const bookingId = String(id).replace("bk-", "");
+      try {
+        await prisma.booking.update({
+          where: { id: bookingId },
+          data: {
+            destination: fields.destination,
+            objective: fields.purpose,
+            status: fields.status === 'approved' ? 'APPROVED' : (fields.status === 'rejected' ? 'REJECTED' : 'WAITING_EXEC')
+          }
+        });
+      } catch (e) {
+        console.warn("Notice updating DB booking:", e);
+      }
+    }
 
     // Sync update or insert to Google Calendar if approved
     const isNowApproved = (fields.status === 'approved' || updated?.status === 'approved');
