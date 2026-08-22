@@ -534,7 +534,10 @@ export default function LandingPage() {
           <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div>
               <h1 className="text-3xl font-black leading-tight tracking-tight md:text-5xl">
-                จองรถตู้ มหาวิทยาลัยพะเยา ง่ายในที่เดียว
+                จองรถตู้ มหาวิทยาลัยพะเยา
+              </h1>
+              <h1 className="text-3xl font-black leading-tight tracking-tight md:text-5xl">
+                <span className="text-violet-400">ได้ง่ายในที่เดียว</span>
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-slate-200 md:text-lg">
                 ตรวจสอบการเดินรถ ตรวจสอบรถว่าง และส่งคำขอจองรถตู้ประจำคณะ

@@ -46,15 +46,26 @@ export async function proxy(request: NextRequest) {
         if (path.startsWith('/api/')) {
           return NextResponse.json({ error: 'Forbidden: Super Admin access required' }, { status: 403 });
         }
+        if (role === 'FACULTY_ADMIN') {
+          return NextResponse.redirect(new URL('/faculty-admin/dashboard', request.url));
+        }
         return NextResponse.redirect(new URL('/login', request.url));
       }
     }
     
     // Role-based access control for Faculty Admin (Pages & API)
     if (path.startsWith('/faculty-admin') || path.startsWith('/api/faculty-admin')) {
-      if (role !== 'FACULTY_ADMIN' && role !== 'SUPER_ADMIN') {
+      if (role !== 'FACULTY_ADMIN') {
         if (path.startsWith('/api/')) {
-          return NextResponse.json({ error: 'Forbidden: Faculty Admin access required' }, { status: 403 });
+          if (role !== 'SUPER_ADMIN') {
+            return NextResponse.json({ error: 'Forbidden: Faculty Admin access required' }, { status: 403 });
+          }
+          return NextResponse.next();
+        }
+        if (role === 'SUPER_ADMIN') {
+          if (path.includes('/drivers')) return NextResponse.redirect(new URL('/super-admin/drivers', request.url));
+          if (path.includes('/vans')) return NextResponse.redirect(new URL('/super-admin/vans', request.url));
+          return NextResponse.redirect(new URL('/super-admin/dashboard', request.url));
         }
         return NextResponse.redirect(new URL('/login', request.url));
       }
@@ -62,9 +73,15 @@ export async function proxy(request: NextRequest) {
 
     // Role-based access control for Executive (Pages & API)
     if (path.startsWith('/executive') || path.startsWith('/api/executive')) {
-      if (role !== 'EXECUTIVE' && role !== 'SUPER_ADMIN') {
+      if (role !== 'EXECUTIVE') {
         if (path.startsWith('/api/')) {
-          return NextResponse.json({ error: 'Forbidden: Executive access required' }, { status: 403 });
+          if (role !== 'SUPER_ADMIN') {
+            return NextResponse.json({ error: 'Forbidden: Executive access required' }, { status: 403 });
+          }
+          return NextResponse.next();
+        }
+        if (role === 'SUPER_ADMIN') {
+          return NextResponse.redirect(new URL('/super-admin/dashboard', request.url));
         }
         return NextResponse.redirect(new URL('/login', request.url));
       }
@@ -72,9 +89,15 @@ export async function proxy(request: NextRequest) {
 
     // Role-based access control for Driver (Pages & API)
     if (path.startsWith('/driver') || path.startsWith('/api/driver')) {
-      if (role !== 'DRIVER' && role !== 'SUPER_ADMIN') {
+      if (role !== 'DRIVER') {
         if (path.startsWith('/api/')) {
-          return NextResponse.json({ error: 'Forbidden: Driver access required' }, { status: 403 });
+          if (role !== 'SUPER_ADMIN') {
+            return NextResponse.json({ error: 'Forbidden: Driver access required' }, { status: 403 });
+          }
+          return NextResponse.next();
+        }
+        if (role === 'SUPER_ADMIN') {
+          return NextResponse.redirect(new URL('/super-admin/dashboard', request.url));
         }
         return NextResponse.redirect(new URL('/login', request.url));
       }
