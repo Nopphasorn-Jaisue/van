@@ -4,12 +4,13 @@ import AppShell from '@/components/AppShell';
 import { 
   MapPin, Users, FileText, Send, 
   Paperclip, UploadCloud, X,
-  CheckCircle, ChevronLeft, ChevronRight, Check
+  CheckCircle, ChevronLeft, ChevronRight, Check, Sparkles
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ThaiTimePicker from '@/components/ThaiTimePicker';
+import { facultyVansList } from '@/Frontend/data/faculty-vans';
 
 interface AvailableVan {
   id: string;
@@ -43,6 +44,7 @@ function BookingFormContent() {
   });
 
   const [availableVans, setAvailableVans] = useState<AvailableVan[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<Array<{ vanId?: string; date?: string; returnDate?: string; status?: string }>>([]);
 
   useEffect(() => {
     fetch('/api/vans')
@@ -51,6 +53,13 @@ function BookingFormContent() {
         if (data.vans) setAvailableVans(data.vans);
       })
       .catch(err => console.error("Error fetching vans:", err));
+
+    fetch('/api/calendar-events')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.rawEvents) setCalendarEvents(data.rawEvents);
+      })
+      .catch(err => console.error("Error fetching calendar events:", err));
   }, []);
 
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -372,12 +381,112 @@ function BookingFormContent() {
               <input 
                 type="number" 
                 min="1"
+                max="30"
                 required
                 value={form.passengers}
                 onChange={e => setForm({...form, passengers: e.target.value})}
                 placeholder="ระบุจำนวนคน" 
                 className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium"
               />
+
+              {/* กล่องแนะนำรถตู้ของคณะที่ว่าง เมื่อผู้โดยสารเกิน 10 คน */}
+              {Number(form.passengers) > 10 && (() => {
+                const departDateStr = form.startDate;
+                const returnDateStr = form.endDate || form.startDate;
+                
+                const reqStart = departDateStr ? new Date(`${departDateStr}T00:00:00`).getTime() : 0;
+                const reqEnd = returnDateStr ? new Date(`${returnDateStr}T23:59:59`).getTime() : 0;
+
+                const otherVans = facultyVansList.filter(v => v.facultyName !== userProfile.faculty);
+
+                const recommendedVans = otherVans.filter(van => {
+                  if (!reqStart) return true;
+                  const hasConflict = calendarEvents.some(b => {
+                    if (b.status === 'REJECTED' || b.status === 'rejected') return false;
+                    if (b.vanId !== van.id) return false;
+
+                    const bStart = b.date ? new Date(`${String(b.date).slice(0, 10)}T00:00:00`).getTime() : 0;
+                    const bEnd = b.returnDate ? new Date(`${String(b.returnDate).slice(0, 10)}T23:59:59`).getTime() : bStart;
+
+                    return bStart <= reqEnd && bEnd >= reqStart;
+                  });
+
+                  return !hasConflict;
+                }).slice(0, 2);
+
+                return (
+                  <div className="mt-3 p-3.5 rounded-2xl bg-gradient-to-br from-amber-50/95 via-orange-50/60 to-purple-50/40 border border-amber-200/90 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="flex items-start gap-2 mb-2">
+                      <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                        <Sparkles size={12} className="text-white" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5 flex-wrap">
+                          <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
+                          <span className="px-1.5 py-0.2 bg-amber-200/80 text-amber-900 rounded-md text-[10px] font-bold">
+                            ผู้โดยสารเกิน 10 คน
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-800/90 mt-0.5 leading-snug">
+                          ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
+                        </p>
+                      </div>
+                    </div>
+
+                    {recommendedVans.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                        {recommendedVans.map(rv => {
+                          const isSelected = form.vanId === rv.id;
+                          return (
+                            <div 
+                              key={rv.id}
+                              onClick={() => setForm(prev => ({ ...prev, vanId: rv.id }))}
+                              className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-amber-400 ${
+                                isSelected 
+                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/50' 
+                                  : 'border-amber-200/80'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between gap-1 mb-1">
+                                  <span className="font-black text-[11px] truncate text-slate-800">
+                                    {rv.facultyName}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[9px] shrink-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    ว่างตรงวัน
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-600 font-medium">
+                                  {rv.plate} {rv.driverName ? `• ${rv.driverName}` : ''}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setForm(prev => ({ ...prev, vanId: rv.id }));
+                                }}
+                                className={`w-full py-1.5 px-2 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1 ${
+                                  isSelected 
+                                    ? 'bg-emerald-600 text-white shadow-xs' 
+                                    : 'bg-[#311171] text-white hover:bg-[#250b57]'
+                                }`}
+                              >
+                                {isSelected ? '✓ เลือกยืมรถคณะนี้แล้ว' : '+ เลือกยืมรถคณะนี้'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-white/90 border border-amber-200/80 text-[11px] text-amber-800 font-medium text-center">
+                        ไม่พบรถตู้ของคณะอื่นที่ว่างตรงกับช่วงวันที่เลือก กรุณาติดต่อส่วนกลาง
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">แหล่งงบประมาณในการเดินทาง</label>

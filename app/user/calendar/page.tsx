@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, 
   Search, RotateCcw, Plus,
   MapPin, Calendar, Clock, User, Phone, FileText, 
-  CalendarDays, X, Edit, Trash2, Compass, Globe,
+  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles
 } from 'lucide-react';
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
@@ -594,6 +594,42 @@ function CalendarContent() {
     }
   };
 
+  // คำนวณแนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง (เมื่อผู้โดยสาร > 10 คน)
+  const getRecommendedAvailableVans = (
+    departDateStr: string,
+    returnDateStr: string,
+    currentFaculty: string,
+    allVans: UnifiedVanInfo[],
+    allBookings: CalendarBookingEvent[]
+  ) => {
+    if (!departDateStr) return [];
+    
+    const reqStart = new Date(`${departDateStr}T00:00:00`).getTime();
+    const reqEnd = new Date(`${returnDateStr || departDateStr}T23:59:59`).getTime();
+
+    // กรองรถตู้ของคณะอื่น (ต่างคณะ)
+    const otherVans = allVans.filter(v => v.facultyName !== currentFaculty);
+
+    // หารถที่ไม่มีคิวจองทับซ้อนในช่วงวันดังกล่าว
+    const availableVans = otherVans.filter(van => {
+      const hasConflict = allBookings.some(b => {
+        if (b.status === 'REJECTED' || b.status === 'rejected') return false;
+        if (b.vanId !== van.id) return false;
+
+        const bStart = b.date instanceof Date ? b.date.getTime() : new Date(`${b.date}T00:00:00`).getTime();
+        const bEnd = b.returnDate 
+          ? new Date(`${b.returnDate}T23:59:59`).getTime() 
+          : (b.date instanceof Date ? new Date(b.date.getFullYear(), b.date.getMonth(), b.date.getDate(), 23, 59, 59).getTime() : new Date(`${b.date}T23:59:59`).getTime());
+
+        return bStart <= reqEnd && bEnd >= reqStart;
+      });
+
+      return !hasConflict;
+    });
+
+    return availableVans.slice(0, 2); // แนะนำ 2 คณะที่ว่างตรงกับวันที่จอง
+  };
+
   const getCalendarDays = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -1149,7 +1185,7 @@ function CalendarContent() {
       {/* Modal: เพิ่ม/แก้ไข ตารางปฏิทิน */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
             <div className="p-4 px-6 border-b border-gray-100 flex justify-between items-center bg-[#311171] text-white shrink-0">
               <div className="flex items-center gap-2">
                 <CalendarDays size={18} />
@@ -1457,12 +1493,107 @@ function CalendarContent() {
                     <input 
                       type="number"
                       min={1}
-                      max={20}
+                      max={30}
                       value={eventFormData.passengers || ''}
                       onChange={e => setEventFormData({ ...eventFormData, passengers: Number(e.target.value) })}
                       placeholder="ระบุจำนวนคน"
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
                     />
+
+                    {/* กล่องแนะนำรถตู้ของคณะที่ว่าง เมื่อผู้โดยสารเกิน 10 คน */}
+                    {Number(eventFormData.passengers) > 10 && (() => {
+                      const recommendedVans = getRecommendedAvailableVans(
+                        eventFormData.date,
+                        eventFormData.returnDate,
+                        currentUser?.faculty || eventFormData.bookingFaculty,
+                        vansList,
+                        bookingsData
+                      );
+
+                      return (
+                        <div className="mt-2.5 p-3 rounded-2xl bg-gradient-to-br from-amber-50/90 via-orange-50/60 to-purple-50/40 border border-amber-200/90 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+                          <div className="flex items-start gap-2 mb-2">
+                            <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                              <Sparkles size={12} className="text-white" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5 flex-wrap">
+                                <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
+                                <span className="px-1.5 py-0.2 bg-amber-200/80 text-amber-900 rounded-md text-[10px] font-bold">
+                                  ผู้โดยสารเกิน 10 คน
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-amber-800/90 mt-0.5 leading-snug">
+                                ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
+                              </p>
+                            </div>
+                          </div>
+
+                          {recommendedVans.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                              {recommendedVans.map(rv => {
+                                const style = getFacultyStyle(rv.facultyName);
+                                const isSelected = eventFormData.vanType === 'BORROW' && eventFormData.vanId === rv.id;
+                                return (
+                                  <div 
+                                    key={rv.id}
+                                    onClick={() => {
+                                      setEventFormData(prev => ({
+                                        ...prev,
+                                        vanId: rv.id,
+                                        vanType: 'BORROW'
+                                      }));
+                                    }}
+                                    className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-amber-400 ${
+                                      isSelected 
+                                        ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/50' 
+                                        : 'border-amber-200/80'
+                                    }`}
+                                  >
+                                    <div>
+                                      <div className="flex items-center justify-between gap-1 mb-1">
+                                        <span className={`font-black text-[11px] truncate ${style.textColor || 'text-slate-800'}`}>
+                                          {rv.facultyName}
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[9px] shrink-0">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                          ว่างตรงวัน
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-600 font-medium">
+                                        {rv.plate} {rv.driverName ? `• ${rv.driverName}` : ''}
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEventFormData(prev => ({
+                                          ...prev,
+                                          vanId: rv.id,
+                                          vanType: 'BORROW'
+                                        }));
+                                      }}
+                                      className={`w-full py-1.5 px-2 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1 ${
+                                        isSelected 
+                                          ? 'bg-emerald-600 text-white shadow-xs' 
+                                          : 'bg-[#311171] text-white hover:bg-[#250b57]'
+                                      }`}
+                                    >
+                                      {isSelected ? '✓ เลือกยืมรถคณะนี้แล้ว' : '+ เลือกยืมรถคณะนี้'}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-2.5 rounded-xl bg-white/90 border border-amber-200/80 text-[11px] text-amber-800 font-medium text-center">
+                              ไม่พบรถตู้ของคณะอื่นที่ว่างตรงกับช่วงวันที่เลือก กรุณาติดต่อส่วนกลาง
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
