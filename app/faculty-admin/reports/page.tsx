@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { CalendarDays, MapPin, Clock, ArrowUpRight, ArrowDownRight, Users, Car, Fuel, AlertCircle, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { CalendarDays, MapPin, Clock, ArrowUpRight, ArrowDownRight, Users, Car, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
 
 type RecentTrip = {
   id: string;
@@ -12,17 +12,6 @@ type RecentTrip = {
   distance: string;
   cost: string;
   status: string;
-};
-
-
-type ExpenseBreakdown = {
-  category: string;
-  amount: number;
-  percentage: number;
-  icon: string;
-  colorClass: string;
-  textClass: string;
-  bgClass: string;
 };
 
 type DriverSummary = {
@@ -61,8 +50,6 @@ export default function Page() {
 
   const [topDestinations, setTopDestinations] = useState<{name: string, count: number, percentage: number}[]>([]);
   const [recentTrips, setRecentTrips] = useState<RecentTrip[]>([]);
-  const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseBreakdown[]>([]);
-  const [totalExpense, setTotalExpense] = useState(0);
   const [driverSummary, setDriverSummary] = useState<DriverSummary[]>([]);
   const [vehicleCompliance, setVehicleCompliance] = useState<VehicleCompliance[]>([]);
   const [facultyVans, setFacultyVans] = useState<FacultyVan[]>([]);
@@ -96,8 +83,6 @@ export default function Page() {
             })));
           }
           if (data.topDestinations) setTopDestinations(data.topDestinations);
-          if (data.expenseBreakdown) setExpenseBreakdown(data.expenseBreakdown);
-          if (data.totalExpense !== undefined) setTotalExpense(data.totalExpense);
           if (data.driverSummary) setDriverSummary(data.driverSummary);
           if (data.vehicleCompliance) setVehicleCompliance(data.vehicleCompliance);
         }
