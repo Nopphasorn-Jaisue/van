@@ -19,7 +19,14 @@ interface GoogleCalendarCache {
 }
 const globalForGcal = globalThis as unknown as { gcalCache?: Record<string, GoogleCalendarCache> };
 const gcalCache: Record<string, GoogleCalendarCache> = globalForGcal.gcalCache ?? (globalForGcal.gcalCache = {});
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
+
+function formatBangkokDate(rawDate: string | Date | undefined): string {
+  if (!rawDate) return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  const d = typeof rawDate === 'string' && !rawDate.includes('T') ? new Date(`${rawDate}T00:00:00+07:00`) : new Date(rawDate);
+  if (isNaN(d.getTime())) return String(rawDate).slice(0, 10);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+}
 
 export const FACULTY_CALENDARS = {
   ICT: 'e9735a3152fcec368b15ac7f64dd21046a923cc5c4d3f9aafac8f706285a40a8@group.calendar.google.com',
@@ -248,21 +255,21 @@ export async function handleSystemCalendarEvents(request: Request) {
 
             let cleanSummary = summary;
             const match = summary.match(/^\[.*?\]\s*(.*)$/);
-            if (match && match[1]) {
-              cleanSummary = match[1];
+            if (match && match[1] && match[1].trim().length > 0) {
+              cleanSummary = match[1].trim();
             }
 
             const vanMatch = facultyVansList.find(v => v.facultyName === facultyName || v.facultyId === facultyId);
             const correctVanId = vanMatch ? vanMatch.id : (facultyId === 'pharm' ? 'v-pharm' : 'v-ict');
 
-            const startDateStr = rawStart.slice(0, 10);
+            const startDateStr = formatBangkokDate(rawStart);
             let returnDateStr = startDateStr;
 
             if (isAllDay && item.end?.date) {
               // Google Calendar all-day event end.date is exclusive (e.g. 2026-09-02 for a 1-day event on 2026-09-01)
-              const parsedEnd = new Date(item.end.date);
+              const parsedEnd = new Date(`${item.end.date}T00:00:00+07:00`);
               parsedEnd.setDate(parsedEnd.getDate() - 1);
-              const prevDayStr = parsedEnd.toISOString().slice(0, 10);
+              const prevDayStr = formatBangkokDate(parsedEnd);
               if (prevDayStr >= startDateStr) {
                 returnDateStr = prevDayStr;
               }
@@ -271,7 +278,7 @@ export async function handleSystemCalendarEvents(request: Request) {
               if (endDateTime.getHours() === 0 && endDateTime.getMinutes() === 0 && endDateTime.getSeconds() === 0) {
                 endDateTime.setDate(endDateTime.getDate() - 1);
               }
-              const parsedEndStr = endDateTime.toISOString().slice(0, 10);
+              const parsedEndStr = formatBangkokDate(endDateTime);
               if (parsedEndStr >= startDateStr) {
                 returnDateStr = parsedEndStr;
               }
@@ -502,12 +509,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // Invalidate Google Calendar cache
-    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
-    if (globalCacheObj.gcalCache) {
-      globalCacheObj.gcalCache = {};
+    // Invalidate Google Calendar cache only if pushed to Google Calendar
+    if (created.status === 'approved') {
+      const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
+      if (globalCacheObj.gcalCache) {
+        globalCacheObj.gcalCache = {};
+      }
+      Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
     }
-    Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
 
     return NextResponse.json({ success: true, event: created });
   } catch (error) {

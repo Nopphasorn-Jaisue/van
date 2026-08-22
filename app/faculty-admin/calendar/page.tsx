@@ -421,8 +421,8 @@ function CalendarContent() {
       phone: eventFormData.phone ? eventFormData.phone.replace(/\D/g, '').slice(0, 10) : '',
       department: "สำนักงานคณบดี",
       tripType: eventFormData.tripType,
-      status: isBorrowing ? "pending_cross_faculty" : "approved",
-      statusText: isBorrowing ? "รอการยืนยันจากคณะเจ้าของรถ" : "อนุมัติแล้ว",
+      status: isBorrowing ? "pending_cross_faculty" : "pending",
+      statusText: isBorrowing ? "รอการยืนยันจากคณะเจ้าของรถ" : "รอดำเนินการ (รอคณบดีอนุมัติ)",
       statusTime: "บันทึกในระบบ"
     };
 
