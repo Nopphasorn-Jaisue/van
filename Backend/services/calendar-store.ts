@@ -82,7 +82,12 @@ export function addStoredCalendarEvent(newEvent: Omit<CalendarEventRecord, 'id' 
 export function updateStoredCalendarEvent(id: string, updatedFields: Partial<CalendarEventRecord>): CalendarEventRecord | null {
   const events = getStoredCalendarEvents();
   const idx = events.findIndex(e => e.id === id);
-  if (idx === -1) return null;
+  if (idx === -1) {
+    const newRecord = { id, ...updatedFields } as CalendarEventRecord;
+    events.push(newRecord);
+    saveStoredCalendarEvents(events);
+    return newRecord;
+  }
   
   events[idx] = { ...events[idx], ...updatedFields };
   saveStoredCalendarEvents(events);

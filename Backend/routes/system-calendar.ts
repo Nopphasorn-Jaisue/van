@@ -681,11 +681,15 @@ export async function PATCH(request: Request) {
           const requesterName = String(fields.requester).trim();
           let reqUser = await prisma.user.findFirst({ where: { name: requesterName } });
           if (!reqUser) {
-            const fac = authUser.facultyId ? { id: authUser.facultyId } : await prisma.faculty.findFirstOrThrow();
+            let targetFacultyId = authUser.facultyId || (authUser.faculty ? authUser.faculty.id : undefined);
+            if (!targetFacultyId) {
+              const defaultFac = await prisma.faculty.findFirst();
+              targetFacultyId = defaultFac ? defaultFac.id : 1;
+            }
             const slug = requesterName.replace(/\s+/g, ".").toLowerCase().replace(/[^a-z0-9.]/g, "") || "user";
             reqUser = await prisma.user.create({
               data: {
-                facultyId: fac.id,
+                facultyId: targetFacultyId,
                 name: requesterName,
                 email: `${Date.now()}-${slug}@example.local`,
                 role: "USER"

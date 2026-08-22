@@ -159,6 +159,11 @@ function CalendarContent() {
                 };
               });
               setBookingsData(mapped);
+              setSelectedEvent(prev => {
+                if (!prev) return null;
+                const found = mapped.find(m => m.id === prev.id);
+                return found ? { ...found, vanId: found.vanId } : prev;
+              });
             }
             if (data && data.vans && Array.isArray(data.vans)) {
               setVansList(data.vans);
