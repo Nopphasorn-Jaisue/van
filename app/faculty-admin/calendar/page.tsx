@@ -117,7 +117,13 @@ function CalendarContent() {
     setIsLoading(true);
     try {
       const currentYear = new Date().getFullYear();
-      const res = await fetch(`/api/calendar-events?year=${currentYear}`);
+      const res = await fetch(`/api/calendar-events?year=${currentYear}&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
       if (res.ok) {
         const text = await res.text();
         if (text && text.trim().length > 0) {
@@ -557,23 +563,27 @@ function CalendarContent() {
   };
 
   const confirmDelete = async (id: string) => {
+    // 1. Optimistically remove immediately from UI in 0ms
+    setBookingsData(prev => prev.filter(b => b.id !== id));
+    if (selectedEvent && selectedEvent.id === id) {
+      setSelectedEvent(null);
+    }
+    setDeleteConfirmId(null);
+
     try {
       const res = await fetch(`/api/calendar-events?id=${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const errorData = await res.json();
         showToast("ไม่สามารถลบได้", errorData.error || "เกิดข้อผิดพลาดในการลบข้อมูล", "error");
-        setDeleteConfirmId(null);
+        fetchEvents();
         return;
       }
-      setBookingsData(prev => prev.filter(b => b.id !== id));
-      if (selectedEvent && selectedEvent.id === id) {
-        setSelectedEvent(null);
-      }
-      setDeleteConfirmId(null);
       showToast("ลบข้อมูลสำเร็จ", "รายการจองถูกลบออกจากปฏิทินเรียบร้อยแล้ว", "info");
+      fetchEvents();
     } catch (err) {
       console.error(err);
       showToast("เกิดข้อผิดพลาด", "ไม่สามารถลบข้อมูลได้", "error");
+      fetchEvents();
     }
   };
 

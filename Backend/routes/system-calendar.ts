@@ -14,6 +14,10 @@ import { Prisma } from "@prisma/client";
 import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
 import { getAuthUser } from "@/app/actions/auth";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
 interface GoogleCalendarCache {
   events: CalendarEventRecord[];
   timestamp: number;
@@ -469,7 +473,9 @@ export async function handleSystemCalendarEvents(request: Request) {
     vans: allVans
   }, {
     headers: {
-      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120'
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
     }
   });
 }
@@ -810,45 +816,35 @@ export async function DELETE(request: Request) {
       }
     }
 
-    // 3. Sync delete to Google Calendar
+    // 3. Sync delete to Google Calendar in background (non-blocking for fast UI response)
     const targetGcalId = gcalId || (storedEvent?.gcalId) || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
 
     if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-      try {
-        const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
-
-        // Collect all potential calendar IDs to search and delete
-        const candidateCalendars = new Set<string>();
-        if (process.env.GOOGLE_CALENDAR_ID) candidateCalendars.add(process.env.GOOGLE_CALENDAR_ID);
-        if (FACULTY_CALENDARS.ICT) candidateCalendars.add(FACULTY_CALENDARS.ICT);
-        if (FACULTY_CALENDARS.PHARM) candidateCalendars.add(FACULTY_CALENDARS.PHARM);
-        if (FACULTY_CALENDARS.SCI) candidateCalendars.add(FACULTY_CALENDARS.SCI);
-
+      (async () => {
         try {
-          const dbFaculties = await prisma.faculty.findMany({ where: { googleCalendarId: { not: null } } });
-          dbFaculties.forEach(f => {
-            if (f.googleCalendarId) candidateCalendars.add(f.googleCalendarId);
-          });
-        } catch {
-          // ignore DB error
-        }
+          const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
+          const candidateCalendars = new Set<string>();
+          if (process.env.GOOGLE_CALENDAR_ID) candidateCalendars.add(process.env.GOOGLE_CALENDAR_ID);
+          if (FACULTY_CALENDARS.ICT) candidateCalendars.add(FACULTY_CALENDARS.ICT);
+          if (FACULTY_CALENDARS.PHARM) candidateCalendars.add(FACULTY_CALENDARS.PHARM);
+          if (FACULTY_CALENDARS.SCI) candidateCalendars.add(FACULTY_CALENDARS.SCI);
 
-        // Delete from all candidate calendars in parallel
-        await Promise.all(
-          Array.from(candidateCalendars).map(async (calId) => {
-            try {
-              await calendar.events.delete({
-                calendarId: calId,
-                eventId: targetGcalId,
-              });
-            } catch {
-              // Not in this particular calendar or already deleted
-            }
-          })
-        );
-      } catch (gcalErr) {
-        console.warn("Google Calendar Push Delete Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
-      }
+          await Promise.all(
+            Array.from(candidateCalendars).map(async (calId) => {
+              try {
+                await calendar.events.delete({
+                  calendarId: calId,
+                  eventId: targetGcalId,
+                });
+              } catch {
+                // Not in this particular calendar or already deleted
+              }
+            })
+          );
+        } catch (gcalErr) {
+          console.warn("Google Calendar Push Delete Warning:", gcalErr);
+        }
+      })();
     }
 
     // 4. Invalidate Google Calendar cache immediately
@@ -858,7 +854,12 @@ export async function DELETE(request: Request) {
     }
     Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
+        'Pragma': 'no-cache'
+      }
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ success: false, error: "Failed to delete event" }, { status: 500 });
