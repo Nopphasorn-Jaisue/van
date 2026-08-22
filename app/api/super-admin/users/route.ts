@@ -83,6 +83,24 @@ export async function POST(request: Request) {
         facultyId
       }
     });
+
+    if (role === 'DRIVER') {
+      try {
+        await prisma.driver.create({
+          data: {
+            userId: createdUser.id,
+            facultyId: facultyId,
+            phone: "-",
+            age: 35,
+            type: "PRIMARY",
+            isActive: true
+          }
+        });
+      } catch (dErr) {
+        console.warn("Notice creating driver profile:", dErr);
+      }
+    }
+
     return NextResponse.json({ success: true, user: createdUser });
   } catch (error: unknown) {
     console.error('Failed to create user:', error);
@@ -122,6 +140,32 @@ export async function PUT(request: Request) {
         facultyId
       }
     });
+
+    if (role === 'DRIVER') {
+      try {
+        const existingDriver = await prisma.driver.findFirst({ where: { userId: updatedUser.id } });
+        if (!existingDriver) {
+          await prisma.driver.create({
+            data: {
+              userId: updatedUser.id,
+              facultyId: facultyId,
+              phone: "-",
+              age: 35,
+              type: "PRIMARY",
+              isActive: true
+            }
+          });
+        } else {
+          await prisma.driver.update({
+            where: { id: existingDriver.id },
+            data: { facultyId: facultyId }
+          });
+        }
+      } catch (dErr) {
+        console.warn("Notice updating driver profile:", dErr);
+      }
+    }
+
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error: unknown) {
     console.error('Failed to update user:', error);

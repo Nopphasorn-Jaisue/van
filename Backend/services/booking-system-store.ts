@@ -375,9 +375,42 @@ function detectAvailability(driverId: number, bookings: Array<{ assignedDriverId
 export async function listDrivers(date?: string, facultyId?: number) {
   await ensureSeedData();
 
+  // Auto-sync: Ensure every User with role DRIVER has a Driver profile in the same faculty
+  try {
+    const driverUsers = await prisma.user.findMany({
+      where: { role: "DRIVER" },
+      include: { driverProfile: true }
+    });
+
+    for (const u of driverUsers) {
+      if (!u.driverProfile) {
+        await prisma.driver.create({
+          data: {
+            userId: u.id,
+            facultyId: u.facultyId,
+            phone: "-",
+            age: 35,
+            type: "PRIMARY",
+            isActive: true
+          }
+        });
+      } else if (u.driverProfile.facultyId !== u.facultyId) {
+        await prisma.driver.update({
+          where: { id: u.driverProfile.id },
+          data: { facultyId: u.facultyId }
+        });
+      }
+    }
+  } catch (syncErr) {
+    console.warn("Notice syncing drivers:", syncErr);
+  }
+
   const where: Prisma.DriverWhereInput = {};
   if (facultyId) {
-    where.facultyId = facultyId;
+    where.OR = [
+      { facultyId },
+      { user: { facultyId } }
+    ];
   }
 
   const [drivers, bookings] = await Promise.all([
