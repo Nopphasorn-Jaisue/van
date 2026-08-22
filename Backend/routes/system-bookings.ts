@@ -33,6 +33,7 @@ export async function handleCreateSystemBooking(request: Request) {
       requesterId: user ? Number(user.id) : undefined,
       requester: body.requester || "ผู้ใช้งานระบบ",
       requesterFaculty: body.requesterFaculty || "ไม่ระบุ",
+      targetFaculties: body.targetFaculties,
       phone: body.phone,
       passengerNames: body.passengerNames,
       destination: body.destination,

@@ -62,6 +62,7 @@ export type CreateBookingPayload = {
   requesterId?: number;
   requester: string;
   requesterFaculty: string;
+  targetFaculties?: string[];
   phone?: string;
   passengerNames?: string;
   destination: string;

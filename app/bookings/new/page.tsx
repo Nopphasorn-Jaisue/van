@@ -42,6 +42,7 @@ function BookingFormContent() {
     phone: "",
     budgetSource: "",
     tripType: "ในจังหวัดพะเยา",
+    targetFaculties: [] as string[],
   });
 
   const [availableVans, setAvailableVans] = useState<AvailableVan[]>([]);
@@ -102,7 +103,8 @@ function BookingFormContent() {
           startAt: `${form.startDate}T${form.startTime}:00`,
           endAt: `${form.endDate}T${form.endTime}:00`,
           tripType: form.tripType,
-          budgetSource: form.budgetSource
+          budgetSource: form.budgetSource,
+          targetFaculties: form.targetFaculties.length > 0 ? form.targetFaculties : undefined
         })
       });
 
@@ -249,13 +251,13 @@ function BookingFormContent() {
                   </div>
                   <label className="block text-xs font-bold text-gray-700 mt-2 mb-1">เลือกคณะเจ้าของรถตู้ที่ต้องการยืม:</label>
                   <select 
-                    value={form.vanId === "borrow" ? "" : form.vanId}
-                    onChange={e => setForm({...form, vanId: e.target.value})}
+                    value={form.targetFaculties.length > 0 ? form.targetFaculties[0] : ""}
+                    onChange={e => setForm({...form, targetFaculties: [e.target.value], vanId: "borrow"})}
                     className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500 outline-none text-xs font-bold text-gray-800"
                   >
                     <option value="">-- เลือกคณะและรถตู้ที่ต้องการยืม --</option>
                     {availableVans.map(van => (
-                      <option key={van.id} value={van.id}>
+                      <option key={van.id} value={van.facultyName || 'ส่วนกลาง'}>
                         {van.vanName} ({van.plate}) - คณะ: {van.facultyName || 'ส่วนกลาง'}
                       </option>
                     ))}
@@ -437,11 +439,17 @@ function BookingFormContent() {
                     {recommendedVans.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                         {recommendedVans.map(rv => {
-                          const isSelected = form.vanId === rv.id;
+                          const facultyName = rv.facultyName || 'ส่วนกลาง';
+                          const isSelected = form.targetFaculties.includes(facultyName);
                           return (
                             <div 
                               key={rv.id}
-                              onClick={() => setForm(prev => ({ ...prev, vanId: rv.id }))}
+                              onClick={() => setForm(prev => {
+                                const newTargetFaculties = isSelected 
+                                  ? prev.targetFaculties.filter(f => f !== facultyName)
+                                  : [...prev.targetFaculties, facultyName];
+                                return { ...prev, targetFaculties: newTargetFaculties, vanId: "borrow" };
+                              })}
                               className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-amber-400 ${
                                 isSelected 
                                   ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/50' 
@@ -451,7 +459,7 @@ function BookingFormContent() {
                               <div>
                                 <div className="flex items-center justify-between gap-1 mb-1">
                                   <span className="font-black text-[11px] truncate text-slate-800">
-                                    {rv.facultyName}
+                                    {facultyName}
                                   </span>
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[9px] shrink-0">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -466,7 +474,12 @@ function BookingFormContent() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setForm(prev => ({ ...prev, vanId: rv.id }));
+                                  setForm(prev => {
+                                    const newTargetFaculties = isSelected 
+                                      ? prev.targetFaculties.filter(f => f !== facultyName)
+                                      : [...prev.targetFaculties, facultyName];
+                                    return { ...prev, targetFaculties: newTargetFaculties, vanId: "borrow" };
+                                  });
                                 }}
                                 className={`w-full py-1.5 px-2 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1.5 ${
                                   isSelected 
@@ -477,12 +490,12 @@ function BookingFormContent() {
                                 {isSelected ? (
                                   <>
                                     <Check size={12} strokeWidth={3} className="text-white shrink-0" />
-                                    <span>เลือกยืมรถคณะนี้แล้ว</span>
+                                    <span>เลือกยืมคณะนี้แล้ว</span>
                                   </>
                                 ) : (
                                   <>
                                     <Plus size={12} strokeWidth={2.5} className="shrink-0" />
-                                    <span>เลือกยืมรถคณะนี้</span>
+                                    <span>เลือกยืมคณะนี้</span>
                                   </>
                                 )}
                               </button>

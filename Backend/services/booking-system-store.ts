@@ -288,9 +288,21 @@ export async function getBookingById(id: string) {
 export async function createBooking(payload: CreateBookingPayload) {
   await ensureSeedData();
 
-  const faculty =
-    (await prisma.faculty.findFirst({ where: { nameTh: payload.requesterFaculty } })) ||
-    (await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } }));
+  const targetFacultyNames = payload.targetFaculties && payload.targetFaculties.length > 0 
+    ? payload.targetFaculties 
+    : [payload.requesterFaculty];
+
+  let facultyRecords = await prisma.faculty.findMany({
+    where: { nameTh: { in: targetFacultyNames } }
+  });
+
+  if (facultyRecords.length === 0) {
+    const fallback = await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } });
+    facultyRecords = [fallback];
+  }
+
+  const requesterFaculty = await prisma.faculty.findFirst({ where: { nameTh: payload.requesterFaculty } })
+    || facultyRecords[0];
 
   let requester = payload.requesterId 
     ? await prisma.user.findUnique({ where: { id: payload.requesterId } })
@@ -299,7 +311,7 @@ export async function createBooking(payload: CreateBookingPayload) {
   if (!requester) {
     requester = await prisma.user.create({
       data: {
-        facultyId: faculty.id,
+        facultyId: requesterFaculty.id,
         name: payload.requester,
         email: `${Date.now()}-${payload.requester.replace(/\s+/g, ".").toLowerCase().replace(/[^a-z0-9.]/g, "") || "user"}@example.local`,
         role: "USER",
@@ -308,32 +320,41 @@ export async function createBooking(payload: CreateBookingPayload) {
   }
 
   const latest = await prisma.booking.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
-  const lastNumber = latest ? Number((latest.id.match(/(\d+)$/) || ["0"])[0]) : 64;
-  const bookingId = `UPV-2569-${(lastNumber + 1).toString().padStart(4, "0")}`;
+  const lastNumber = latest ? Number((latest.id.match(/(\d+)/)?.[1] || "0")) : 64;
+  const baseBookingId = `UPV-2569-${(lastNumber + 1).toString().padStart(4, "0")}`;
 
-  const row = await prisma.booking.create({
-    data: {
-      id: bookingId,
-      requesterId: requester.id,
-      targetFacultyId: faculty.id,
-      destination: payload.destination,
-      objective: payload.purpose,
-      departureDate: new Date(payload.startAt),
-      returnDate: new Date(payload.endAt),
-      passengersCount: payload.passengers,
-      phone: payload.phone || null,
-      passengerNames: payload.passengerNames || null,
-      budgetSource: payload.budgetSource || "งบส่วนกลางของคณะ",
-      tripType: payload.tripType || "ในจังหวัดพะเยา",
-      status: (payload.status as BookingStatus) || "WAITING_ADMIN",
-    },
-    include: {
-      requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
-    },
-  });
+  const createdRows = [];
 
-  return toBookingDto(row as unknown as BookingWithRelations);
+  for (let i = 0; i < facultyRecords.length; i++) {
+    const faculty = facultyRecords[i];
+    const bookingId = facultyRecords.length > 1 ? `${baseBookingId}-${i + 1}` : baseBookingId;
+    
+    const row = await prisma.booking.create({
+      data: {
+        id: bookingId,
+        requesterId: requester.id,
+        targetFacultyId: faculty.id,
+        destination: payload.destination,
+        objective: payload.purpose,
+        departureDate: new Date(payload.startAt),
+        returnDate: new Date(payload.endAt),
+        passengersCount: payload.passengers,
+        phone: payload.phone || null,
+        passengerNames: payload.passengerNames || null,
+        budgetSource: payload.budgetSource || "งบส่วนกลางของคณะ",
+        tripType: payload.tripType || "ในจังหวัดพะเยา",
+        status: (payload.status as BookingStatus) || "WAITING_ADMIN",
+      },
+      include: {
+        requester: { include: { faculty: true } },
+        assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
+      },
+    });
+    createdRows.push(row);
+  }
+
+  const dtos = await Promise.all(createdRows.map(row => toBookingDto(row as unknown as BookingWithRelations)));
+  return facultyRecords.length > 1 ? dtos : dtos[0];
 }
 
 function detectAvailability(driverId: number, bookings: Array<{ assignedDriverId: number | null; status: string; departureDate: Date; returnDate: Date }>): DriverAvailability {
