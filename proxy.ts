@@ -41,7 +41,8 @@ export async function proxy(request: NextRequest) {
     const role = (payload.role as string) || '';
 
     // Role-based access control for Super Admin (Pages & API)
-    if (path.startsWith('/super-admin') || path.startsWith('/api/super-admin')) {
+    const isSuperAdminRoute = path === '/super-admin' || path.startsWith('/super-admin/') || path === '/api/super-admin' || path.startsWith('/api/super-admin/');
+    if (isSuperAdminRoute) {
       if (role !== 'SUPER_ADMIN') {
         if (path.startsWith('/api/')) {
           return NextResponse.json({ error: 'Forbidden: Super Admin access required' }, { status: 403 });
@@ -54,7 +55,8 @@ export async function proxy(request: NextRequest) {
     }
     
     // Role-based access control for Faculty Admin (Pages & API)
-    if (path.startsWith('/faculty-admin') || path.startsWith('/api/faculty-admin')) {
+    const isFacultyAdminRoute = path === '/faculty-admin' || path.startsWith('/faculty-admin/') || path === '/api/faculty-admin' || path.startsWith('/api/faculty-admin/');
+    if (isFacultyAdminRoute) {
       if (role !== 'FACULTY_ADMIN') {
         if (path.startsWith('/api/')) {
           if (role !== 'SUPER_ADMIN') {
@@ -72,7 +74,8 @@ export async function proxy(request: NextRequest) {
     }
 
     // Role-based access control for Executive (Pages & API)
-    if (path.startsWith('/executive') || path.startsWith('/api/executive')) {
+    const isExecutiveRoute = path === '/executive' || path.startsWith('/executive/') || path === '/api/executive' || path.startsWith('/api/executive/');
+    if (isExecutiveRoute) {
       if (role !== 'EXECUTIVE') {
         if (path.startsWith('/api/')) {
           if (role !== 'SUPER_ADMIN') {
@@ -88,10 +91,11 @@ export async function proxy(request: NextRequest) {
     }
 
     // Role-based access control for Driver (Pages & API)
-    if (path.startsWith('/driver') || path.startsWith('/api/driver')) {
+    const isDriverRoute = path === '/driver' || path.startsWith('/driver/') || path === '/api/driver' || path.startsWith('/api/driver/');
+    if (isDriverRoute) {
       if (role !== 'DRIVER') {
         if (path.startsWith('/api/')) {
-          if (role !== 'SUPER_ADMIN') {
+          if (role !== 'SUPER_ADMIN' && role !== 'FACULTY_ADMIN') {
             return NextResponse.json({ error: 'Forbidden: Driver access required' }, { status: 403 });
           }
           return NextResponse.next();
