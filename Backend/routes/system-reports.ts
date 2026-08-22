@@ -150,7 +150,6 @@ export async function handleGetReports() {
     const kpis = [
       { title: 'การจองทั้งหมด', value: tripsThisMonth.toString(), unit: 'ครั้ง', trend: tripsTrend, status: getStatus(tripsTrend) },
       { title: 'ระยะทางรวม', value: totalDistance.toLocaleString(), unit: 'กม.', trend: distanceTrend, status: getStatus(distanceTrend) },
-      { title: 'ค่าเชื้อเพลิง', value: fuelCost.toLocaleString(), unit: 'บาท', trend: fuelTrend, status: getStatus(fuelTrend, true) },
       { title: 'ชั่วโมงใช้งานรถ', value: estimatedHours.toString(), unit: 'ชม.', trend: hoursTrend, status: getStatus(hoursTrend) }
     ];
 

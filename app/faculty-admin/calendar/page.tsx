@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   ChevronLeft, ChevronRight, 

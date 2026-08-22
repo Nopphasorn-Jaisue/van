@@ -56,7 +56,6 @@ export default function Page() {
   const [kpis, setKpis] = useState([
     { title: "การจองทั้งหมด", value: "-", unit: "ครั้ง", trend: "0%", trendUp: true, icon: CalendarDays, color: "bg-indigo-50", iconColor: "text-indigo-600", valueColor: "text-slate-900" },
     { title: "ระยะทางรวม", value: "-", unit: "กม.", trend: "0%", trendUp: true, icon: MapPin, color: "bg-emerald-50", iconColor: "text-emerald-600", valueColor: "text-slate-900" },
-    { title: "ค่าเชื้อเพลิง", value: "-", unit: "บาท", trend: "0%", trendUp: false, icon: Fuel, color: "bg-orange-50", iconColor: "text-orange-600", valueColor: "text-slate-900" },
     { title: "ชั่วโมงใช้งานรถ", value: "-", unit: "ชม.", trend: "0%", trendUp: true, icon: Clock, color: "bg-purple-50", iconColor: "text-purple-600", valueColor: "text-slate-900" },
   ]);
 
@@ -81,8 +80,7 @@ export default function Page() {
           setKpis([
             { title: data.kpis[0].title, value: data.kpis[0].value, unit: data.kpis[0].unit, trend: data.kpis[0].trend, trendUp: data.kpis[0].status === 'positive', icon: CalendarDays, color: "bg-indigo-50", iconColor: "text-indigo-600", valueColor: "text-slate-900" },
             { title: data.kpis[1].title, value: data.kpis[1].value, unit: data.kpis[1].unit, trend: data.kpis[1].trend, trendUp: data.kpis[1].status === 'positive', icon: MapPin, color: "bg-emerald-50", iconColor: "text-emerald-600", valueColor: "text-slate-900" },
-            { title: data.kpis[2].title, value: data.kpis[2].value, unit: data.kpis[2].unit, trend: data.kpis[2].trend, trendUp: data.kpis[2].status === 'positive', icon: Fuel, color: "bg-orange-50", iconColor: "text-orange-600", valueColor: "text-slate-900" },
-            { title: data.kpis[3].title, value: data.kpis[3].value, unit: data.kpis[3].unit, trend: data.kpis[3].trend, trendUp: data.kpis[3].status === 'positive', icon: Clock, color: "bg-purple-50", iconColor: "text-purple-600", valueColor: "text-slate-900" },
+            { title: data.kpis[2].title, value: data.kpis[2].value, unit: data.kpis[2].unit, trend: data.kpis[2].trend, trendUp: data.kpis[2].status === 'positive', icon: Clock, color: "bg-purple-50", iconColor: "text-purple-600", valueColor: "text-slate-900" },
           ]);
 
           if (data.recentTrips) {
@@ -149,7 +147,7 @@ export default function Page() {
         </div>
 
         {/* Fixed KPI Row */}
-        <div className="flex-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="flex-none grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4">
           {kpis.map((kpi, idx) => (
             <div key={idx} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-4">
