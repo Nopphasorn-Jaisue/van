@@ -98,6 +98,21 @@ function CalendarContent() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Toast Notification State
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+  } | null>(null);
+
+  const showToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setNotification({ show: true, title, message, type });
+    setTimeout(() => {
+      setNotification(prev => (prev && prev.title === title ? { ...prev, show: false } : prev));
+    }, 4500);
+  };
+
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
@@ -418,9 +433,10 @@ function CalendarContent() {
               date: new Date(payload.date)
             });
           }
+          showToast("อัปเดตข้อมูลการจองสำเร็จ!", `แก้ไขรายละเอียดตารางงาน "${destinationText}" สำหรับ "${requesterText}" เรียบร้อยแล้ว`, "success");
         } else {
           const errData = await res.json();
-          alert(`ไม่สามารถบันทึกได้: ${errData.error || "เกิดข้อผิดพลาด"}`);
+          showToast("เกิดข้อผิดพลาด", errData.error || "ไม่สามารถบันทึกการแก้ไขได้", "error");
         }
       } else {
         const res = await fetch('/api/calendar-events', {
@@ -430,15 +446,16 @@ function CalendarContent() {
         });
         if (res.ok) {
           fetchEvents();
+          showToast("บันทึกการจองรถตู้สำเร็จแล้ว!", `เพิ่มตารางการจองไป "${destinationText}" สำหรับ "${requesterText}" เรียบร้อยแล้ว (${payload.statusText})`, "success");
         } else {
           const errData = await res.json();
-          alert(`ไม่สามารถบันทึกได้: ${errData.error || "เกิดข้อผิดพลาด"}`);
+          showToast("เกิดข้อผิดพลาด", errData.error || "ไม่สามารถบันทึกการจองได้", "error");
         }
       }
       setIsModalOpen(false);
     } catch (err) {
       console.error(err);
-      alert("เกิดข้อผิดพลาดในการบันทึกตารางปฏิทิน");
+      showToast("เกิดข้อผิดพลาด", "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์เพื่อบันทึกตารางปฏิทิน", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -449,7 +466,7 @@ function CalendarContent() {
       const res = await fetch(`/api/calendar-events?id=${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const errorData = await res.json();
-        alert(errorData.error || "เกิดข้อผิดพลาดในการลบข้อมูล");
+        showToast("ไม่สามารถลบได้", errorData.error || "เกิดข้อผิดพลาดในการลบข้อมูล", "error");
         setDeleteConfirmId(null);
         return;
       }
@@ -458,8 +475,10 @@ function CalendarContent() {
         setSelectedEvent(null);
       }
       setDeleteConfirmId(null);
+      showToast("ลบข้อมูลสำเร็จ", "รายการจองถูกลบออกจากปฏิทินเรียบร้อยแล้ว", "info");
     } catch (err) {
       console.error(err);
+      showToast("เกิดข้อผิดพลาด", "ไม่สามารถลบข้อมูลได้", "error");
     }
   };
 
@@ -651,8 +670,47 @@ function CalendarContent() {
   const weekDays = getWeekDays(baseDate);
 
   return (
-    <div className="max-w-[1600px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0 space-y-2">
+    <div className="max-w-[1600px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0 space-y-2 relative">
         
+        {/* Toast Notification Alert */}
+        {notification && notification.show && (
+          <div className="fixed top-20 right-6 z-[100] animate-in fade-in slide-in-from-top-4 duration-300 max-w-md w-full px-4 sm:px-0 pointer-events-auto">
+            <div className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 backdrop-blur-xl transition-all ${
+              notification.type === 'success' 
+                ? 'bg-white/95 border-emerald-300 text-emerald-950 shadow-emerald-500/20' 
+                : notification.type === 'error'
+                ? 'bg-white/95 border-rose-300 text-rose-950 shadow-rose-500/20'
+                : 'bg-white/95 border-purple-300 text-purple-950 shadow-purple-500/20'
+            }`}>
+              <div className={`p-2.5 rounded-xl shrink-0 ${
+                notification.type === 'success' 
+                  ? 'bg-emerald-100 text-emerald-700' 
+                  : notification.type === 'error'
+                  ? 'bg-rose-100 text-rose-700'
+                  : 'bg-purple-100 text-[#311171]'
+              }`}>
+                {notification.type === 'success' ? (
+                  <Check className="w-5 h-5 stroke-[2.5]" />
+                ) : notification.type === 'error' ? (
+                  <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
+                ) : (
+                  <Sparkles className="w-5 h-5 stroke-[2.5]" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 pt-0.5">
+                <h4 className="text-sm font-black text-gray-900 leading-snug">{notification.title}</h4>
+                <p className="text-xs text-gray-600 mt-1 font-medium leading-relaxed">{notification.message}</p>
+              </div>
+              <button 
+                onClick={() => setNotification(null)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ----- Filter & Action Controls Bar ----- */}
         <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-2 bg-white/70 backdrop-blur-md p-3 rounded-2xl border border-gray-100 shadow-xs">
           
