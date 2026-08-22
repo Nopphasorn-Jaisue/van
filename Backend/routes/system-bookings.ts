@@ -54,6 +54,11 @@ export async function handleCreateSystemBooking(request: Request) {
 
 export async function handleAssignDriverToBooking(request: Request, bookingId: string) {
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'FACULTY_ADMIN' && user.role !== 'SUPER_ADMIN')) {
+      return NextResponse.json({ success: false, message: "UNAUTHORIZED_ROLE" }, { status: 403 });
+    }
+
     const body = await request.json();
     const booking = await assignDriver(bookingId, body.driverId);
     return NextResponse.json({ success: true, booking });
@@ -67,6 +72,11 @@ import { pushBookingToGoogleCalendar } from "./system-calendar";
 
 export async function handleBookingStatusUpdate(request: Request, bookingId: string) {
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'FACULTY_ADMIN' && user.role !== 'EXECUTIVE' && user.role !== 'SUPER_ADMIN')) {
+      return NextResponse.json({ success: false, message: "UNAUTHORIZED_ROLE" }, { status: 403 });
+    }
+
     const body = await request.json();
     const status = body.status as SystemBookingStatus;
 
@@ -102,6 +112,11 @@ export async function handleGetBookingDetail(_request: Request, bookingId: strin
 
 export async function handleUpdateSystemBooking(request: Request, bookingId: string) {
   try {
+    const user = await getAuthUser();
+    if (!user) {
+      return NextResponse.json({ success: false, message: "UNAUTHORIZED" }, { status: 401 });
+    }
+
     const body = await request.json();
     const updated = await prisma.booking.update({
       where: { id: bookingId },
