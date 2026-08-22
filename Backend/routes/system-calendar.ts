@@ -10,6 +10,7 @@ import {
 import { listBookings } from "@/Backend/services/booking-system-store";
 import { getGoogleCalendarClient } from "@/Backend/services/google-calendar";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
 import { getAuthUser } from "@/app/actions/auth";
 
@@ -492,23 +493,36 @@ export async function POST(request: Request) {
         where: { nameTh: body.bookingFaculty || authUser.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร" }
       })) || (await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } }));
 
-      let requester = authUser.id 
-        ? await prisma.user.findFirst({ where: { id: Number(authUser.id) } })
-        : null;
+      let requester = null;
+      const requesterName = (body.requester || '').trim();
 
-      if (!requester && body.requester) {
-        requester = await prisma.user.findFirst({ where: { name: body.requester } });
-      }
-
-      if (!requester) {
-        requester = await prisma.user.create({
-          data: {
-            facultyId: faculty.id,
-            name: body.requester || authUser.name || "ผู้ขอใช้บริการ",
-            email: `${Date.now()}-user@example.local`,
-            role: authUser.role || "FACULTY_ADMIN"
-          }
-        });
+      if (requesterName && requesterName !== authUser.name) {
+        requester = await prisma.user.findFirst({ where: { name: requesterName } });
+        if (!requester) {
+          const slug = requesterName.replace(/\s+/g, ".").toLowerCase().replace(/[^a-z0-9.]/g, "") || "user";
+          requester = await prisma.user.create({
+            data: {
+              facultyId: faculty.id,
+              name: requesterName,
+              email: `${Date.now()}-${slug}@example.local`,
+              role: "USER"
+            }
+          });
+        }
+      } else {
+        requester = authUser.id 
+          ? await prisma.user.findFirst({ where: { id: Number(authUser.id) } })
+          : null;
+        if (!requester) {
+          requester = await prisma.user.create({
+            data: {
+              facultyId: faculty.id,
+              name: authUser.name || "ผู้ขอใช้บริการ",
+              email: `${Date.now()}-user@example.local`,
+              role: authUser.role || "FACULTY_ADMIN"
+            }
+          });
+        }
       }
 
       const latest = await prisma.booking.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
@@ -632,13 +646,58 @@ export async function PATCH(request: Request) {
     if (String(id).startsWith("bk-")) {
       const bookingId = String(id).replace("bk-", "");
       try {
+        const updateData: Prisma.BookingUpdateInput = {
+          destination: fields.destination || undefined,
+          objective: fields.purpose || undefined,
+          status: fields.status === 'approved' ? 'APPROVED' : (fields.status === 'rejected' ? 'REJECTED' : 'WAITING_EXEC')
+        };
+
+        if (fields.passengers) {
+          updateData.passengersCount = Number(fields.passengers);
+        }
+        if (fields.phone !== undefined) {
+          updateData.phone = fields.phone || null;
+        }
+        if (fields.tripType) {
+          updateData.tripType = fields.tripType;
+        }
+
+        if (fields.date) {
+          const startDateRaw = String(fields.date).slice(0, 10);
+          const startDateTime = new Date(`${startDateRaw}T08:30:00+07:00`);
+          if (!isNaN(startDateTime.getTime())) {
+            updateData.departureDate = startDateTime;
+          }
+        }
+        if (fields.returnDate) {
+          const endDateRaw = String(fields.returnDate).slice(0, 10);
+          const endDateTime = new Date(`${endDateRaw}T16:30:00+07:00`);
+          if (!isNaN(endDateTime.getTime())) {
+            updateData.returnDate = endDateTime;
+          }
+        }
+
+        if (fields.requester) {
+          const requesterName = String(fields.requester).trim();
+          let reqUser = await prisma.user.findFirst({ where: { name: requesterName } });
+          if (!reqUser) {
+            const fac = authUser.facultyId ? { id: authUser.facultyId } : await prisma.faculty.findFirstOrThrow();
+            const slug = requesterName.replace(/\s+/g, ".").toLowerCase().replace(/[^a-z0-9.]/g, "") || "user";
+            reqUser = await prisma.user.create({
+              data: {
+                facultyId: fac.id,
+                name: requesterName,
+                email: `${Date.now()}-${slug}@example.local`,
+                role: "USER"
+              }
+            });
+          }
+          updateData.requester = { connect: { id: reqUser.id } };
+        }
+
         await prisma.booking.update({
           where: { id: bookingId },
-          data: {
-            destination: fields.destination,
-            objective: fields.purpose,
-            status: fields.status === 'approved' ? 'APPROVED' : (fields.status === 'rejected' ? 'REJECTED' : 'WAITING_EXEC')
-          }
+          data: updateData
         });
       } catch (e) {
         console.warn("Notice updating DB booking:", e);
