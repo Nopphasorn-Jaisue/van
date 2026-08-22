@@ -703,16 +703,6 @@ function CalendarContent() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <a
-              href="/api/calendar-events/export"
-              download="up-van-calendar.ics"
-              className="px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-full text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95"
-              title="ส่งออกปฏิทินไฟล์ .ics (สำหรับ Google Calendar, Outlook, Apple Calendar)"
-            >
-              <Download size={14} className="text-[#311171]" />
-              <span>ส่งออกปฏิทิน (.ics)</span>
-            </a>
-
             <button
               onClick={() => handleOpenAddModal()}
               className="px-4 py-2 bg-[#311171] hover:bg-[#230b54] text-white rounded-full text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
