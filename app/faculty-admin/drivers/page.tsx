@@ -115,26 +115,15 @@ export default function DriversPage() {
   useEffect(() => {
     setMounted(true);
     loadDrivers();
-    loadPendingRequests();
     
-    // Fetch current admin info
-    fetch('/api/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.id) {
-          setAdminId(data.id);
-        }
-      })
-      .catch(err => console.error(err));
-
     getAuthUser().then(user => {
-      if (user?.facultyId) {
-        setUserFacultyId(user.facultyId.toString());
+      if (user) {
+        if (user.id) setAdminId(Number(user.id));
+        if (user.facultyId) setUserFacultyId(user.facultyId.toString());
       }
     }).catch(console.error);
 
-    getFaculties().then(setFaculties).catch(console.error);
-    fetch('/api/vans').then(res => res.json()).then(data => setVans(data.vans || [])).catch(console.error);
+    loadPendingRequests();
   }, []);
 
   const handleApprove = async (id: number, approval: 'APPROVED' | 'REJECTED') => {
@@ -204,6 +193,13 @@ export default function DriversPage() {
   };
 
   const openAddModal = () => {
+    if (faculties.length === 0) {
+      getFaculties().then(setFaculties).catch(console.error);
+    }
+    if (vans.length === 0) {
+      fetch('/api/vans').then(res => res.json()).then(data => setVans(data.vans || [])).catch(console.error);
+    }
+
     setEditingId(null);
     const defaultFacId = userFacultyId || (faculties.length > 0 ? faculties[0].id.toString() : "");
     const matchingVans = vans.filter(v => !defaultFacId || v.faculty?.id?.toString() === defaultFacId || !v.faculty);
@@ -225,6 +221,13 @@ export default function DriversPage() {
   };
 
   const openEditModal = (driver: Driver) => {
+    if (faculties.length === 0) {
+      getFaculties().then(setFaculties).catch(console.error);
+    }
+    if (vans.length === 0) {
+      fetch('/api/vans').then(res => res.json()).then(data => setVans(data.vans || [])).catch(console.error);
+    }
+
     setEditingId(driver.id);
     const facId = driver.facultyId ? driver.facultyId.toString() : (userFacultyId || (faculties.length > 0 ? faculties[0].id.toString() : ""));
     const driverVanId = driver.assignedVanId ? driver.assignedVanId.toString() : "";

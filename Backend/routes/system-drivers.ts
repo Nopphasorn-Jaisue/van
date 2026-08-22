@@ -13,11 +13,13 @@ export async function handleListDrivers(request: Request) {
   
   const user = await getAuthUser();
   let facultyId: number | undefined;
-  if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+  let facultyName: string | undefined;
+  if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE')) {
     facultyId = user.facultyId;
+    facultyName = user.faculty?.nameTh;
   }
 
-  return NextResponse.json({ drivers: await listDrivers(date, facultyId) });
+  return NextResponse.json({ drivers: await listDrivers(date, facultyId, facultyName) });
 }
 
 export async function handleGetDriverDashboard(_request: Request, driverId: string) {

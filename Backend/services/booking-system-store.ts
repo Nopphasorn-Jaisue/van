@@ -372,50 +372,30 @@ function detectAvailability(driverId: number, bookings: Array<{ assignedDriverId
   return active ? "ON_TRIP" : "AVAILABLE";
 }
 
-export async function listDrivers(date?: string, facultyId?: number) {
-  await ensureSeedData();
+export async function listDrivers(date?: string, facultyId?: number, facultyName?: string) {
+  const whereDriver: Prisma.DriverWhereInput = {};
+  const whereUser: Prisma.UserWhereInput = { role: "DRIVER" };
 
-  // Auto-sync: Ensure every User with role DRIVER has a Driver profile in the same faculty
-  try {
-    const driverUsers = await prisma.user.findMany({
-      where: { role: "DRIVER" },
-      include: { driverProfile: true }
-    });
+  if (facultyId || facultyName) {
+    const driverOr: Prisma.DriverWhereInput[] = [];
+    const userOr: Prisma.UserWhereInput[] = [];
 
-    for (const u of driverUsers) {
-      if (!u.driverProfile) {
-        await prisma.driver.create({
-          data: {
-            userId: u.id,
-            facultyId: u.facultyId,
-            phone: "-",
-            age: 35,
-            type: "PRIMARY",
-            isActive: true
-          }
-        });
-      } else if (u.driverProfile.facultyId !== u.facultyId) {
-        await prisma.driver.update({
-          where: { id: u.driverProfile.id },
-          data: { facultyId: u.facultyId }
-        });
-      }
+    if (facultyId) {
+      driverOr.push({ facultyId }, { user: { facultyId } });
+      userOr.push({ facultyId });
     }
-  } catch (syncErr) {
-    console.warn("Notice syncing drivers:", syncErr);
+    if (facultyName) {
+      driverOr.push({ faculty: { nameTh: facultyName } }, { user: { faculty: { nameTh: facultyName } } });
+      userOr.push({ faculty: { nameTh: facultyName } });
+    }
+
+    whereDriver.OR = driverOr;
+    whereUser.OR = userOr;
   }
 
-  const where: Prisma.DriverWhereInput = {};
-  if (facultyId) {
-    where.OR = [
-      { facultyId },
-      { user: { facultyId } }
-    ];
-  }
-
-  const [drivers, bookings] = await Promise.all([
+  const [dbDrivers, dbDriverUsers, bookings] = await Promise.all([
     prisma.driver.findMany({
-      where,
+      where: whereDriver,
       include: {
         user: true,
         faculty: { include: { vans: true } },
@@ -423,7 +403,19 @@ export async function listDrivers(date?: string, facultyId?: number) {
       },
       orderBy: { id: "asc" },
     }),
+    prisma.user.findMany({
+      where: whereUser,
+      include: {
+        faculty: { include: { vans: true } },
+        driverProfile: { include: { assignedVan: true } }
+      },
+      orderBy: { id: "asc" },
+    }),
     prisma.booking.findMany({
+      where: {
+        status: "APPROVED",
+        departureDate: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+      },
       select: {
         id: true,
         assignedDriverId: true,
@@ -432,8 +424,33 @@ export async function listDrivers(date?: string, facultyId?: number) {
         departureDate: true,
         returnDate: true,
       },
+      take: 100
     }),
   ]);
+
+  const drivers = [...dbDrivers];
+  const existingUserIds = new Set(drivers.map(d => d.userId));
+
+  for (const u of dbDriverUsers) {
+    if (!existingUserIds.has(u.id)) {
+      drivers.push({
+        id: u.driverProfile?.id || u.id,
+        userId: u.id,
+        user: u,
+        facultyId: u.facultyId,
+        faculty: u.faculty,
+        phone: u.driverProfile?.phone || "-",
+        age: u.driverProfile?.age || 35,
+        type: u.driverProfile?.type || "PRIMARY",
+        isActive: u.driverProfile?.isActive !== undefined ? u.driverProfile.isActive : true,
+        avatar: u.driverProfile?.avatar || u.avatar || null,
+        contractStart: u.driverProfile?.contractStart || new Date(),
+        assignedVanId: u.driverProfile?.assignedVanId || null,
+        assignedVan: u.driverProfile?.assignedVan || null,
+      } as any);
+      existingUserIds.add(u.id);
+    }
+  }
 
   const normalizedDate = date ? new Date(date).toISOString().slice(0, 10) : null;
 

@@ -58,14 +58,24 @@ export async function getPendingAvailabilityRequests() {
   try {
     const user = await getAuthUser();
     let facultyId: number | undefined;
-    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+    let facultyName: string | undefined;
+    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE')) {
       facultyId = user.facultyId;
+      facultyName = user.faculty?.nameTh;
+    }
+
+    const whereDriver: Record<string, unknown> = {};
+    if (facultyId || facultyName) {
+      whereDriver.OR = [
+        ...(facultyId ? [{ facultyId }, { user: { facultyId } }] : []),
+        ...(facultyName ? [{ faculty: { nameTh: facultyName } }, { user: { faculty: { nameTh: facultyName } } }] : [])
+      ];
     }
 
     return await prisma.driverAvailability.findMany({
       where: {
         approval: 'PENDING',
-        ...(facultyId ? { driver: { facultyId } } : {})
+        ...(facultyId || facultyName ? { driver: whereDriver } : {})
       },
       include: {
         driver: {

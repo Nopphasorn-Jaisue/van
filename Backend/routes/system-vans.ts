@@ -7,8 +7,17 @@ export async function handleListVans() {
   try {
     const user = await getAuthUser();
     const where: Prisma.VanWhereInput = {};
-    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
-      where.facultyId = user.facultyId;
+    if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE')) {
+      const orList: Prisma.VanWhereInput[] = [];
+      if (user.facultyId) {
+        orList.push({ facultyId: user.facultyId });
+      }
+      if (user.faculty?.nameTh) {
+        orList.push({ faculty: { nameTh: user.faculty.nameTh } });
+      }
+      if (orList.length > 0) {
+        where.OR = orList;
+      }
     }
 
     const vans = await prisma.van.findMany({
