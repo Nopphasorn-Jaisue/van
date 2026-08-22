@@ -387,7 +387,7 @@ function CalendarContent() {
       return;
     }
 
-    const targetVan = vansMap[eventFormData.vanId] || vansList[0];
+    const targetVan = vansMap[eventFormData.vanId] || vansList.find(v => v.id === eventFormData.vanId) || vansList[0];
 
     const isBorrowing = eventFormData.vanType === 'BORROW';
     const combinedTime = `${eventFormData.departTime} - ${eventFormData.returnTime} น.`;
@@ -395,6 +395,50 @@ function CalendarContent() {
     const destinationText = eventFormData.destination.trim() || "ไม่ระบุสถานที่ปลายทาง";
     const purposeText = eventFormData.purpose.trim() || "ภารกิจใช้รถตู้";
     const requesterText = eventFormData.requester.trim() || "ผู้ขอใช้บริการ";
+
+    // ตรวจสอบการจองซ้ำซ้อน (รถตู้คันเดียวกัน วันเดียวกัน และเวลาซ้อนทับกัน)
+    const parseTimeStr = (t: string) => {
+      const parts = t.replace(/น\./g, '').split('-').map(s => s.trim());
+      return {
+        start: parts[0] || '08:30',
+        end: parts[1] || '16:30'
+      };
+    };
+
+    const newStart = eventFormData.departTime;
+    const newEnd = eventFormData.returnTime;
+
+    const conflict = bookingsData.find(b => {
+      if (editingEventId && b.id === editingEventId) return false;
+      if (b.status === 'rejected' || b.status === 'REJECTED' || b.status === 'cancelled') return false;
+      if (b.vanId !== eventFormData.vanId) return false;
+
+      const bStartDate = b.date instanceof Date ? b.date.toISOString().slice(0, 10) : String(b.date).slice(0, 10);
+      const bEndDate = b.returnDate ? (b.returnDate instanceof Date ? b.returnDate.toISOString().slice(0, 10) : String(b.returnDate).slice(0, 10)) : bStartDate;
+
+      const targetStart = eventFormData.date;
+      const targetEnd = eventFormData.returnDate || eventFormData.date;
+
+      const isDateOverlap = targetStart <= bEndDate && targetEnd >= bStartDate;
+      if (!isDateOverlap) return false;
+
+      // ตรวจสอบช่วงเวลาซ้อนทับ
+      const bTime = parseTimeStr(b.time || '');
+      const isTimeOverlap = (newStart < bTime.end) && (newEnd > bTime.start);
+      return isTimeOverlap;
+    });
+
+    if (conflict) {
+      const targetVanInfo = vansMap[eventFormData.vanId] || vansList.find(v => v.id === eventFormData.vanId);
+      const vanLabel = targetVanInfo ? `${targetVanInfo.vanName} (${targetVanInfo.plate})` : 'รถตู้คันนี้';
+      const proceed = confirm(
+        `⚠️ แจ้งเตือนคิวจองซ้ำซ้อน!\n\n${vanLabel} มีคิวจองในช่วงเวลาเดียวกันแล้ว:\n- วันที่: ${conflict.date instanceof Date ? conflict.date.toLocaleDateString('th-TH') : conflict.date}\n- เวลา: ${conflict.time}\n- ผู้ขอ: ${conflict.requester || '-'}\n- ปลายทาง: ${conflict.destination}\n\nคุณต้องการยืนยันบันทึกการจองนี้ต่อไปหรือไม่?`
+      );
+      if (!proceed) {
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     const payload = {
       vanId: eventFormData.vanId,
@@ -425,15 +469,35 @@ function CalendarContent() {
           body: JSON.stringify({ id: editingEventId, ...payload })
         });
         if (res.ok) {
-          fetchEvents();
+          const updatedEvent: CalendarBookingEvent = {
+            id: editingEventId,
+            vanId: String(payload.vanId),
+            facultyId: payload.facultyId,
+            date: new Date(payload.date),
+            returnDate: payload.returnDate ? String(payload.returnDate) : undefined,
+            time: payload.time,
+            destination: payload.destination,
+            purpose: payload.purpose,
+            passengers: payload.passengers,
+            status: payload.status,
+            bookingFaculty: payload.bookingFaculty,
+            requester: payload.requester,
+            phone: payload.phone,
+            department: payload.department,
+            purposeDetail: payload.purposeDetail,
+            routeDetail: payload.routeDetail,
+            statusText: payload.statusText,
+            statusTime: payload.statusTime,
+            tripType: payload.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด"
+          };
+
+          // Optimistic instant update in 0ms
+          setBookingsData(prev => prev.map(b => b.id === editingEventId ? updatedEvent : b));
           if (selectedEvent && selectedEvent.id === editingEventId) {
-            setSelectedEvent({
-              ...selectedEvent,
-              ...payload,
-              date: new Date(payload.date)
-            });
+            setSelectedEvent(updatedEvent);
           }
           showToast("อัปเดตข้อมูลการจองสำเร็จ!", `แก้ไขรายละเอียดตารางงาน "${destinationText}" สำหรับ "${requesterText}" เรียบร้อยแล้ว`, "success");
+          fetchEvents();
         } else {
           const errData = await res.json();
           showToast("เกิดข้อผิดพลาด", errData.error || "ไม่สามารถบันทึกการแก้ไขได้", "error");
@@ -445,8 +509,34 @@ function CalendarContent() {
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          fetchEvents();
+          const resData = await res.json();
+          const createdId = resData.event?.id ? String(resData.event.id) : `bk-temp-${Date.now()}`;
+          const newEvent: CalendarBookingEvent = {
+            id: createdId,
+            vanId: String(payload.vanId),
+            facultyId: payload.facultyId,
+            date: new Date(payload.date),
+            returnDate: payload.returnDate ? String(payload.returnDate) : undefined,
+            time: payload.time,
+            destination: payload.destination,
+            purpose: payload.purpose,
+            passengers: payload.passengers,
+            status: payload.status,
+            bookingFaculty: payload.bookingFaculty,
+            requester: payload.requester,
+            phone: payload.phone,
+            department: payload.department,
+            purposeDetail: payload.purposeDetail,
+            routeDetail: payload.routeDetail,
+            statusText: payload.statusText,
+            statusTime: payload.statusTime,
+            tripType: payload.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด"
+          };
+
+          // Optimistic instant update in 0ms
+          setBookingsData(prev => [newEvent, ...prev]);
           showToast("บันทึกการจองรถตู้สำเร็จแล้ว!", `เพิ่มตารางการจองไป "${destinationText}" สำหรับ "${requesterText}" เรียบร้อยแล้ว (${payload.statusText})`, "success");
+          fetchEvents();
         } else {
           const errData = await res.json();
           showToast("เกิดข้อผิดพลาด", errData.error || "ไม่สามารถบันทึกการจองได้", "error");
@@ -869,29 +959,39 @@ function CalendarContent() {
                         
                         {[0, 1, 2, 3, 4, 5, 6].map(dayIndex => {
                           const cellDate = weekDays[dayIndex].dateObj;
-                          const event = filteredBookings.find(b => b.vanId === van.id && isBookingActiveOnDate(b, cellDate));
-                          const isSelected = selectedEvent && selectedEvent.id === event?.id;
-                          const style = event ? getFacultyStyle(event.bookingFaculty) : null;
+                          const dayEvents = filteredBookings.filter(b => b.vanId === van.id && isBookingActiveOnDate(b, cellDate));
                           
                           return (
                             <td key={dayIndex} className="p-1.5 border-r border-gray-100 align-top relative bg-white group/cell">
-                              {event && style ? (
-                                <div 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (selectedEvent?.id === event.id) {
-                                      setSelectedEvent(null);
-                                    } else {
-                                      setSelectedEvent({ ...event, vanId: van.id });
-                                    }
-                                  }}
-                                  className={`p-1.5 rounded-lg shadow-2xs relative group cursor-pointer hover:scale-[1.01] transition-all h-full min-h-[65px] border ${style.colorClass} ${isSelected ? 'ring-2 ring-[#311171] font-bold shadow-xs' : ''}`}
-                                >
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] font-bold">{style.shortName}</span>
-                                    <span className="text-[9px] font-medium truncate opacity-90">{event.destination}</span>
-                                    <span className="text-[8.5px] opacity-75">{event.time}</span>
-                                  </div>
+                              {dayEvents.length > 0 ? (
+                                <div className="flex flex-col gap-1.5">
+                                  {dayEvents.map(event => {
+                                    const isSelected = selectedEvent && selectedEvent.id === event.id;
+                                    const style = getFacultyStyle(event.bookingFaculty);
+                                    return (
+                                      <div 
+                                        key={event.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (selectedEvent?.id === event.id) {
+                                            setSelectedEvent(null);
+                                          } else {
+                                            setSelectedEvent({ ...event, vanId: van.id });
+                                          }
+                                        }}
+                                        className={`p-1.5 rounded-lg shadow-2xs relative group cursor-pointer hover:scale-[1.01] transition-all min-h-[50px] border ${style.colorClass} ${isSelected ? 'ring-2 ring-[#311171] font-bold shadow-xs' : ''}`}
+                                      >
+                                        <div className="flex flex-col gap-0.5">
+                                          <div className="flex items-center justify-between gap-1">
+                                            <span className="text-[10px] font-bold truncate">{style.shortName}</span>
+                                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${event.status === 'approved' || event.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                          </div>
+                                          <span className="text-[9px] font-medium truncate opacity-90">{event.destination}</span>
+                                          <span className="text-[8.5px] opacity-75">{event.time}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               ) : (
                                 <button 
