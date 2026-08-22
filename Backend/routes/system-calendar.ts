@@ -224,7 +224,7 @@ export async function handleSystemCalendarEvents(request: Request) {
 
             const response = await fetchWithTimeout;
             return { items: response.data.items, meta: cal };
-          } catch (err) {
+          } catch {
             console.warn(`Notice: Google Calendar fetch completed/bypassed for ${cal.id}`);
             return null;
           }
@@ -331,12 +331,23 @@ export async function handleSystemCalendarEvents(request: Request) {
     }
   }
 
-  if (yearParam && monthParam) {
+  if (yearParam) {
     const y = Number(yearParam);
+    events = events.filter(e => {
+      const startD = new Date(e.date);
+      const endD = e.returnDate ? new Date(e.returnDate) : startD;
+      return (startD.getFullYear() === y || endD.getFullYear() === y);
+    });
+  }
+
+  if (monthParam) {
     const m = Number(monthParam);
     events = events.filter(e => {
-      const d = new Date(e.date);
-      return d.getFullYear() === y && (d.getMonth() + 1) === m;
+      const startD = new Date(e.date);
+      const endD = e.returnDate ? new Date(e.returnDate) : startD;
+      const startMonth = startD.getMonth() + 1;
+      const endMonth = endD.getMonth() + 1;
+      return (startMonth === m || endMonth === m || (startMonth < m && endMonth > m));
     });
   }
 

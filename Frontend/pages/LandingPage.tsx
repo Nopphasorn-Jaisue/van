@@ -297,14 +297,12 @@ export default function LandingPage() {
       return;
     }
 
+    const currentYear = currentDate.getFullYear();
     const fallbackEvents = buildFallbackNetworkEvents(currentDate);
 
     const fetchEvents = async () => {
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-
       try {
-        const response = await fetch(`/api/calendar-events?year=${year}&month=${month}`);
+        const response = await fetch(`/api/calendar-events?year=${currentYear}`);
         if (!response.ok) {
           throw new Error('calendar unavailable');
         }
@@ -315,7 +313,7 @@ export default function LandingPage() {
         setNetworkEvents(finalEvents);
 
         try {
-          sessionStorage.setItem('cached_landing_calendar_events', JSON.stringify(finalEvents));
+          sessionStorage.setItem(`cached_landing_calendar_events_${currentYear}`, JSON.stringify(finalEvents));
         } catch {
           // ignore storage quota error
         }
@@ -327,7 +325,7 @@ export default function LandingPage() {
     };
 
     fetchEvents();
-  }, [currentDate]);
+  }, [currentDate?.getFullYear()]);
 
 
   const calendarDays = buildCalendarDays(currentDate);
@@ -536,7 +534,7 @@ export default function LandingPage() {
           <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div>
               <h1 className="text-3xl font-black leading-tight tracking-tight md:text-5xl">
-                จองรถตู้ประจำคณะได้ง่ายในที่เดียว
+                จองรถตู้ มหาวิทยาลัยพะเยา ง่ายในที่เดียว
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-slate-200 md:text-lg">
                 ตรวจสอบการเดินรถ ตรวจสอบรถว่าง และส่งคำขอจองรถตู้ประจำคณะ
