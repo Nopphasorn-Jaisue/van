@@ -4,7 +4,7 @@ import {
   SystemBookingStatus,
 } from "@/lib/booking-system-types";
 import { prisma } from "@/lib/prisma";
-import { BookingStatus, Prisma } from "@prisma/client";
+import { BookingStatus, DriverType, Prisma } from "@prisma/client";
 
 type CalendarRow = {
   id: string;
@@ -221,6 +221,14 @@ type BookingWithRelations = Prisma.BookingGetPayload<{
   };
 }>;
 
+type DriverWithRelations = Prisma.DriverGetPayload<{
+  include: {
+    user: true;
+    faculty: { include: { vans: true } };
+    assignedVan: true;
+  };
+}>;
+
 async function toBookingDto(row: BookingWithRelations) {
   return {
     id: row.id,
@@ -428,7 +436,7 @@ export async function listDrivers(date?: string, facultyId?: number, facultyName
     }),
   ]);
 
-  const drivers = [...dbDrivers];
+  const drivers: DriverWithRelations[] = [...dbDrivers];
   const existingUserIds = new Set(drivers.map(d => d.userId));
 
   for (const u of dbDriverUsers) {
@@ -441,13 +449,13 @@ export async function listDrivers(date?: string, facultyId?: number, facultyName
         faculty: u.faculty,
         phone: u.driverProfile?.phone || "-",
         age: u.driverProfile?.age || 35,
-        type: u.driverProfile?.type || "PRIMARY",
+        type: u.driverProfile?.type || DriverType.PRIMARY,
         isActive: u.driverProfile?.isActive !== undefined ? u.driverProfile.isActive : true,
         avatar: u.driverProfile?.avatar || u.avatar || null,
         contractStart: u.driverProfile?.contractStart || new Date(),
         assignedVanId: u.driverProfile?.assignedVanId || null,
         assignedVan: u.driverProfile?.assignedVan || null,
-      } as any);
+      });
       existingUserIds.add(u.id);
     }
   }

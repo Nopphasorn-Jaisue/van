@@ -126,7 +126,8 @@ function CalendarContent() {
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/calendar-events');
+      const currentYear = new Date().getFullYear();
+      const res = await fetch(`/api/calendar-events?year=${currentYear}`);
       if (res.ok) {
         const text = await res.text();
         if (text && text.trim().length > 0) {
@@ -703,7 +704,7 @@ function CalendarContent() {
               <option value="all">ทุกคณะรวมกัน</option>
               {facultiesList.map(faculty => (
                 <option key={faculty.id} value={faculty.name}>
-                  {faculty.name} {faculty.id === 'ict' ? '(คณะของคุณ)' : ''}
+                  {faculty.name} {currentUser?.faculty === faculty.name ? '(คณะของคุณ)' : ''}
                 </option>
               ))}
             </select>
