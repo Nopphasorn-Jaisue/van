@@ -31,7 +31,7 @@ export async function handleListBookings(request: Request) {
   }
 
   try {
-    const rawRows = await prisma.$queryRaw<any[]>`
+        const rawRows = await prisma.$queryRaw<any[]>`
       SELECT 
         b.id,
         b.destination,
@@ -43,20 +43,25 @@ export async function handleListBookings(request: Request) {
         b.budget_source AS "budgetSource",
         b.trip_type AS "tripType",
         b.status,
+        b.reject_reason AS "rejectReason",
         b.phone,
         b.requester_id AS "requesterId",
         b.target_faculty_id AS "targetFacultyId",
         u.name AS "requester",
+        u.email AS "requesterEmail",
         f.name_th AS "requesterFaculty",
         f.id AS "requesterFacultyId",
         tf.name_th AS "targetFaculty",
-        du.name AS "assignedDriverName"
+        du.name AS "assignedDriverName",
+        v.plate AS "vanPlate",
+        v.name AS "vanName"
       FROM bookings b
       LEFT JOIN users u ON u.id = b.requester_id
       LEFT JOIN faculties f ON f.id = u.faculty_id
       LEFT JOIN faculties tf ON tf.id = b.target_faculty_id
       LEFT JOIN drivers d ON d.id = b.assigned_driver_id
       LEFT JOIN users du ON du.id = d.user_id
+      LEFT JOIN vans v ON v.faculty_id = b.target_faculty_id
       ORDER BY b.created_at DESC;
     `;
 
@@ -68,16 +73,17 @@ export async function handleListBookings(request: Request) {
       filtered = filtered.filter(b => b.requesterFacultyId === facultyId || b.targetFacultyId === facultyId);
     }
 
-    const mapped = filtered.map((b) => ({
+        const mapped = filtered.map((b) => ({
       id: b.id,
       requester: b.requester || "ผู้ขอใช้บริการ",
+      requesterEmail: b.requesterEmail || "-",
       phone: b.phone || "-",
       requesterFaculty: b.requesterFaculty || (b.requesterFacultyId === 6 ? "คณะเภสัชฯ" : "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"),
-      requesterFacultyId: b.requesterFacultyId || 1,
+      requesterFacultyId: Number(b.requesterFacultyId || 1),
       targetFaculty: b.targetFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-      targetFacultyId: b.targetFacultyId || 1,
-      destination: b.destination,
-      purpose: b.purpose,
+      targetFacultyId: Number(b.targetFacultyId || 1),
+      destination: b.destination || "ไม่ระบุสถานที่",
+      purpose: b.purpose || "ภารกิจใช้รถ",
       passengers: Number(b.passengers || 1),
       passengersCount: Number(b.passengers || 1),
       startAt: b.startAt ? new Date(b.startAt).toISOString() : new Date().toISOString(),
@@ -86,8 +92,9 @@ export async function handleListBookings(request: Request) {
       budgetSource: b.budgetSource || "งบประมาณคณะ",
       tripType: (b.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || "ในจังหวัดพะเยา",
       status: b.status as SystemBookingStatus,
-      assignedDriverName: b.assignedDriverName || (b.targetFacultyId === 1 ? "นาย" : "พนักงานขับรถ"),
-      assignedVanPlate: b.targetFacultyId === 1 ? "1นช3009 กรุงเทพมหานคร" : "ยังไม่ผูกทะเบียน",
+      rejectReason: b.rejectReason || null,
+      assignedDriverName: b.assignedDriverName || (b.targetFacultyId === 1 ? "นาย" : "พนักงานขับรถประจำคณะ"),
+      assignedVanPlate: b.vanPlate || (b.targetFacultyId === 1 ? "1นช3009 กรุงเทพมหานคร" : "รถตู้ประจำคณะ"),
     }));
 
     cachedBookings[cacheKey] = { data: mapped, timestamp: Date.now() };
