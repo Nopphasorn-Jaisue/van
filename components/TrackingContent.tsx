@@ -32,6 +32,25 @@ type MappedBooking = {
 };
 
 export function TrackingContent() {
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำขอจอง #${bookingId}?`)) return;
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELLED', reason: 'ผู้ใช้งานขอยกเลิกการจอง' })
+      });
+      if (res.ok) {
+        alert('ยกเลิกคำขอจองสำเร็จ');
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled', statusText: 'ยกเลิก' } : b));
+      } else {
+        const d = await res.json();
+        alert(d.error || 'เกิดข้อผิดพลาดในการยกเลิก');
+      }
+    } catch (e) {
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    }
+  };
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "approved" | "history" | "cancelled">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -159,7 +178,7 @@ export function TrackingContent() {
                   <th className="py-4 px-4 font-bold min-w-[200px]">ปลายทาง / วันเวลา</th>
                   <th className="py-4 px-4 font-bold w-[140px]">ผู้โดยสาร</th>
                   <th className="py-4 px-4 font-bold min-w-[220px]">พนักงาน / รถที่จัดสรร</th>
-                  <th className="py-4 pr-6 pl-4 font-bold text-right w-[120px]">เอกสาร</th>
+                  <th className="py-4 pr-6 pl-4 font-bold text-right min-w-[150px]">การดำเนินการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -242,9 +261,27 @@ export function TrackingContent() {
                     
                     {/* View Action */}
                     <td className="py-4 pr-6 pl-4 align-top text-right">
-                      <Link href="#" className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-purple-50 text-[#311171] transition-colors">
-                        <ChevronRight size={18} />
-                      </Link>
+                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {booking.status === 'pending' ? (
+                          <>
+                            <Link 
+                              href={`/bookings/new?edit=${booking.id}`}
+                              className="px-2.5 py-1.5 bg-purple-50 text-[#311171] hover:bg-purple-100 rounded-lg text-xs font-bold transition-colors"
+                            >
+                              แก้ไข
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => handleCancelBooking(booking.id)}
+                              className="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors"
+                            >
+                              ยกเลิก
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400 font-medium">-</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

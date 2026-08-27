@@ -164,6 +164,17 @@ export default function DriverRecords() {
   const [startImageFile, setStartImageFile] = useState<File | null>(null);
   const [startImagePreview, setStartImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const endFileInputRef = useRef<HTMLInputElement>(null);
+  const [endImageFile, setEndImageFile] = useState<File | null>(null);
+  const [endImagePreview, setEndImagePreview] = useState<string | null>(null);
+
+  const handleEndImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setEndImageFile(file);
+      setEndImagePreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

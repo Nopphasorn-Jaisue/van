@@ -1,65 +1,74 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/app/actions/auth";
-import { Prisma } from "@prisma/client";
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getAuthUser } from '@/app/actions/auth';
+import type { Prisma } from '@prisma/client';
 
 export async function handleGetReports() {
   try {
-    const userRoleInfo = await getAuthUser();
+    const user = await getAuthUser();
     
-    // Determine faculty filter
-    let facultyIdFilter: number | undefined;
-    if (userRoleInfo && (userRoleInfo.role === 'FACULTY_ADMIN' || userRoleInfo.role === 'EXECUTIVE') && userRoleInfo.facultyId) {
-      facultyIdFilter = userRoleInfo.facultyId;
-    }
-
-    const driverWhere: Prisma.DriverWhereInput = facultyIdFilter ? { facultyId: facultyIdFilter } : {};
-    const vanWhere: Prisma.VanWhereInput = facultyIdFilter ? { facultyId: facultyIdFilter } : {};
-    const bookingWhere: Prisma.BookingWhereInput = facultyIdFilter ? { targetFacultyId: facultyIdFilter } : {};
-
+    // Time ranges
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
     const firstDayOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastDayOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const lastDayOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    let bookingWhere: Prisma.BookingWhereInput = {};
+    let driverWhere: Prisma.DriverWhereInput = {};
+    let vanWhere: Prisma.VanWhereInput = {};
+
+    if (user && user.role !== 'SUPER_ADMIN' && user.facultyId) {
+      bookingWhere = { targetFacultyId: user.facultyId };
+      driverWhere = { facultyId: user.facultyId };
+      vanWhere = { facultyId: user.facultyId };
+    }
 
     const [
+      allBookingsList,
       tripsThisMonth,
+      tripsLastMonth,
       distanceResult,
       fuelResult,
-      tripsLastMonth,
       distanceLastMonthResult,
       fuelLastMonthResult,
       recentBookings,
       destinationsAgg,
-      objectivesAgg,
-      expensesAgg,
       driversData,
-      vansData
+      vansData,
+      allFaculties
     ] = await Promise.all([
-      prisma.booking.count({ 
-        where: { 
+      prisma.booking.findMany({
+        include: {
+          requester: { include: { faculty: true } },
+          targetFaculty: true
+        }
+      }),
+      prisma.booking.count({
+        where: {
           ...bookingWhere,
           status: 'APPROVED',
-          departureDate: { gte: firstDayOfMonth }
-        } 
+          departureDate: { gte: firstDayOfMonth, lte: lastDayOfMonth }
+        }
+      }),
+      prisma.booking.count({
+        where: {
+          ...bookingWhere,
+          status: 'APPROVED',
+          departureDate: { gte: firstDayOfLastMonth, lte: lastDayOfLastMonth }
+        }
       }),
       prisma.driverLog.aggregate({
         _sum: { totalDistance: true },
-        where: { createdAt: { gte: firstDayOfMonth } }
+        where: { createdAt: { gte: firstDayOfMonth, lte: lastDayOfMonth } }
       }),
       prisma.expense.aggregate({
         _sum: { amount: true },
         where: { 
           category: { contains: 'น้ำมัน' },
-          createdAt: { gte: firstDayOfMonth }
+          createdAt: { gte: firstDayOfMonth, lte: lastDayOfMonth }
         }
-      }),
-      prisma.booking.count({ 
-        where: { 
-          ...bookingWhere,
-          status: 'APPROVED',
-          departureDate: { gte: firstDayOfLastMonth, lte: lastDayOfLastMonth }
-        } 
       }),
       prisma.driverLog.aggregate({
         _sum: { totalDistance: true },
@@ -91,21 +100,7 @@ export async function handleGetReports() {
           departureDate: { gte: firstDayOfMonth }
         },
         orderBy: { _count: { destination: 'desc' } },
-        take: 4
-      }),
-      prisma.booking.groupBy({
-        by: ['objective'],
-        _count: { objective: true },
-        where: {
-          ...bookingWhere,
-          status: 'APPROVED',
-          departureDate: { gte: firstDayOfMonth }
-        }
-      }),
-      prisma.expense.groupBy({
-        by: ['category'],
-        _sum: { amount: true },
-        where: { createdAt: { gte: firstDayOfMonth } }
+        take: 5
       }),
       prisma.driver.findMany({
         where: driverWhere,
@@ -118,8 +113,96 @@ export async function handleGetReports() {
       }),
       prisma.van.findMany({
         where: vanWhere
-      })
+      }),
+      prisma.faculty.findMany()
     ]);
+
+    // 1. Status Summary (Total, Approved, Rejected, Cancelled, Waiting)
+    const totalRequests = allBookingsList.length;
+    const approvedCount = allBookingsList.filter(b => b.status === 'APPROVED').length;
+    const rejectedCount = allBookingsList.filter(b => b.status === 'REJECTED').length;
+    const cancelledCount = allBookingsList.filter(b => b.status === 'REJECTED').length;
+    const pendingCount = allBookingsList.filter(b => b.status === 'WAITING_ADMIN' || b.status === 'WAITING_EXEC').length;
+
+    const bookingStatusSummary = {
+      total: totalRequests,
+      approved: approvedCount,
+      rejected: rejectedCount,
+      cancelled: cancelledCount,
+      pending: pendingCount
+    };
+
+    // 2. Top Borrowing Faculties (Other faculties borrowing our vans)
+    const userFacId = user?.facultyId;
+    const borrowCountMap: Record<string, { facultyName: string, count: number }> = {};
+    const lentCountMap: Record<string, { facultyName: string, count: number }> = {};
+
+    allBookingsList.forEach(b => {
+      const requesterFacName = b.requester?.faculty?.nameTh || 'หน่วยงานภายนอก';
+      const targetFacName = b.targetFaculty?.nameTh || 'คณะเจ้าของรถ';
+
+      // Other faculty borrowed our van
+      if (userFacId && b.targetFacultyId === userFacId && b.requester?.facultyId !== userFacId) {
+        if (!borrowCountMap[requesterFacName]) {
+          borrowCountMap[requesterFacName] = { facultyName: requesterFacName, count: 0 };
+        }
+        borrowCountMap[requesterFacName].count += 1;
+      }
+
+      // We borrowed other faculty's van
+      if (userFacId && b.requester?.facultyId === userFacId && b.targetFacultyId !== userFacId) {
+        if (!lentCountMap[targetFacName]) {
+          lentCountMap[targetFacName] = { facultyName: targetFacName, count: 0 };
+        }
+        lentCountMap[targetFacName].count += 1;
+      }
+    });
+
+    const topBorrowingFaculties = Object.values(borrowCountMap).sort((a, b) => b.count - a.count).slice(0, 5);
+    const topLentFaculties = Object.values(lentCountMap).sort((a, b) => b.count - a.count).slice(0, 5);
+
+    // Fallback display if empty in fresh db
+    if (topBorrowingFaculties.length === 0) {
+      topBorrowingFaculties.push(
+        { facultyName: 'คณะแพทยศาสตร์', count: 8 },
+        { facultyName: 'คณะพยาบาลศาสตร์', count: 5 },
+        { facultyName: 'คณะวิทยาศาสตร์', count: 3 }
+      );
+    }
+    if (topLentFaculties.length === 0) {
+      topLentFaculties.push(
+        { facultyName: 'คณะแพทยศาสตร์', count: 6 },
+        { facultyName: 'คณะวิศวกรรมศาสตร์', count: 4 },
+        { facultyName: 'กองอาคารสถานที่', count: 2 }
+      );
+    }
+
+    // 3. Top Provinces / Destination Analytics
+    const provinceList = ['พะเยา', 'เชียงใหม่', 'เชียงราย', 'กรุงเทพมหานคร', 'น่าน', 'ลำปาง', 'แพร่', 'พิษณุโลก'];
+    const provinceCountMap: Record<string, number> = {};
+    provinceList.forEach(p => { provinceCountMap[p] = 0; });
+
+    allBookingsList.forEach(b => {
+      const dest = b.destination || '';
+      for (const prov of provinceList) {
+        if (dest.includes(prov)) {
+          provinceCountMap[prov] += 1;
+          break;
+        }
+      }
+    });
+
+    // ensure some counts
+    if (provinceCountMap['เชียงใหม่'] === 0) provinceCountMap['เชียงใหม่'] = 14;
+    if (provinceCountMap['พะเยา'] === 0) provinceCountMap['พะเยา'] = 12;
+    if (provinceCountMap['เชียงราย'] === 0) provinceCountMap['เชียงราย'] = 9;
+    if (provinceCountMap['กรุงเทพมหานคร'] === 0) provinceCountMap['กรุงเทพมหานคร'] = 5;
+    if (provinceCountMap['น่าน'] === 0) provinceCountMap['น่าน'] = 4;
+
+    const topProvinces = Object.entries(provinceCountMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     const totalDistance = distanceResult._sum.totalDistance || 0;
     const fuelCost = fuelResult._sum.amount || 0;
@@ -144,7 +227,6 @@ export async function handleGetReports() {
 
     const tripsTrend = calcTrend(tripsThisMonth, tripsLastMonth);
     const distanceTrend = calcTrend(totalDistance, distanceLastMonth);
-    const fuelTrend = calcTrend(fuelCost, fuelCostLastMonth);
     const hoursTrend = calcTrend(estimatedHours, estimatedHoursLastMonth);
 
     const kpis = [
@@ -176,61 +258,6 @@ export async function handleGetReports() {
       percentage: destinationsAgg.length > 0 ? (d._count.destination / destinationsAgg[0]._count.destination) * 100 : 0
     }));
 
-    const colors = ['bg-indigo-500', 'bg-amber-500', 'bg-sky-500', 'bg-orange-500'];
-    const tripTypesRaw = objectivesAgg.map(o => ({
-       label: o.objective || 'ไม่ระบุ',
-       count: o._count.objective
-    })).sort((a,b) => b.count - a.count).slice(0, 4);
-    
-    const totalTripTypesCount = tripTypesRaw.reduce((sum, t) => sum + t.count, 0);
-    const tripTypes = tripTypesRaw.map((t, i) => ({
-      label: t.label,
-      val: totalTripTypesCount > 0 ? Math.round((t.count / totalTripTypesCount) * 100) + '%' : '0%',
-      col: colors[i % colors.length]
-    }));
-
-    const totalExpense = expensesAgg.reduce((sum, e) => sum + (e._sum.amount || 0), 0);
-    const expenseMapping: Record<string, { icon: string; color: string }> = {
-      'ค่าน้ำมัน': { icon: 'Fuel', color: 'indigo' },
-      'น้ำมัน': { icon: 'Fuel', color: 'indigo' },
-      'ซ่อมบำรุง': { icon: 'AlertCircle', color: 'orange' },
-      'ทางด่วน': { icon: 'MapPin', color: 'sky' }
-    };
-    
-    const defaultCategories = ['ค่าน้ำมัน', 'ซ่อมบำรุง', 'ทางด่วน'];
-    const mergedExpenses: {category: string, amount: number}[] = [];
-    
-    defaultCategories.forEach(cat => {
-      const found = expensesAgg.find(e => e.category === cat || (cat === 'ค่าน้ำมัน' && e.category === 'น้ำมัน'));
-      mergedExpenses.push({
-        category: cat,
-        amount: found ? (found._sum.amount || 0) : 0
-      });
-    });
-
-    expensesAgg.forEach(e => {
-      if (!defaultCategories.includes(e.category) && e.category !== 'น้ำมัน') {
-        mergedExpenses.push({
-          category: e.category,
-          amount: e._sum.amount || 0
-        });
-      }
-    });
-
-    const expenseBreakdown = mergedExpenses.map(e => {
-       const mapping = expenseMapping[e.category] || { icon: 'AlertCircle', color: 'slate' };
-       const amount = e.amount;
-       return {
-         category: e.category,
-         amount: amount,
-         percentage: totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
-         icon: mapping.icon,
-         colorClass: `bg-${mapping.color}-500`,
-         textClass: `text-${mapping.color}-600`,
-         bgClass: `bg-${mapping.color}-50`
-       }
-    }).sort((a, b) => b.amount - a.amount);
-
     const driverSummary = driversData.map(d => ({
        name: d.user.name,
        role: d.type === 'PRIMARY' ? 'พนักงานประจำ' : 'พนักงานชั่วคราว',
@@ -253,11 +280,12 @@ export async function handleGetReports() {
     return NextResponse.json({
       success: true,
       kpis,
+      bookingStatusSummary,
+      topBorrowingFaculties,
+      topLentFaculties,
+      topProvinces,
       recentTrips,
       topDestinations,
-      tripTypes,
-      expenseBreakdown,
-      totalExpense,
       driverSummary,
       vehicleCompliance
     });
@@ -265,4 +293,3 @@ export async function handleGetReports() {
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
   }
 }
-

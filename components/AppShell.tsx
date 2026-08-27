@@ -237,8 +237,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               { icon: CalendarDays, label: "ตารางงาน", href: "/driver/schedule" },
               { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
               { icon: FileSpreadsheet, label: "รายงานการใช้งาน", href: "/driver/usage-report" },
-              { icon: Wrench, label: "ตรวจสภาพ", href: "/driver/inspection" },
-              { icon: FileText, label: "รถและสัญญา", href: "/driver/contract" },
+                            { icon: FileText, label: "รถและสัญญา", href: "/driver/contract" },
             ].map((item, idx) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
@@ -369,8 +368,7 @@ function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { us
         { icon: CalendarDays, label: "ตารางการใช้รถตู้", href: "/faculty-admin/calendar" },
         { icon: FileSignature, label: "คำขอที่ต้องอนุมัติ", href: "/faculty-admin/approvals" },
         { icon: CarFront, label: "จัดการรถประจำคณะ", href: "/faculty-admin/vans" },
-        { icon: Wrench, label: "ประวัติการตรวจสภาพรถตู้", href: "/faculty-admin/maintenance" },
-        { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
+                { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
 
         { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/faculty-admin/usage-report" },
         { icon: BarChart3, label: "รายงานและสถิติ", href: "/faculty-admin/reports" },
@@ -396,8 +394,7 @@ function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { us
         { icon: CalendarDays, label: "ตารางงานของฉัน", href: "/driver/schedule" },
         { icon: FileSignature, label: "บันทึกการเดินทาง", href: "/driver/records" },
         { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/driver/usage-report" },
-        { icon: Wrench, label: "ตรวจสภาพรถ", href: "/driver/inspection" },
-        { icon: FileText, label: "ข้อมูลรถและสัญญา", href: "/driver/contract" },
+                { icon: FileText, label: "ข้อมูลรถและสัญญา", href: "/driver/contract" },
       ];
     }
 

@@ -32,6 +32,9 @@ function BookingFormContent() {
   const [form, setForm] = useState({
     vanId: prefilledVanId || "",
     destination: "",
+    pickupLocation: "",
+    coordinatorName: "",
+    coordinatorPhone: "",
     startDate: prefilledDate || "",
     startTime: "",
     endDate: prefilledDate || "",
@@ -101,6 +104,40 @@ function BookingFormContent() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.destination.trim()) {
+      alert("กรุณาระบุสถานที่ปลายทาง");
+      return;
+    }
+    if (!form.pickupLocation.trim()) {
+      alert("กรุณาระบุจุดรับผู้โดยสาร");
+      return;
+    }
+    if (!form.startDate || !form.startTime || !form.endDate || !form.endTime) {
+      alert("กรุณาระบุวันและเวลาเดินทางให้ครบถ้วน");
+      return;
+    }
+    if (!form.purpose.trim()) {
+      alert("กรุณาระบุวัตถุประสงค์การเดินทาง");
+      return;
+    }
+    if (!form.passengers || Number(form.passengers) <= 0) {
+      alert("กรุณาระบุจำนวนผู้โดยสารให้ถูกต้อง");
+      return;
+    }
+    if (!form.passengerNames.trim()) {
+      alert("กรุณาระบุชื่อผู้โดยสาร");
+      return;
+    }
+    const validatedPhone = form.phone.replace(/\D/g, '');
+    if (validatedPhone.length !== 10) {
+      alert("กรุณากรอกเบอร์โทรศัพท์สำหรับติดต่อให้ครบ 10 หลัก");
+      return;
+    }
+    if (form.coordinatorPhone && form.coordinatorPhone.replace(/\D/g, '').length !== 10) {
+      alert("เบอร์โทรศัพท์ผู้ประสานงานต้องครบ 10 หลัก");
+      return;
+    }
     e.preventDefault();
     
     if (!form.destination.trim()) {
@@ -612,7 +649,45 @@ function BookingFormContent() {
           </div>
         </div>
 
-        {/* Section 4: Attachments */}
+                  {/* ข้อมูลผู้ประสานงาน (กรณีผู้บริหารเดินทาง) */}
+          <div className="mt-4 p-3.5 bg-purple-50/50 rounded-xl border border-purple-100 space-y-3">
+            <div className="text-xs font-bold text-[#311171] flex items-center justify-between">
+              <span>ข้อมูลผู้ประสานงาน (กรณีผู้เดินทางเป็นผู้บริหารระดับสูง)</span>
+              <span className="text-[10px] text-purple-700/70 font-normal">ทางเลือก</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-600 mb-1">ชื่อ-สกุล ผู้ประสานงาน</label>
+                <input 
+                  type="text" 
+                  value={form.coordinatorName}
+                  onChange={e => setForm({...form, coordinatorName: e.target.value})}
+                  placeholder="เช่น นายสมบูรณ์ (เลขานุการ)" 
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-[#311171]/20 outline-none text-xs font-medium"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[11px] font-bold text-gray-600">เบอร์โทรผู้ประสานงาน (10 หลัก)</label>
+                  {form.coordinatorPhone && (
+                    <span className="text-[10px] font-bold text-gray-400">
+                      {form.coordinatorPhone.replace(/\D/g, '').length}/10
+                    </span>
+                  )}
+                </div>
+                <input 
+                  type="tel" 
+                  maxLength={10}
+                  value={form.coordinatorPhone}
+                  onChange={e => setForm({...form, coordinatorPhone: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                  placeholder="เช่น 0891234567" 
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-[#311171]/20 outline-none text-xs font-medium"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Attachments */}
         {/* Section 4: Attachments */}
         <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-xl shadow-gray-200/20">
           <div className="flex items-center gap-3 text-[#311171] mb-4">

@@ -3,6 +3,7 @@ import AppShell from '@/components/AppShell';
 import { getAuthUser } from '@/app/actions/auth';
 import { prisma } from '@/lib/prisma';
 import { Clock, MapPin, Users, Calendar, AlertCircle } from 'lucide-react';
+import UserBookingActions from '@/components/UserBookingActions';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
