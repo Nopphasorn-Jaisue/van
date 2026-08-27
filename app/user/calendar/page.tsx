@@ -5,8 +5,7 @@ import {
   ChevronLeft, ChevronRight, 
   Search, RotateCcw, Plus,
   MapPin, Calendar, Clock, User, Phone, FileText, 
-  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles,
-  Download, Check, AlertTriangle
+  CalendarDays, X, Edit, Trash2, Compass, Globe, Check, AlertTriangle, Users
 } from 'lucide-react';
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
@@ -124,7 +123,7 @@ function CalendarContent() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (arg?: number | boolean) => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/calendar-events');
@@ -133,6 +132,9 @@ function CalendarContent() {
         if (text && text.trim().length > 0) {
           try {
             const data = JSON.parse(text);
+            try {
+              sessionStorage.setItem('cached_user_calendar_events', text);
+            } catch {}
             if (data && data.rawEvents && Array.isArray(data.rawEvents)) {
               const mapped: CalendarBookingEvent[] = data.rawEvents.map((e: RawCalendarEventItem) => {
                 let eventDate = new Date();
@@ -189,7 +191,49 @@ function CalendarContent() {
     const now = new Date();
     setBaseDate(now);
     setTodayDate(now);
-    fetchEvents();
+
+    // Instant load from client cache
+    try {
+      const cached = sessionStorage.getItem('cached_user_calendar_events');
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data && data.rawEvents && Array.isArray(data.rawEvents)) {
+          const mapped = data.rawEvents.map((e: RawCalendarEventItem) => {
+            const d = e.date ? (e.date instanceof Date ? e.date : new Date(e.date)) : new Date();
+            return {
+              id: String(e.id),
+              vanId: String(e.vanId || 'v-ict'),
+              facultyId: e.facultyId || 'ict',
+              date: isNaN(d.getTime()) ? new Date() : d,
+              returnDate: e.returnDate ? String(e.returnDate) : undefined,
+              time: e.time || '08:30 - 16:30 น.',
+              destination: e.destination || 'ไม่ระบุสถานที่',
+              purpose: e.purpose || 'ภารกิจคณะ',
+              passengers: Number(e.passengers || 10),
+              status: e.status || 'approved',
+              bookingFaculty: e.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+              requester: e.requester || '',
+              phone: e.phone || '',
+              department: e.department || 'สำนักงานคณบดี',
+              purposeDetail: e.purposeDetail || e.purpose,
+              routeDetail: e.routeDetail || 'พะเยา',
+              statusText: e.statusText || 'อนุมัติแล้ว',
+              statusTime: e.statusTime || 'บันทึกในระบบ',
+              tripType: (e.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || 'ในจังหวัดพะเยา'
+            };
+          });
+          setBookingsData(mapped);
+          setIsLoading(false);
+        }
+        if (data && data.vans && Array.isArray(data.vans)) {
+          setVansList(data.vans);
+        }
+      }
+    } catch {}
+
+    fetchEvents(true);
+
+    const safetyTimer = setTimeout(() => setIsLoading(false), 1200);
 
     const fetchUser = async () => {
       try {
@@ -297,7 +341,28 @@ function CalendarContent() {
 
   // 1 Faculty = 1 Van + 1 Driver
   const vansMap: Record<string, UnifiedVanInfo> = {};
-  vansList.forEach(v => vansMap[v.id] = v);
+  vansList.forEach(v => {
+    vansMap[v.id] = v;
+    if (v.facultyId) vansMap[v.facultyId] = v;
+    if (v.facultyId === '1' || v.id === '1' || v.id === 'v-ict') {
+      vansMap['1'] = v;
+      vansMap['3'] = v;
+      vansMap['van-003'] = v;
+      vansMap['v-ict'] = v;
+    }
+    if (v.facultyId === '6' || v.id === 'v-pharm' || v.id === '6') {
+      vansMap['6'] = v;
+      vansMap['8'] = v;
+      vansMap['van-008'] = v;
+      vansMap['v-pharm'] = v;
+    }
+    if (v.facultyId === '2' || v.id === 'v-sci' || v.id === '2') {
+      vansMap['2'] = v;
+      vansMap['9'] = v;
+      vansMap['van-009'] = v;
+      vansMap['v-sci'] = v;
+    }
+  });
 
   const filteredVans = vansList.filter(v => {
     if (selectedFacultyFilter === "all") return true;
@@ -391,9 +456,88 @@ function CalendarContent() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const destinationText = eventFormData.destination.trim() || "ไม่ระบุสถานที่ปลายทาง";
-    const purposeText = eventFormData.purpose.trim() || "ภารกิจใช้รถตู้";
-    const requesterText = eventFormData.requester.trim() || "ผู้ขอใช้บริการ";
+    if (!eventFormData.destination || !eventFormData.destination.trim()) {
+      Swal.fire({
+        title: 'ข้อมูลไม่ครบถ้วน',
+        text: 'กรุณากรอกสถานที่ปลายทาง',
+        icon: 'warning',
+        confirmButtonColor: '#311171'
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!eventFormData.purpose || !eventFormData.purpose.trim()) {
+      Swal.fire({
+        title: 'ข้อมูลไม่ครบถ้วน',
+        text: 'กรุณากรอกวัตถุประสงค์การเดินทาง',
+        icon: 'warning',
+        confirmButtonColor: '#311171'
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!eventFormData.requester || !eventFormData.requester.trim()) {
+      Swal.fire({
+        title: 'ข้อมูลไม่ครบถ้วน',
+        text: 'กรุณากรอกชื่อผู้ขอใช้บริการ',
+        icon: 'warning',
+        confirmButtonColor: '#311171'
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    const rawPhone = (eventFormData.phone || '').trim();
+    if (!rawPhone) {
+      Swal.fire({
+        title: 'ข้อมูลไม่ครบถ้วน',
+        text: 'กรุณากรอกเบอร์โทรศัพท์ (10 หลัก)',
+        icon: 'warning',
+        confirmButtonColor: '#311171'
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      Swal.fire({
+        title: 'เบอร์โทรศัพท์ไม่ถูกต้อง',
+        text: `เบอร์ไม่ครบ 10 ตัว (ปัจจุบันมี ${cleanPhone.length} ตัว กรุณากรอกให้ครบ 10 ตัว)`,
+        icon: 'warning',
+        confirmButtonColor: '#311171'
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (cleanPhone.length > 10) {
+      Swal.fire({
+        title: 'เบอร์โทรศัพท์ไม่ถูกต้อง',
+        text: 'เบอร์โทรศัพท์เกิน 10 ตัว (กรุณาตรวจสอบอีกครั้ง)',
+        icon: 'warning',
+        confirmButtonColor: '#311171'
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!cleanPhone.startsWith('0')) {
+      Swal.fire({
+        title: 'เบอร์โทรศัพท์ไม่ถูกต้อง',
+        text: 'เบอร์โทรศัพท์ต้องขึ้นต้นด้วยเลข 0',
+        icon: 'warning',
+        confirmButtonColor: '#311171'
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    const destinationText = eventFormData.destination.trim();
+    const purposeText = eventFormData.purpose.trim();
+    const requesterText = eventFormData.requester.trim();
 
     // Convert date and time to ISO strings
     const startAt = new Date(`${eventFormData.date}T${eventFormData.departTime}:00+07:00`).toISOString();
@@ -452,21 +596,24 @@ function CalendarContent() {
   };
 
   const confirmDelete = async (id: string) => {
+    setBookingsData(prev => prev.filter(b => b.id !== id));
+    if (selectedEvent && selectedEvent.id === id) {
+      setSelectedEvent(null);
+    }
+    setDeleteConfirmId(null);
+
     try {
       const res = await fetch(`/api/calendar-events?id=${id}`, { method: 'DELETE' });
       if (!res.ok) {
-        const errorData = await res.json();
+        const errorData = await res.json().catch(() => ({}));
         alert(errorData.error || "เกิดข้อผิดพลาดในการลบข้อมูล");
-        setDeleteConfirmId(null);
+        fetchEvents();
         return;
       }
-      setBookingsData(prev => prev.filter(b => b.id !== id));
-      if (selectedEvent && selectedEvent.id === id) {
-        setSelectedEvent(null);
-      }
-      setDeleteConfirmId(null);
+      fetchEvents(true);
     } catch (err) {
       console.error(err);
+      fetchEvents();
     }
   };
 
@@ -1125,6 +1272,14 @@ function CalendarContent() {
                     </div>
                   </div>
 
+                  <div className="flex gap-3">
+                    <Users size={16} className="text-[#311171] shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 mb-0.5">จำนวนผู้โดยสาร</p>
+                      <p className="text-[13px] font-bold text-gray-900">{selectedEvent.passengers ? `${selectedEvent.passengers} คน` : "1 คน"}</p>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 gap-3">
                     <div className="flex gap-3">
                       <Calendar size={16} className="text-[#311171] shrink-0 mt-0.5" />
@@ -1277,7 +1432,7 @@ function CalendarContent() {
                         onClick={() => setEventFormData({ ...eventFormData, vanType: 'BORROW', vanId: '' })}
                         className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                           eventFormData.vanType === 'BORROW'
-                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            ? 'bg-[#311171] text-white border-[#311171] shadow-xs'
                             : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
                         }`}
                       >
@@ -1467,9 +1622,12 @@ function CalendarContent() {
                   {/* ผู้ขอใช้บริการ & เบอร์โทรศัพท์ */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block font-bold text-gray-700 mb-1">ผู้ขอใช้บริการ</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block font-bold text-gray-700">ผู้ขอใช้บริการ <span className="text-red-500">*</span></label>
+                      </div>
                       <input 
                         type="text"
+                        required
                         value={eventFormData.requester}
                         onChange={e => setEventFormData({ ...eventFormData, requester: e.target.value })}
                         placeholder="ชื่อ-นามสกุล"
@@ -1477,15 +1635,34 @@ function CalendarContent() {
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-gray-700 mb-1">เบอร์โทรศัพท์ (10 หลัก)</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block font-bold text-gray-700">เบอร์โทรศัพท์ (10 หลัก) <span className="text-red-500">*</span></label>
+                        <span className={`text-[10px] font-bold ${eventFormData.phone.length === 10 ? 'text-emerald-600' : eventFormData.phone.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                          {eventFormData.phone.length}/10
+                        </span>
+                      </div>
                       <input 
                         type="text"
                         maxLength={10}
+                        required
                         value={eventFormData.phone}
                         onChange={e => setEventFormData({ ...eventFormData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                         placeholder="เช่น 0812345678"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
+                        className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${
+                          eventFormData.phone && eventFormData.phone.length < 10
+                            ? 'border-red-500 bg-red-50/30 text-red-900'
+                            : eventFormData.phone.length === 10
+                              ? 'border-emerald-500 bg-emerald-50/20'
+                              : 'border-gray-200 focus:border-[#311171]'
+                        }`}
                       />
+                      {eventFormData.phone && eventFormData.phone.length < 10 ? (
+                        <p className="text-[10px] text-red-500 mt-1 font-medium">
+                          ⚠️ เบอร์ไม่ครบ 10 ตัว (ขาดอีก {10 - eventFormData.phone.length} ตัว)
+                        </p>
+                      ) : eventFormData.phone.length === 10 ? (
+                        <p className="text-[10px] text-emerald-600 mt-1 font-medium">✓ เบอร์โทรศัพท์ครบ 10 ตัว</p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1512,22 +1689,17 @@ function CalendarContent() {
                       );
 
                       return (
-                        <div className="mt-2.5 p-3 rounded-2xl bg-gradient-to-br from-amber-50/90 via-orange-50/60 to-purple-50/40 border border-amber-200/90 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
-                          <div className="flex items-start gap-2 mb-2">
-                            <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                              <Sparkles size={12} className="text-white" />
+                        <div className="mt-2.5 p-3 rounded-2xl bg-gradient-to-br from-purple-50 via-purple-50/80 to-purple-100/50 border border-purple-200 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+                          <div className="mb-2">
+                            <div className="font-bold text-[#311171] text-xs flex items-center gap-1.5 flex-wrap">
+                              <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
+                              <span className="px-1.5 py-0.5 bg-purple-100 text-[#311171] border border-purple-200/60 rounded-md text-[10px] font-bold">
+                                ผู้โดยสารเกิน 10 คน
+                              </span>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5 flex-wrap">
-                                <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
-                                <span className="px-1.5 py-0.2 bg-amber-200/80 text-amber-900 rounded-md text-[10px] font-bold">
-                                  ผู้โดยสารเกิน 10 คน
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-amber-800/90 mt-0.5 leading-snug">
-                                ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
-                              </p>
-                            </div>
+                            <p className="text-[11px] text-purple-900/80 mt-0.5 leading-snug">
+                              ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
+                            </p>
                           </div>
 
                           {recommendedVans.length > 0 ? (
@@ -1545,10 +1717,10 @@ function CalendarContent() {
                                         vanType: 'BORROW'
                                       }));
                                     }}
-                                    className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-amber-400 ${
+                                    className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-purple-300 ${
                                       isSelected 
                                         ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/50' 
-                                        : 'border-amber-200/80'
+                                        : 'border-purple-100'
                                     }`}
                                   >
                                     <div>
@@ -1598,7 +1770,7 @@ function CalendarContent() {
                               })}
                             </div>
                           ) : (
-                            <div className="p-2.5 rounded-xl bg-white/90 border border-amber-200/80 text-[11px] text-amber-800 font-medium text-center">
+                            <div className="p-2.5 rounded-xl bg-white/90 border border-purple-200/80 text-[11px] text-purple-900 font-medium text-center">
                               ไม่พบรถตู้ของคณะอื่นที่ว่างตรงกับช่วงวันที่เลือก กรุณาติดต่อส่วนกลาง
                             </div>
                           )}

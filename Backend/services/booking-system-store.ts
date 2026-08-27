@@ -37,55 +37,12 @@ type SeedBooking = {
   assignedDriverName?: string;
 };
 
-const seedDrivers: SeedDriver[] = [
-  { name: "นายสมชาย ใจดี", phone: "081-234-5678", facultyName: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร", vanPlate: "นข 6789 พะเยา", age: 45 },
-  { name: "นายอนุชา คำมี", phone: "086-345-6789", facultyName: "คณะ ICT", vanPlate: "นข 1122 พะเยา", age: 41 },
-  { name: "นายวิชัย แสนดี", phone: "089-456-7890", facultyName: "คณะพลังงาน", vanPlate: "นข 2233 พะเยา", age: 47 },
-  { name: "นายประเสริฐ จันทรดี", phone: "090-567-8901", facultyName: "คณะวิทยาศาสตร์", vanPlate: "นข 3344 พะเยา", age: 39 },
-  { name: "นายชูชาติ สุขใจ", phone: "093-678-9012", facultyName: "คณะเภสัชฯ", vanPlate: "นข 4455 พะเยา", age: 42 },
-  { name: "นายธนวัฒน์ วันดี", phone: "094-789-0123", facultyName: "คณะนิติศาสตร์", vanPlate: "นข 5566 พะเยา", age: 37 },
-];
+const seedDrivers: SeedDriver[] = [];
 
-const seedBookings: SeedBooking[] = [
-  {
-    id: "UPV-2569-0065",
-    requester: "ดร.สมเกียรติ เรียนดี",
-    requesterFaculty: "คณะวิทยาศาสตร์",
-    destination: "มหาวิทยาลัยเชียงใหม่",
-    purpose: "นำนิสิตศึกษาดูงาน",
-    passengers: 9,
-    startAt: "2026-07-20T06:00:00+07:00",
-    endAt: "2026-07-20T18:00:00+07:00",
-    status: "WAITING_ADMIN",
-  },
-  {
-    id: "UPV-2569-0066",
-    requester: "นายภานุวัฒน์ ศรีดี",
-    requesterFaculty: "คณะเภสัชฯ",
-    destination: "อำเภอเมืองเชียงราย",
-    purpose: "ลงพื้นที่วิจัย",
-    passengers: 15,
-    startAt: "2026-07-21T08:30:00+07:00",
-    endAt: "2026-07-21T18:30:00+07:00",
-    status: "WAITING_EXEC",
-    assignedDriverName: "นายชูชาติ สุขใจ",
-  },
-  {
-    id: "UPV-2569-0067",
-    requester: "อ.นันทนา จันทร์ใส",
-    requesterFaculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-    destination: "จังหวัดลำปาง",
-    purpose: "ประชุมโครงการ",
-    passengers: 8,
-    startAt: "2026-07-18T13:00:00+07:00",
-    endAt: "2026-07-18T17:00:00+07:00",
-    status: "APPROVED",
-    assignedDriverName: "นายสมชาย ใจดี",
-  },
-];
+const seedBookings: SeedBooking[] = [];
 
 const globalForSeed = globalThis as unknown as { seeded?: boolean };
-let seeded = globalForSeed.seeded ?? (process.env.NODE_ENV === "production");
+let seeded = true;
 
 function normalizeRole(rawRole: unknown): string {
   const role = String(rawRole || "USER").toUpperCase();
@@ -111,104 +68,7 @@ function parseDriverCode(code: string) {
   return Number(matched[1]);
 }
 
-async function ensureSeedData() {
-  if (seeded) {
-    return;
-  }
-
-  const hasRows = await prisma.faculty.count();
-  if (hasRows > 0) {
-    seeded = true;
-    globalForSeed.seeded = true;
-    return;
-  }
-
-  const facultyNames = Array.from(new Set(seedDrivers.map((driver) => driver.facultyName).concat(seedBookings.map((booking) => booking.requesterFaculty))));
-
-  for (const facultyName of facultyNames) {
-    await prisma.faculty.create({
-      data: {
-        nameTh: facultyName,
-        nameEn: facultyName,
-      },
-    });
-  }
-
-  for (const driver of seedDrivers) {
-    const faculty = await prisma.faculty.findFirstOrThrow({ where: { nameTh: driver.facultyName } });
-
-    const user = await prisma.user.create({
-      data: {
-        facultyId: faculty.id,
-        name: driver.name,
-        email: `${driver.name.replace(/\s+/g, ".").toLowerCase().replace(/[^a-z0-9.]/g, "") || "driver"}.${faculty.id}@example.local`,
-        role: "DRIVER",
-      },
-    });
-
-    await prisma.van.create({
-      data: {
-        facultyId: faculty.id,
-        plate: driver.vanPlate,
-        engine: "ดีเซล",
-        capacity: 12,
-        isActive: true,
-      },
-    });
-
-    await prisma.driver.create({
-      data: {
-        userId: user.id,
-        facultyId: faculty.id,
-        phone: driver.phone,
-        age: driver.age,
-        type: "PRIMARY",
-        isActive: true,
-      },
-    });
-  }
-
-  for (const booking of seedBookings) {
-    const faculty = await prisma.faculty.findFirstOrThrow({ where: { nameTh: booking.requesterFaculty } });
-
-    let requester = await prisma.user.findFirst({ where: { name: booking.requester } });
-    if (!requester) {
-      requester = await prisma.user.create({
-        data: {
-          facultyId: faculty.id,
-          name: booking.requester,
-          email: `${booking.id.toLowerCase()}@example.local`,
-          role: "USER",
-        },
-      });
-    }
-
-    let assignedDriverId: number | null = null;
-    if (booking.assignedDriverName) {
-      const driver = await prisma.driver.findFirst({ where: { user: { name: booking.assignedDriverName } } });
-      assignedDriverId = driver?.id ?? null;
-    }
-
-    await prisma.booking.create({
-      data: {
-        id: booking.id,
-        requesterId: requester.id,
-        targetFacultyId: faculty.id,
-        destination: booking.destination,
-        objective: booking.purpose,
-        departureDate: new Date(booking.startAt),
-        returnDate: new Date(booking.endAt),
-        passengersCount: booking.passengers,
-        budgetSource: "งบประมาณคณะ",
-        tripType: "ในจังหวัดพะเยา",
-        status: booking.status,
-        assignedDriverId,
-      },
-    });
-  }
-
-  seeded = true;
-}
+async function ensureSeedData() { /* real DB only */ }
 
 function toThaiDate(value: Date) {
   return value.toISOString();
@@ -253,26 +113,27 @@ async function toBookingDto(row: BookingWithRelations) {
 }
 
 export async function listBookings(status?: SystemBookingStatus, facultyId?: number) {
-  await ensureSeedData();
-
   const where: Prisma.BookingWhereInput = {};
   if (status) {
     where.status = status === "COMPLETED" ? BookingStatus.APPROVED : (status as BookingStatus);
   }
   if (facultyId) {
-    where.requester = { facultyId };
+    where.OR = [
+      { requester: { facultyId } },
+      { targetFacultyId: facultyId }
+    ];
   }
 
   const rows = await prisma.booking.findMany({
     where,
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
+      assignedDriver: { include: { user: true, faculty: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return Promise.all(rows.map((row) => toBookingDto(row)));
+  return Promise.all(rows.map((row) => toBookingDto(row as any)));
 }
 
 export async function getBookingById(id: string) {

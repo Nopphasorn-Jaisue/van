@@ -52,27 +52,51 @@ export default function FacultyAdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Instant hydration from sessionStorage
+    try {
+      const cached = sessionStorage.getItem('cached_faculty_dashboard');
+      if (cached) {
+        const d = JSON.parse(cached);
+        if (d) {
+          if (Array.isArray(d.requests)) setRequests(d.requests);
+          if (typeof d.vansCount === 'number') setVansCount(d.vansCount);
+          if (typeof d.readyVansCount === 'number') setReadyVansCount(d.readyVansCount);
+          if (typeof d.driversCount === 'number') setDriversCount(d.driversCount);
+          if (typeof d.activeDriversCount === 'number') setActiveDriversCount(d.activeDriversCount);
+          if (Array.isArray(d.calendarEvents)) setCalendarEvents(d.calendarEvents);
+          setIsLoading(false);
+        }
+      }
+    } catch {}
+
+    const safetyTimer = setTimeout(() => setIsLoading(false), 1200);
+
     async function loadData() {
       try {
-        const [reqRes, vanRes, drvRes, calRes] = await Promise.all([
-          fetch('/api/bookings?status=WAITING_ADMIN'),
+        const [reqRes, vanRes, drvRes, calRes] = await Promise.allSettled([
+          fetch('/api/bookings'),
           fetch('/api/vans'),
           fetch('/api/drivers'),
           fetch('/api/calendar-events')
         ]);
         
-        const reqData = await reqRes.json();
-        const vanData = await vanRes.json();
-        const drvData = await drvRes.json();
-        const calData = await calRes.json();
+        const reqData = reqRes.status === 'fulfilled' && reqRes.value.ok ? await reqRes.value.json() : { bookings: [] };
+        const vanData = vanRes.status === 'fulfilled' && vanRes.value.ok ? await vanRes.value.json() : { vans: [] };
+        const drvData = drvRes.status === 'fulfilled' && drvRes.value.ok ? await drvRes.value.json() : { drivers: [] };
+        const calData = calRes.status === 'fulfilled' && calRes.value.ok ? await calRes.value.json() : { events: {} };
         
         const formatThaiDateTime = (dateStr: string) => {
+          if (!dateStr) return "-";
           const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return "-";
           return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) + 
                  ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
         };
         
-        const mapped = (reqData.bookings || []).map((b: Booking) => ({
+        const rawBookings = Array.isArray(reqData.bookings) ? reqData.bookings : [];
+        const pendingBookings = rawBookings.filter((b: any) => b.status === 'WAITING_ADMIN' || b.status === 'WAITING_EXEC');
+        
+        const mapped = pendingBookings.map((b: Booking) => ({
           id: b.id,
           time: formatThaiDateTime(b.submittedAt),
           requester: `${b.requester}\n${b.requesterFaculty}`,
@@ -83,13 +107,17 @@ export default function FacultyAdminDashboard() {
         
         setRequests(mapped);
 
-        const vans = vanData.vans || [];
-        setVansCount(vans.length);
-        setReadyVansCount(vans.filter((v: Van) => v.status === 'ready').length);
+        const vans = Array.isArray(vanData.vans) ? vanData.vans : [];
+        const vCount = vans.length;
+        const vReady = vans.filter((v: Van) => v.status === 'ready' || (v as any).isActive).length;
+        setVansCount(vCount);
+        setReadyVansCount(vReady);
 
-        const drivers = drvData.drivers || [];
-        setDriversCount(drivers.length);
-        setActiveDriversCount(drivers.filter((d: Driver) => !d.isLocked).length);
+        const drivers = Array.isArray(drvData.drivers) ? drvData.drivers : [];
+        const dCount = drivers.length;
+        const dActive = drivers.filter((d: Driver) => !d.isLocked && (d as any).isActive !== false).length;
+        setDriversCount(dCount);
+        setActiveDriversCount(dActive);
 
         const flattenedCalEvents: CalendarEvent[] = [];
         if (calData && calData.events) {
@@ -107,6 +135,17 @@ export default function FacultyAdminDashboard() {
         }
         setCalendarEvents(flattenedCalEvents);
 
+        try {
+          sessionStorage.setItem('cached_faculty_dashboard', JSON.stringify({
+            requests: mapped,
+            vansCount: vCount,
+            readyVansCount: vReady,
+            driversCount: dCount,
+            activeDriversCount: dActive,
+            calendarEvents: flattenedCalEvents
+          }));
+        } catch {}
+
       } catch (err) {
         console.error(err);
       } finally {
@@ -114,6 +153,7 @@ export default function FacultyAdminDashboard() {
       }
     }
     loadData();
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const router = useRouter();

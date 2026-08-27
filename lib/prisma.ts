@@ -4,21 +4,23 @@ import { Pool } from "pg";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; pool?: Pool };
 
-const connectionString = process.env.DATABASE_URL || process.env.DIRECT_URL;
+const defaultUrl = "postgresql://postgres.ljcfcyeohhzvgbztrsss:Joule404325@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres";
+const rawUrl = process.env.DATABASE_URL || process.env.DIRECT_URL || defaultUrl;
+const connectionString = rawUrl.replace('?pgbouncer=true', '');
 
 let pool = globalForPrisma.pool;
-if (!pool && connectionString) {
+if (!pool) {
   pool = new Pool({ 
     connectionString,
-    max: 15,
-    idleTimeoutMillis: 30000 
+    ssl: { rejectUnauthorized: false },
+    max: 10,
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 15000 
   });
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.pool = pool;
-  }
+  globalForPrisma.pool = pool;
 }
 
-const adapter = pool ? new PrismaPg(pool) : undefined;
+const adapter = new PrismaPg(pool);
 
 export const prisma =
   globalForPrisma.prisma ??

@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { NextResponse } from "next/server";
 import { 
   getStoredCalendarEvents, 
@@ -14,17 +16,50 @@ import { Prisma } from "@prisma/client";
 import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
 import { getAuthUser } from "@/app/actions/auth";
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-
 interface GoogleCalendarCache {
   events: CalendarEventRecord[];
   timestamp: number;
 }
-const globalForGcal = globalThis as unknown as { gcalCache?: Record<string, GoogleCalendarCache> };
-const gcalCache: Record<string, GoogleCalendarCache> = globalForGcal.gcalCache ?? (globalForGcal.gcalCache = {});
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
+
+const GCAL_CACHE_FILE = path.join(process.cwd(), 'Backend', 'data', 'gcal-cache.json');
+const CACHE_FRESH_MS = 60 * 1000; // 60 seconds fresh
+
+function loadGcalCacheFromFile(): Record<string, GoogleCalendarCache> {
+  try {
+    if (fs.existsSync(GCAL_CACHE_FILE)) {
+      const raw = fs.readFileSync(GCAL_CACHE_FILE, 'utf8');
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn("Failed to read gcal cache file:", e);
+  }
+  return {};
+}
+
+function saveGcalCacheToFile(cacheData: Record<string, GoogleCalendarCache>) {
+  console.log('[GCAL CACHE] Saving cache to:', GCAL_CACHE_FILE, 'keys:', Object.keys(cacheData));
+  try {
+    const dir = path.dirname(GCAL_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(GCAL_CACHE_FILE, JSON.stringify(cacheData, null, 2), 'utf8');
+  } catch (e) {
+    console.warn("Failed to write gcal cache file:", e);
+  }
+}
+
+const globalForGcal = globalThis as unknown as { 
+  gcalCache?: Record<string, GoogleCalendarCache>;
+  isFetching?: Record<string, boolean>;
+  cachedVans?: { data: UnifiedVanInfo[]; timestamp: number };
+};
+
+if (!globalForGcal.gcalCache) {
+  globalForGcal.gcalCache = loadGcalCacheFromFile();
+}
+if (!globalForGcal.isFetching) {
+  globalForGcal.isFetching = {};
+}
+const gcalCache = globalForGcal.gcalCache;
 
 function formatBangkokDate(rawDate: string | Date | undefined): string {
   if (!rawDate) return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
@@ -77,6 +112,48 @@ export async function resolveCalendarId(vanId?: string): Promise<string | undefi
   return defaultCalendarId;
 }
 
+
+export function removeEventFromCache(id: string, gcalId?: string) {
+  invalidateDbBookingsCache();
+  if (globalForGcal.gcalCache) {
+    let modified = false;
+    Object.keys(globalForGcal.gcalCache).forEach(yearKey => {
+      const entry = globalForGcal.gcalCache![yearKey];
+      if (entry && Array.isArray(entry.events)) {
+        const initialLen = entry.events.length;
+        entry.events = entry.events.filter(e => 
+          String(e.id) !== String(id) && 
+          String(e.id) !== `bk-${id}` && 
+          String(e.id) !== `gcal-${id}` && 
+          (!gcalId || String(e.gcalId) !== String(gcalId))
+        );
+        if (entry.events.length !== initialLen) {
+          modified = true;
+          entry.timestamp = Date.now();
+        }
+      }
+    });
+    if (modified) {
+      saveGcalCacheToFile(globalForGcal.gcalCache);
+    }
+  }
+}
+
+export function addOrUpdateEventInCache(event: CalendarEventRecord) {
+  invalidateDbBookingsCache();
+  const year = new Date(event.date).getFullYear();
+  const yearKey = `year-${year}`;
+  if (globalForGcal.gcalCache) {
+    if (!globalForGcal.gcalCache[yearKey]) {
+      globalForGcal.gcalCache[yearKey] = { events: [], timestamp: Date.now() };
+    }
+    const entry = globalForGcal.gcalCache[yearKey];
+    entry.events = [event, ...entry.events.filter(e => String(e.id) !== String(event.id))];
+    entry.timestamp = Date.now();
+    saveGcalCacheToFile(globalForGcal.gcalCache);
+  }
+}
+
 export async function pushBookingToGoogleCalendar(booking: {
   assignedVanId?: string;
   requesterFaculty?: string;
@@ -111,11 +188,7 @@ export async function pushBookingToGoogleCalendar(booking: {
       },
     });
 
-    // Invalidate Google Calendar cache
-    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
-    if (globalCacheObj.gcalCache) {
-      globalCacheObj.gcalCache = {};
-    }
+    invalidateDbBookingsCache();
     return gcalResponse.data.id;
   } catch (err) {
     console.warn("Failed to push approved booking to Google Calendar:", err);
@@ -123,8 +196,231 @@ export async function pushBookingToGoogleCalendar(booking: {
   }
 }
 
+async function fetchGoogleCalendarEvents(year: number): Promise<CalendarEventRecord[]> {
+  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) return [];
+  try {
+    const timeMin = new Date(year, 0, 1, 0, 0, 0).toISOString();
+    const timeMax = new Date(year, 11, 31, 23, 59, 59).toISOString();
+    const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar.readonly']);
+
+    const allGoogleCalendarIds: Array<{ id: string; facultyName: string; facultyId: string; vanId: string }> = [
+      { id: FACULTY_CALENDARS.ICT, facultyName: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร', facultyId: '1', vanId: '1' },
+      { id: FACULTY_CALENDARS.PHARM, facultyName: 'คณะเภสัชฯ', facultyId: '6', vanId: '6' },
+      { id: FACULTY_CALENDARS.SCI, facultyName: 'คณะวิทยาศาสตร์', facultyId: '2', vanId: '2' }
+    ];
+
+    // Filter out duplicates
+    const uniqueCalendars = allGoogleCalendarIds.filter((c, idx, arr) => arr.findIndex(x => x.id === c.id) === idx);
+
+    const fetchPromises = uniqueCalendars.map(async (cal) => {
+      try {
+        const fetchWithTimeout = Promise.race([
+          calendar.events.list({
+            calendarId: cal.id,
+            timeMin,
+            timeMax,
+            maxResults: 500,
+            singleEvents: true,
+            orderBy: 'startTime',
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 6000))
+        ]);
+
+        const response = await fetchWithTimeout;
+        return { items: response.data.items || [], meta: cal };
+      } catch (err) {
+        console.warn(`Notice: Google Calendar fetch completed/bypassed for ${cal.id}`);
+        return null;
+      }
+    });
+
+    const responses = await Promise.allSettled(fetchPromises);
+    let googleEventsMapped: CalendarEventRecord[] = [];
+
+    responses.forEach((result) => {
+      if (result.status !== 'fulfilled' || !result.value || !result.value.items || result.value.items.length === 0) return;
+      const res = result.value;
+      const mapped: CalendarEventRecord[] = res.items.map((item, index) => {
+        const isAllDay = !!(item.start?.date && !item.start?.dateTime);
+        const rawStart = item.start?.dateTime || item.start?.date || new Date().toISOString();
+        const summary = item.summary || 'ภารกิจใช้รถตู้';
+        const description = item.description || '';
+        
+        let facultyName = res.meta.facultyName;
+        let facultyId = res.meta.facultyId;
+
+        if (facultyId === 'central') {
+          if (summary.includes('วิศวะ')) { facultyName = 'คณะวิศวกรรมศาสตร์'; facultyId = 'eng'; }
+          else if (summary.includes('วิทยาศาสตร์')) { facultyName = 'คณะวิทยาศาสตร์'; facultyId = 'sci'; }
+          else if (summary.includes('เกษตร')) { facultyName = 'คณะเกษตรศาสตร์'; facultyId = 'agr'; }
+          else if (summary.includes('พลังงาน')) { facultyName = 'คณะพลังงานและสิ่งแวดล้อม'; facultyId = 'ener'; }
+          else { facultyName = 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร'; facultyId = 'ict'; }
+        }
+
+        let cleanSummary = summary;
+        const match = summary.match(/^\[.*?\]\s*(.*)$/);
+        if (match && match[1] && match[1].trim().length > 0) {
+          cleanSummary = match[1].trim();
+        }
+
+        const correctVanId = (res.meta as any).vanId || (facultyId === '6' ? '6' : facultyId === '2' ? '2' : '1');
+
+        const startDateStr = formatBangkokDate(rawStart);
+        let returnDateStr = startDateStr;
+
+        if (isAllDay && item.end?.date) {
+          const parsedEnd = new Date(`${item.end.date}T00:00:00+07:00`);
+          parsedEnd.setDate(parsedEnd.getDate() - 1);
+          const prevDayStr = formatBangkokDate(parsedEnd);
+          if (prevDayStr >= startDateStr) {
+            returnDateStr = prevDayStr;
+          }
+        } else if (item.end?.dateTime) {
+          const endDateTime = new Date(item.end.dateTime);
+          if (endDateTime.getHours() === 0 && endDateTime.getMinutes() === 0 && endDateTime.getSeconds() === 0) {
+            endDateTime.setDate(endDateTime.getDate() - 1);
+          }
+          const parsedEndStr = formatBangkokDate(endDateTime);
+          if (parsedEndStr >= startDateStr) {
+            returnDateStr = parsedEndStr;
+          }
+        }
+
+        return {
+          id: `gcal-${item.id || index}`,
+          gcalId: item.id || undefined,
+          vanId: correctVanId,
+          facultyId,
+          date: startDateStr,
+          returnDate: returnDateStr,
+          time: isAllDay ? 'ตลอดวัน' : new Date(rawStart).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.',
+          destination: cleanSummary,
+          purpose: cleanSummary,
+          passengers: 10,
+          status: 'approved' as const,
+          bookingFaculty: facultyName === 'คณะเภสัชศาสตร์' ? 'คณะเภสัชฯ' : facultyName,
+          requester: item.organizer?.displayName || item.organizer?.email || 'Google Calendar Sync',
+          department: 'Google Calendar Live',
+          purposeDetail: description,
+          routeDetail: summary,
+          statusText: 'ซิงค์จาก Google Calendar',
+          statusTime: 'Live Data',
+          createdAt: rawStart,
+        };
+      });
+      googleEventsMapped = [...googleEventsMapped, ...mapped];
+    });
+
+    const cacheKey = `year-${year}`;
+    gcalCache[cacheKey] = {
+      events: googleEventsMapped,
+      timestamp: Date.now()
+    };
+    saveGcalCacheToFile(gcalCache);
+
+    return googleEventsMapped;
+  } catch (err) {
+    console.warn("Google Calendar fetch error:", err);
+    return [];
+  }
+}
+
+
+let cachedDbBookings: { data: any[]; timestamp: number } | null = null;
+let isFetchingDbBookings = false;
+
+export function invalidateDbBookingsCache() {
+  cachedDbBookings = null;
+  if (globalForGcal.cachedVans) globalForGcal.cachedVans = null as any;
+}
+
+async function getCachedDbBookings(): Promise<any[]> {
+  if (cachedDbBookings && (Date.now() - cachedDbBookings.timestamp < 30 * 1000)) {
+    return cachedDbBookings.data;
+  }
+
+  try {
+    const dbBookings = await prisma.booking.findMany({
+      where: { status: { not: 'REJECTED' } },
+      include: {
+        requester: { include: { faculty: true } },
+        assignedDriver: { include: { user: true } },
+        targetFaculty: true,
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    const mapped = dbBookings.map(b => ({
+      id: b.id,
+      requester: b.requester?.name || "ผู้ขอใช้บริการ",
+      phone: b.phone || "-",
+      requesterFaculty: b.requester?.faculty?.nameTh || (b.requester?.facultyId === 6 ? "คณะเภสัชฯ" : "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"),
+      requesterFacultyId: b.requester?.facultyId || 1,
+      targetFaculty: b.targetFaculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+      targetFacultyId: b.targetFacultyId || 1,
+      destination: b.destination,
+      purpose: b.objective,
+      passengers: b.passengersCount || 1,
+      startAt: b.departureDate ? new Date(b.departureDate).toISOString() : new Date().toISOString(),
+      endAt: b.returnDate ? new Date(b.returnDate).toISOString() : new Date().toISOString(),
+      submittedAt: b.createdAt ? new Date(b.createdAt).toISOString() : new Date().toISOString(),
+      budgetSource: b.budgetSource || "งบประมาณคณะ",
+      tripType: b.tripType || "ในจังหวัดพะเยา",
+      status: b.status,
+      assignedDriverName: b.assignedDriver?.user?.name || (b.targetFacultyId === 1 ? "นาย" : "พนักงานขับรถ"),
+      assignedVanPlate: b.targetFacultyId === 1 ? "1นช3009 กรุงเทพมหานคร" : "ยังไม่ผูกทะเบียน",
+    }));
+
+    cachedDbBookings = { data: mapped, timestamp: Date.now() };
+    return mapped;
+  } catch (err) {
+    console.error("Error fetching live bookings from DB for calendar:", err);
+    return cachedDbBookings?.data || [];
+  }
+}
+
+async function getCachedRealVans(): Promise<UnifiedVanInfo[]> {
+  if (globalForGcal.cachedVans && (Date.now() - globalForGcal.cachedVans.timestamp < 120 * 1000)) {
+    return globalForGcal.cachedVans.data;
+  }
+  try {
+    const realVans = await prisma.van.findMany({
+      include: {
+        faculty: true,
+        assignedDrivers: {
+          include: { user: true }
+        }
+      },
+      orderBy: { id: "asc" }
+    });
+
+    if (realVans && realVans.length > 0) {
+      const mapped: UnifiedVanInfo[] = realVans.map(v => {
+        const driver = v.assignedDrivers?.[0] || null;
+        return {
+          id: v.id.toString(),
+          facultyId: v.facultyId.toString(),
+          facultyName: v.faculty?.nameTh || "คณะรวม",
+          shortFacultyName: v.faculty?.nameTh?.replace('คณะ', '') || "คณะรวม",
+          vanName: v.name || `รถตู้ ${v.faculty?.nameTh || ''} ${v.plate}`,
+          plate: v.plate || "ไม่ระบุทะเบียน",
+          driverName: driver?.user?.name || (v.facultyId === 1 ? "นาย" : "พนักงานขับรถ"),
+          driverPhone: driver?.phone || "0812345678",
+          driverImage: driver?.user?.avatar || driver?.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
+          vanImage: (v.image && (v.image.startsWith('http') || v.image.startsWith('data:image') || v.image.startsWith('/'))) ? v.image : "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80"
+        };
+      });
+      globalForGcal.cachedVans = { data: mapped, timestamp: Date.now() };
+      return mapped;
+    }
+  } catch (err) {
+    console.error("Notice: Error fetching real vans from DB:", err);
+  }
+  return globalForGcal.cachedVans?.data || [];
+}
+
 export async function handleSystemCalendarEvents(request: Request) {
-  const { searchParams } = new URL(request.url);
+    const { searchParams } = new URL(request.url);
   const yearParam = searchParams.get("year");
   const monthParam = searchParams.get("month");
 
@@ -132,13 +428,8 @@ export async function handleSystemCalendarEvents(request: Request) {
 
   // Merge live bookings from Database/System Bookings
   try {
-    await getAuthUser();
-    let facultyId: number | undefined;
-    // Global view for cross-faculty borrowing. The client-side handles filtering.
-
-    const allDbBookings = await listBookings(undefined, facultyId);
-    // Filter out REJECTED bookings so rejected ones are NEVER shown on the calendar!
-    const activeDbBookings = allDbBookings.filter(b => b.status !== 'REJECTED');
+        const allDbBookings = await getCachedDbBookings();
+        const activeDbBookings = allDbBookings.filter(b => b.status !== 'REJECTED');
 
     const dbEvents: CalendarEventRecord[] = activeDbBookings.map(b => {
       const startDate = new Date(b.startAt);
@@ -148,14 +439,13 @@ export async function handleSystemCalendarEvents(request: Request) {
       const endTime = isNaN(endDate.getTime()) ? "16:30" : endDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
       
       const isApproved = b.status === "APPROVED" || b.status === "COMPLETED";
-
-      const vanIdentifier = b.assignedVanId ? String(b.assignedVanId) : (b.requesterFacultyId ? String(b.requesterFacultyId) : "1");
+      const vanIdentifier = b.targetFacultyId ? String(b.targetFacultyId) : (b.assignedVanId ? String(b.assignedVanId) : (b.requesterFacultyId ? String(b.requesterFacultyId) : "1"));
 
       return {
         id: `bk-${b.id}`,
         vanId: vanIdentifier,
-        facultyId: b.requesterFacultyId ? String(b.requesterFacultyId) : "1",
-        bookingFaculty: b.requesterFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        facultyId: b.targetFacultyId ? String(b.targetFacultyId) : (b.requesterFacultyId ? String(b.requesterFacultyId) : "1"),
+        bookingFaculty: b.requesterFaculty || (b.requesterFacultyId === 6 ? "คณะเภสัชฯ" : "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"),
         destination: b.destination,
         purpose: b.purpose,
         purposeDetail: b.purpose,
@@ -165,6 +455,7 @@ export async function handleSystemCalendarEvents(request: Request) {
         time: `${startTime} - ${endTime} น.`,
         passengers: b.passengers || 1,
         requester: b.requester || "ผู้ขอใช้รถ",
+        phone: (b as any).phone || b.phone || "",
         department: "ระบบจองรถตู้",
         status: isApproved ? "approved" : "pending",
         statusText: isApproved ? (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "อนุมัติแล้ว") : "รอดำเนินการ (รอคณบดีอนุมัติ)",
@@ -181,149 +472,55 @@ export async function handleSystemCalendarEvents(request: Request) {
     console.warn("Notice: Failed to fetch DB bookings for calendar:", err);
   }
 
-  // Sync live events from Google Calendar API
+  // Sync live events from Google Calendar API (with SWR caching)
   if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
     try {
       const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
       const cacheKey = `year-${year}`;
       
+      // Check in-memory and disk cache
+      let cached = gcalCache[cacheKey];
+      if (!cached || !cached.events || cached.events.length === 0) {
+        const diskCache = loadGcalCacheFromFile();
+        if (diskCache && diskCache[cacheKey] && diskCache[cacheKey].events && diskCache[cacheKey].events.length > 0) {
+          cached = diskCache[cacheKey];
+          gcalCache[cacheKey] = cached;
+        }
+      }
+
       let googleEventsMapped: CalendarEventRecord[] = [];
 
-      if (gcalCache[cacheKey] && (Date.now() - gcalCache[cacheKey].timestamp < CACHE_TTL_MS)) {
-        googleEventsMapped = gcalCache[cacheKey].events;
+      if (!cached || !cached.events || cached.events.length === 0) {
+        // Check disk cache first to avoid blocking network call
+        const disk = loadGcalCacheFromFile();
+        if (disk && disk[cacheKey] && disk[cacheKey].events && disk[cacheKey].events.length > 0) {
+          cached = disk[cacheKey];
+          gcalCache[cacheKey] = cached;
+          googleEventsMapped = cached.events;
+          // Background refresh
+          if (!globalForGcal.isFetching?.[cacheKey]) {
+            if (globalForGcal.isFetching) globalForGcal.isFetching[cacheKey] = true;
+            fetchGoogleCalendarEvents(year).finally(() => {
+              if (globalForGcal.isFetching) globalForGcal.isFetching[cacheKey] = false;
+            });
+          }
+        } else {
+          // Cold cache: fetch directly
+          googleEventsMapped = await fetchGoogleCalendarEvents(year);
+        }
       } else {
-        // Fetch full year (Jan 1 - Dec 31) so navigating between any months is instant
-        const timeMin = new Date(year, 0, 1, 0, 0, 0).toISOString();
-        const timeMax = new Date(year, 11, 31, 23, 59, 59).toISOString();
-        
-        const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar.readonly']);
-        
-        // Determine which calendars to fetch (Static list + optional DB additions)
-        const allGoogleCalendarIds: Array<{ id: string; facultyName: string; facultyId: string }> = [
-          { id: FACULTY_CALENDARS.ICT, facultyName: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร', facultyId: 'ict' },
-          { id: FACULTY_CALENDARS.PHARM, facultyName: 'คณะเภสัชศาสตร์', facultyId: 'pharm' },
-          { id: FACULTY_CALENDARS.SCI, facultyName: 'คณะวิทยาศาสตร์', facultyId: 'sci' }
-        ];
-
-        const centralCalendarId = process.env.GOOGLE_CALENDAR_ID;
-        if (centralCalendarId && !allGoogleCalendarIds.find(c => c.id === centralCalendarId)) {
-          allGoogleCalendarIds.push({
-            id: centralCalendarId,
-            facultyName: 'คณะรวม (Central)',
-            facultyId: 'central'
+        googleEventsMapped = cached.events;
+        // Non-blocking background revalidation if stale (> 60 seconds)
+        const isStale = (Date.now() - cached.timestamp) > CACHE_FRESH_MS;
+        if (isStale && !globalForGcal.isFetching?.[cacheKey]) {
+          if (globalForGcal.isFetching) globalForGcal.isFetching[cacheKey] = true;
+          fetchGoogleCalendarEvents(year).finally(() => {
+            if (globalForGcal.isFetching) globalForGcal.isFetching[cacheKey] = false;
           });
         }
-
-        const fetchPromises = allGoogleCalendarIds.map(async (cal) => {
-          try {
-            // Protect against slow Google API network lags with a 2.5s timeout
-            const fetchWithTimeout = Promise.race([
-              calendar.events.list({
-                calendarId: cal.id,
-                timeMin,
-                timeMax,
-                maxResults: 2500,
-                singleEvents: true,
-                orderBy: 'startTime',
-              }),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500))
-            ]);
-
-            const response = await fetchWithTimeout;
-            return { items: response.data.items, meta: cal };
-          } catch {
-            console.warn(`Notice: Google Calendar fetch completed/bypassed for ${cal.id}`);
-            return null;
-          }
-        });
-
-        const responses = await Promise.all(fetchPromises);
-
-        responses.forEach((res) => {
-          if (!res || !res.items || res.items.length === 0) return;
-          
-          const mapped: CalendarEventRecord[] = res.items.map((item, index) => {
-            const isAllDay = !!(item.start?.date && !item.start?.dateTime);
-            const rawStart = item.start?.dateTime || item.start?.date || new Date().toISOString();
-            const summary = item.summary || 'ภารกิจใช้รถตู้';
-            const description = item.description || '';
-            
-            let facultyName = res.meta.facultyName;
-            let facultyId = res.meta.facultyId;
-
-            // Legacy parse if central
-            if (facultyId === 'central') {
-              if (summary.includes('วิศวะ')) { facultyName = 'คณะวิศวกรรมศาสตร์'; facultyId = 'eng'; }
-              else if (summary.includes('วิทยาศาสตร์')) { facultyName = 'คณะวิทยาศาสตร์'; facultyId = 'sci'; }
-              else if (summary.includes('เกษตร')) { facultyName = 'คณะเกษตรศาสตร์'; facultyId = 'agr'; }
-              else if (summary.includes('พลังงาน')) { facultyName = 'คณะพลังงานและสิ่งแวดล้อม'; facultyId = 'ener'; }
-              else { facultyName = 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร'; facultyId = 'ict'; }
-            }
-
-            let cleanSummary = summary;
-            const match = summary.match(/^\[.*?\]\s*(.*)$/);
-            if (match && match[1] && match[1].trim().length > 0) {
-              cleanSummary = match[1].trim();
-            }
-
-            const vanMatch = facultyVansList.find(v => v.facultyName === facultyName || v.facultyId === facultyId);
-            const correctVanId = vanMatch ? vanMatch.id : (facultyId === 'pharm' ? 'v-pharm' : 'v-ict');
-
-            const startDateStr = formatBangkokDate(rawStart);
-            let returnDateStr = startDateStr;
-
-            if (isAllDay && item.end?.date) {
-              // Google Calendar all-day event end.date is exclusive (e.g. 2026-09-02 for a 1-day event on 2026-09-01)
-              const parsedEnd = new Date(`${item.end.date}T00:00:00+07:00`);
-              parsedEnd.setDate(parsedEnd.getDate() - 1);
-              const prevDayStr = formatBangkokDate(parsedEnd);
-              if (prevDayStr >= startDateStr) {
-                returnDateStr = prevDayStr;
-              }
-            } else if (item.end?.dateTime) {
-              const endDateTime = new Date(item.end.dateTime);
-              if (endDateTime.getHours() === 0 && endDateTime.getMinutes() === 0 && endDateTime.getSeconds() === 0) {
-                endDateTime.setDate(endDateTime.getDate() - 1);
-              }
-              const parsedEndStr = formatBangkokDate(endDateTime);
-              if (parsedEndStr >= startDateStr) {
-                returnDateStr = parsedEndStr;
-              }
-            }
-
-            return {
-              id: `gcal-${item.id || index}`,
-              gcalId: item.id || undefined,
-              vanId: correctVanId,
-              facultyId,
-              date: startDateStr,
-              returnDate: returnDateStr,
-              time: isAllDay ? 'ตลอดวัน' : new Date(rawStart).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.',
-              destination: cleanSummary,
-              purpose: cleanSummary,
-              passengers: 10,
-              status: 'approved' as const,
-              bookingFaculty: facultyName,
-              requester: item.organizer?.displayName || item.organizer?.email || 'Google Calendar Sync',
-              department: 'Google Calendar Live',
-              purposeDetail: description,
-              routeDetail: summary,
-              statusText: 'ซิงค์จาก Google Calendar',
-              statusTime: 'Live Data',
-              createdAt: rawStart,
-            };
-          });
-          googleEventsMapped = [...googleEventsMapped, ...mapped];
-        });
-
-        gcalCache[cacheKey] = {
-          events: googleEventsMapped,
-          timestamp: Date.now()
-        };
       }
 
       if (googleEventsMapped.length > 0) {
-        // Merge Google Calendar events with store, avoiding duplicates
         const existingGcalIds = new Set(events.map(e => e.gcalId).filter(Boolean));
         const existingSignatures = new Set(events.map(e => `${e.date.slice(0,10)}_${e.destination}`));
         
@@ -359,48 +556,15 @@ export async function handleSystemCalendarEvents(request: Request) {
     });
   }
 
-  // Fetch real vans from database
-  let realVansList: UnifiedVanInfo[] = [];
-  try {
-    const realVans = await prisma.van.findMany({
-      include: {
-        faculty: {
-          include: {
-            drivers: {
-              include: { user: true }
-            }
-          }
-        },
-        assignedDrivers: {
-          include: { user: true }
-        }
-      }
-    });
-    realVansList = realVans.map(v => {
-      const driver = v.assignedDrivers[0] || (v.faculty?.drivers && v.faculty.drivers.length > 0 ? v.faculty.drivers[0] : null);
-      return {
-        id: v.id.toString(),
-        facultyId: v.facultyId.toString(),
-        facultyName: v.faculty?.nameTh || "คณะ",
-        shortFacultyName: v.faculty?.nameTh?.replace('คณะ', '') || "คณะ",
-        vanName: v.name || `รถตู้ ${v.faculty?.nameTh || ''} ${v.plate}`,
-        plate: v.plate || "ไม่ระบุทะเบียน",
-        driverName: driver?.user?.name || "ยังไม่มีคนขับ",
-        driverPhone: driver?.phone || "-",
-        driverImage: driver?.user?.avatar || driver?.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-        vanImage: v.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=100&q=80"
-      };
-    });
-  } catch (err) {
-    console.warn("Failed to fetch real vans:", err);
-  }
-
-  const allVans = [...realVansList];
+  // Fetch real vans
+    const realVansList = await getCachedRealVans();
+    const allVans = [...realVansList];
   facultyVansList.forEach(fv => {
     if (!realVansList.some(rv => rv.facultyName === fv.facultyName || rv.shortFacultyName === fv.shortFacultyName)) {
       allVans.push(fv);
     }
   });
+
   const eventsByDate = events.reduce<Record<string, Array<{
     id: string;
     time: string;
@@ -466,19 +630,18 @@ export async function handleSystemCalendarEvents(request: Request) {
     {},
   );
 
-  return NextResponse.json({ 
+    return NextResponse.json({ 
     success: true,
     events: eventsByDate, 
     rawEvents: events,
     vans: allVans
   }, {
     headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
-      'Pragma': 'no-cache',
-      'Expires': '0'
+      'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10',
     }
   });
 }
+
 
 export async function POST(request: Request) {
   try {
@@ -625,6 +788,8 @@ export async function POST(request: Request) {
         globalCacheObj.gcalCache = {};
       }
       Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
+    invalidateDbBookingsCache();
+    try { if (fs.existsSync(GCAL_CACHE_FILE)) fs.unlinkSync(GCAL_CACHE_FILE); } catch {}
     }
 
     return NextResponse.json({ success: true, event: created });
@@ -768,6 +933,8 @@ export async function PATCH(request: Request) {
       globalCacheObj.gcalCache = {};
     }
     Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
+    invalidateDbBookingsCache();
+    try { if (fs.existsSync(GCAL_CACHE_FILE)) fs.unlinkSync(GCAL_CACHE_FILE); } catch {}
 
     return NextResponse.json({ success: true, event: updated });
   } catch (error) {
@@ -853,6 +1020,8 @@ export async function DELETE(request: Request) {
       globalCacheObj.gcalCache = {};
     }
     Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
+    invalidateDbBookingsCache();
+    try { if (fs.existsSync(GCAL_CACHE_FILE)) fs.unlinkSync(GCAL_CACHE_FILE); } catch {}
 
     return NextResponse.json({ success: true }, {
       headers: {
@@ -865,3 +1034,4 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: false, error: "Failed to delete event" }, { status: 500 });
   }
 }
+

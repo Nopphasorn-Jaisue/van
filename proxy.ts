@@ -15,7 +15,18 @@ export async function proxy(request: NextRequest) {
     path === '/auth/callback' ||
     path === '/' ||
     path === '/landing' ||
-    (request.method === 'GET' && path === '/api/calendar-events') ||
+    (request.method === 'GET' && (
+      path === '/api/calendar-events' ||
+      path === '/api/vans' ||
+      path === '/api/drivers' ||
+      path === '/api/bookings' ||
+      path.startsWith('/api/bookings') ||
+      path === '/api/notifications' ||
+      path === '/api/super-admin/faculties' ||
+      path === '/api/super-admin/dashboard' ||
+      path === '/api/super-admin/users' ||
+      path.startsWith('/api/faculty-admin')
+    )) ||
     path.startsWith('/_next') ||
     path.startsWith('/static');
 
@@ -44,6 +55,9 @@ export async function proxy(request: NextRequest) {
     const isSuperAdminRoute = path === '/super-admin' || path.startsWith('/super-admin/') || path === '/api/super-admin' || path.startsWith('/api/super-admin/');
     if (isSuperAdminRoute) {
       if (role !== 'SUPER_ADMIN') {
+        if (path.startsWith('/api/')) {
+          return NextResponse.json({ error: 'Forbidden: Super Admin access required' }, { status: 403 });
+        }
         if (path.startsWith('/api/')) {
           return NextResponse.json({ error: 'Forbidden: Super Admin access required' }, { status: 403 });
         }

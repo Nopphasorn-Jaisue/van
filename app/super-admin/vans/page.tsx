@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getVans, getFaculties } from "@/app/actions/superadmin";
+// Used REST API for stable real-time data loading
 import { 
   Bus, CheckCircle2, Wrench, RefreshCw,
   Search, Eye, Edit, ChevronLeft, ChevronRight, X, Trash2
@@ -63,23 +63,41 @@ export default function SuperAdminVans() {
 
   const loadData = async () => {
     try {
-      const [vansData, facultiesData] = await Promise.all([
-        getVans(),
-        getFaculties()
+      const [resVans, resFacs] = await Promise.all([
+        fetch('/api/vans'),
+        fetch('/api/super-admin/faculties')
       ]);
-      setVans(vansData.map(v => ({
-        ...v,
-        brandModel: v.brand,
-        seats: v.capacity,
-        driverAvatar: v.driverAvatar,
-        status: v.status as "READY" | "MAINTENANCE" | "DISABLED",
-        nextInspection: v.nextMaintenance,
-        nextService: "-",
-        image: v.image,
-        taxExp: v.taxExp,
-        insExp: v.insExp
-      })));
-      setFacultiesList(facultiesData);
+
+      if (resVans.ok) {
+        const vansJson = await resVans.json();
+        const rawVans: any[] = Array.isArray(vansJson) ? vansJson : (vansJson.vans || []);
+        const formatted: VanItem[] = rawVans.map(v => ({
+          id: v.id,
+          plate: v.plate || v.plateNumber,
+          brandModel: v.name || v.brandModel || 'Toyota Commuter',
+          seats: v.capacity || 10,
+          faculty: v.faculty?.nameTh || v.faculty || 'ส่วนกลาง',
+          status: v.isActive === false ? 'MAINTENANCE' : (v.status || 'READY'),
+          driver: v.driver || 'ไม่มีคนขับประจำ',
+          driverAvatar: v.driverAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
+          nextInspection: v.nextMaintenance || 'ไม่ระบุ',
+          nextService: '-',
+          image: v.image,
+          taxExp: v.taxExp,
+          insExp: v.insExp
+        }));
+        setVans(formatted);
+        try { sessionStorage.setItem('cached_superadmin_vans', JSON.stringify(formatted)); } catch {}
+      }
+
+      if (resFacs.ok) {
+        const facsJson = await resFacs.json();
+        if (facsJson.success && Array.isArray(facsJson.data)) {
+          const facList = facsJson.data.map((f: any) => ({ id: f.id, name: f.name }));
+          setFacultiesList(facList);
+          try { sessionStorage.setItem('cached_superadmin_faculties_list', JSON.stringify(facList)); } catch {}
+        }
+      }
     } catch (error) {
       console.error("Failed to load vans", error);
       showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลรถตู้");
@@ -87,6 +105,12 @@ export default function SuperAdminVans() {
   };
 
   useEffect(() => {
+    try {
+      const cachedVans = sessionStorage.getItem('cached_superadmin_vans');
+      if (cachedVans) setVans(JSON.parse(cachedVans));
+      const cachedFacs = sessionStorage.getItem('cached_superadmin_faculties_list');
+      if (cachedFacs) setFacultiesList(JSON.parse(cachedFacs));
+    } catch {}
     loadData();
   }, []);
 

@@ -49,6 +49,7 @@ export async function getDriverCalendar(driverId: number, start: Date, end: Date
       }
     });
   } catch (error) {
+    console.error("Failed to get driver calendar:", error);
     return [];
   }
 }

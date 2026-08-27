@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -98,14 +98,13 @@ function LoginForm() {
       <div className="w-full max-w-[500px] bg-white rounded-[24px] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-500">
         
         {/* Top Header - Purple Gradient */}
-        <div className="bg-gradient-to-b from-[#311171] to-[#4a1c99] p-10 flex flex-col items-center text-center">
+        <div className="bg-gradient-to-b from-[#ffffff] to-[#ffffff] p-10 flex flex-col items-center text-center">
           {/* Logo */}
-          <div className="w-28 h-28 bg-white rounded-2xl flex items-center justify-center shadow-lg mb-6 p-3">
+          <div className="w-28 h-28 flex items-center justify-center">
             <img src="/LOGO UP.png" alt="UP Logo" className="w-full h-full object-contain" />
           </div>
           
-          <h1 className="text-3xl font-black text-white mb-2 tracking-tight">ระบบจองรถตู้</h1>
-          <p className="text-white/90 font-medium text-sm">คณะเทคโนโลยีสารสนเทศและการสื่อสาร มหาวิทยาลัยพะเยา</p>
+          
         </div>
 
         {/* Bottom Content - White */}

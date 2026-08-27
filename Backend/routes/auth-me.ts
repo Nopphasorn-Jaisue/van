@@ -1,23 +1,41 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getRoleFromClaims } from "@/Backend/services/booking-system-store";
+import { getAuthUser } from "@/app/actions/auth";
+
 
 export async function handleGetCurrentUser() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims;
+  try {
+    const user = await getAuthUser();
+    if (!user) {
+      return NextResponse.json({
+        authenticated: false,
+        role: "USER",
+        email: null,
+        fullName: null,
+        name: "ผู้ขอใช้บริการ",
+        faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        facultyId: 1
+      });
+    }
 
-  const role = getRoleFromClaims(claims);
-  const email = typeof claims?.email === "string" ? claims.email : null;
-  const fullName =
-    typeof claims?.user_metadata === "object" && claims?.user_metadata && "full_name" in claims.user_metadata
-      ? String((claims.user_metadata as Record<string, unknown>).full_name || "")
-      : null;
-
-  return NextResponse.json({
-    role,
-    email,
-    fullName,
-    authenticated: Boolean(claims?.sub),
-  });
+    return NextResponse.json({
+      authenticated: true,
+      id: user.id,
+      role: user.role,
+      email: user.email,
+      name: user.name,
+      fullName: user.name,
+      facultyId: user.facultyId,
+      faculty: user.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+      facultyName: user.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+    });
+  } catch (err: any) {
+    return NextResponse.json({
+      authenticated: false,
+      role: "USER",
+      email: null,
+      name: "ผู้ขอใช้บริการ",
+      faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+      facultyId: 1
+    });
+  }
 }

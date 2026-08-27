@@ -62,8 +62,21 @@ export default function FacultyUsageReportPage() {
   }, []);
 
   useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem('cached_faculty_usage_report');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setReportRows(parsed);
+          setIsLoading(false);
+        }
+      }
+    } catch {}
+
+    const safetyTimer = setTimeout(() => setIsLoading(false), 1200);
+
     async function loadData() {
-      setIsLoading(true);
+      // Background load
       try {
         const bookingsRes = await getAllFacultyBookingsWithLogs();
         if (bookingsRes.success && Array.isArray(bookingsRes.bookings)) {
@@ -99,6 +112,9 @@ export default function FacultyUsageReportPage() {
 
             // Use only fetched data from database
             setReportRows(mapped);
+            try {
+              sessionStorage.setItem('cached_faculty_usage_report', JSON.stringify(mapped));
+            } catch {}
           } else {
             setReportRows([]);
           }

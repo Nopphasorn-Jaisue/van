@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "vanId": "3",
+    "facultyId": "1",
+    "bookingFaculty": "คณะเภสัชฯ",
+    "destination": "020",
+    "purpose": "20202",
+    "purposeDetail": "20202",
+    "routeDetail": "พะเยา -> 020",
+    "date": "2026-08-30",
+    "returnDate": "2026-08-30",
+    "time": "08:30 - 16:30 น.",
+    "passengers": 1,
+    "requester": "20202",
+    "phone": "0587867687",
+    "department": "สำนักงานคณบดี",
+    "tripType": "ในจังหวัดพะเยา",
+    "status": "pending_cross_faculty",
+    "statusText": "รอการยืนยันจากคณะเจ้าของรถ",
+    "statusTime": "บันทึกในระบบ",
+    "id": "bk-UPV-2569-2570",
+    "createdAt": "2026-08-27T06:45:52.373Z"
+  }
+]

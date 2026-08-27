@@ -18,7 +18,7 @@ interface MaintenanceAlert {
   urgency: string;
 }
 
-import { getDashboardStats } from '@/app/actions/superadmin';
+// Used REST API & SWR for instant navigation
 
 export default function SuperAdminDashboard() {
   const router = useRouter();
@@ -33,6 +33,7 @@ export default function SuperAdminDashboard() {
   };
 
   // Dashboard state
+  // Dashboard state
   const [maintenanceAlerts, setMaintenanceAlerts] = useState<MaintenanceAlert[]>([]);
   const [stats, setStats] = useState({
     totalVans: 0,
@@ -40,19 +41,33 @@ export default function SuperAdminDashboard() {
     activeMissions: 0,
     utilizationPercent: 0
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    try {
+      const cachedStats = sessionStorage.getItem('cached_superadmin_stats');
+      if (cachedStats) setStats(JSON.parse(cachedStats));
+      const cachedAlerts = sessionStorage.getItem('cached_superadmin_alerts');
+      if (cachedAlerts) setMaintenanceAlerts(JSON.parse(cachedAlerts));
+    } catch {}
     const fetchDashboardData = async () => {
       try {
-        const data = await getDashboardStats();
-        setStats({
-          totalVans: data.totalVans || 0,
-          totalFaculties: data.totalFaculties || 0,
-          activeMissions: data.activeMissions || 0,
-          utilizationPercent: data.utilizationPercent || 0
-        });
-        setMaintenanceAlerts(data.maintenanceAlerts || []);
+        const res = await fetch('/api/super-admin/dashboard');
+        if (res.ok) {
+          const data = await res.json();
+          const newStats = {
+            totalVans: data.totalVans || 0,
+            totalFaculties: data.totalFaculties || 0,
+            activeMissions: data.activeMissions || 0,
+            utilizationPercent: data.utilizationPercent || 0
+          };
+          setStats(newStats);
+          setMaintenanceAlerts(data.maintenanceAlerts || []);
+          try {
+            sessionStorage.setItem('cached_superadmin_stats', JSON.stringify(newStats));
+            sessionStorage.setItem('cached_superadmin_alerts', JSON.stringify(data.maintenanceAlerts || []));
+          } catch {}
+        }
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
       } finally {

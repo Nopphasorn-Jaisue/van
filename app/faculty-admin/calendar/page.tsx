@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, 
   Search, RotateCcw, Plus,
   MapPin, Calendar, Clock, User, Phone, FileText, 
-  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles, Check, AlertTriangle
+  CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles, Check, AlertTriangle, Users
 } from 'lucide-react';
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
@@ -97,23 +97,24 @@ function CalendarContent() {
   const [vansList, setVansList] = useState<UnifiedVanInfo[]>(facultyVansList);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Toast Notification State
   const [notification, setNotification] = useState<{
     show: boolean;
-    type: 'success' | 'error' | 'info';
+    type: 'success' | 'error' | 'info' | 'delete';
     title: string;
     message: string;
   } | null>(null);
 
-  const showToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const showToast = (title: string, message: string, type: 'success' | 'error' | 'info' | 'delete' = 'success') => {
     setNotification({ show: true, title, message, type });
     setTimeout(() => {
       setNotification(prev => (prev && prev.title === title ? { ...prev, show: false } : prev));
     }, 4500);
   };
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (arg?: number | boolean) => {
     setIsLoading(true);
     try {
       const currentYear = new Date().getFullYear();
@@ -129,6 +130,9 @@ function CalendarContent() {
         if (text && text.trim().length > 0) {
           try {
             const data = JSON.parse(text);
+            try {
+              sessionStorage.setItem('cached_fa_calendar_events', text);
+            } catch {}
             if (data && data.rawEvents && Array.isArray(data.rawEvents)) {
               const mapped: CalendarBookingEvent[] = data.rawEvents.map((e: RawCalendarEventItem) => {
                 let eventDate = new Date();
@@ -190,7 +194,49 @@ function CalendarContent() {
     const now = new Date();
     setBaseDate(now);
     setTodayDate(now);
-    fetchEvents();
+
+    // Instant load from client cache
+    try {
+      const cached = sessionStorage.getItem('cached_fa_calendar_events');
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data && data.rawEvents && Array.isArray(data.rawEvents)) {
+          const mapped = data.rawEvents.map((e: RawCalendarEventItem) => {
+            const d = e.date ? (e.date instanceof Date ? e.date : new Date(e.date)) : new Date();
+            return {
+              id: String(e.id),
+              vanId: String(e.vanId || 'v-ict'),
+              facultyId: e.facultyId || 'ict',
+              date: isNaN(d.getTime()) ? new Date() : d,
+              returnDate: e.returnDate ? String(e.returnDate) : undefined,
+              time: e.time || '08:30 - 16:30 น.',
+              destination: e.destination || 'ไม่ระบุสถานที่',
+              purpose: e.purpose || 'ภารกิจคณะ',
+              passengers: Number(e.passengers || 10),
+              status: e.status || 'approved',
+              bookingFaculty: e.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+              requester: e.requester || '',
+              phone: e.phone || '',
+              department: e.department || 'สำนักงานคณบดี',
+              purposeDetail: e.purposeDetail || e.purpose,
+              routeDetail: e.routeDetail || 'พะเยา',
+              statusText: e.statusText || 'อนุมัติแล้ว',
+              statusTime: e.statusTime || 'บันทึกในระบบ',
+              tripType: (e.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || 'ในจังหวัดพะเยา'
+            };
+          });
+          setBookingsData(mapped);
+          setIsLoading(false);
+        }
+        if (data && data.vans && Array.isArray(data.vans)) {
+          setVansList(data.vans);
+        }
+      }
+    } catch {}
+
+    fetchEvents(true);
+
+    const safetyTimer = setTimeout(() => setIsLoading(false), 1200);
 
     const fetchUser = async () => {
       try {
@@ -298,7 +344,28 @@ function CalendarContent() {
 
   // 1 Faculty = 1 Van + 1 Driver
   const vansMap: Record<string, UnifiedVanInfo> = {};
-  vansList.forEach(v => vansMap[v.id] = v);
+  vansList.forEach(v => {
+    vansMap[v.id] = v;
+    if (v.facultyId) vansMap[v.facultyId] = v;
+    if (v.facultyId === '1' || v.id === '1' || v.id === 'v-ict') {
+      vansMap['1'] = v;
+      vansMap['3'] = v;
+      vansMap['van-003'] = v;
+      vansMap['v-ict'] = v;
+    }
+    if (v.facultyId === '6' || v.id === 'v-pharm' || v.id === '6') {
+      vansMap['6'] = v;
+      vansMap['8'] = v;
+      vansMap['van-008'] = v;
+      vansMap['v-pharm'] = v;
+    }
+    if (v.facultyId === '2' || v.id === 'v-sci' || v.id === '2') {
+      vansMap['2'] = v;
+      vansMap['9'] = v;
+      vansMap['van-009'] = v;
+      vansMap['v-sci'] = v;
+    }
+  });
 
   const filteredVans = vansList.filter(v => {
     if (selectedFacultyFilter === "all") return true;
@@ -325,6 +392,7 @@ function CalendarContent() {
 
   const handleOpenAddModal = (dateStr?: string) => {
     setEditingEventId(null);
+    setFormError(null);
     let defaultDate = dateStr;
     if (!defaultDate) {
       const d = new Date();
@@ -352,6 +420,7 @@ function CalendarContent() {
 
   const handleOpenEditModal = (event: CalendarBookingEvent) => {
     setEditingEventId(event.id);
+    setFormError(null);
     const now = new Date();
     let eventDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (event.date) {
@@ -403,9 +472,65 @@ function CalendarContent() {
     const isBorrowing = eventFormData.vanType === 'BORROW';
     const combinedTime = `${eventFormData.departTime} - ${eventFormData.returnTime} น.`;
     
-    const destinationText = eventFormData.destination.trim() || "ไม่ระบุสถานที่ปลายทาง";
-    const purposeText = eventFormData.purpose.trim() || "ภารกิจใช้รถตู้";
-    const requesterText = eventFormData.requester.trim() || "ผู้ขอใช้บริการ";
+    // 1. ตรวจสอบสถานที่ปลายทาง
+    if (!eventFormData.destination || !eventFormData.destination.trim()) {
+      setFormError("กรุณากรอกสถานที่ปลายทาง");
+      showToast("ข้อมูลไม่ครบถ้วน", "กรุณากรอกสถานที่ปลายทางก่อนบันทึก", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // 2. ตรวจสอบวัตถุประสงค์
+    if (!eventFormData.purpose || !eventFormData.purpose.trim()) {
+      setFormError("กรุณากรอกวัตถุประสงค์การเดินทาง");
+      showToast("ข้อมูลไม่ครบถ้วน", "กรุณากรอกวัตถุประสงค์การเดินทางก่อนบันทึก", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // 3. ตรวจสอบผู้ขอใช้บริการ (ถ้าไม่กรอก จะขึ้นแจ้งเตือนและบันทึกไม่ได้)
+    if (!eventFormData.requester || !eventFormData.requester.trim()) {
+      setFormError("กรุณากรอกชื่อผู้ขอใช้บริการ");
+      showToast("ข้อมูลไม่ครบถ้วน", "กรุณากรอกชื่อผู้ขอใช้บริการก่อนบันทึก", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // 4. ตรวจสอบเบอร์โทรศัพท์ (ถ้าไม่กรอก หรือไม่ครบ 10 ตัว แจ้งเตือนและบันทึกไม่ได้)
+    const rawPhone = (eventFormData.phone || '').trim();
+    if (!rawPhone) {
+      setFormError("กรุณากรอกเบอร์โทรศัพท์ (10 หลัก)");
+      showToast("ข้อมูลไม่ครบถ้วน", "กรุณากรอกเบอร์โทรศัพท์ก่อนบันทึก", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      setFormError(`เบอร์ไม่ครบ 10 ตัว (ปัจจุบันมี ${cleanPhone.length} ตัว กรุณากรอกให้ครบ 10 ตัว)`);
+      showToast("เบอร์โทรศัพท์ไม่ถูกต้อง", `เบอร์ไม่ครบ 10 ตัว (ปัจจุบันมี ${cleanPhone.length} ตัว ขาดอีก ${10 - cleanPhone.length} ตัว)`, "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (cleanPhone.length > 10) {
+      setFormError("เบอร์โทรศัพท์เกิน 10 ตัว (กรุณาตรวจสอบอีกครั้ง)");
+      showToast("เบอร์โทรศัพท์ไม่ถูกต้อง", "เบอร์โทรศัพท์เกิน 10 ตัว", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!cleanPhone.startsWith('0')) {
+      setFormError("เบอร์โทรศัพท์ต้องขึ้นต้นด้วยเลข 0");
+      showToast("เบอร์โทรศัพท์ไม่ถูกต้อง", "เบอร์โทรศัพท์ต้องขึ้นต้นด้วยเลข 0", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    setFormError(null);
+    const destinationText = eventFormData.destination.trim();
+    const purposeText = eventFormData.purpose.trim();
+    const requesterText = eventFormData.requester.trim();
 
     // ตรวจสอบการจองซ้ำซ้อน (รถตู้คันเดียวกัน วันเดียวกัน และเวลาซ้อนทับกัน)
     const parseTimeStr = (t: string) => {
@@ -578,8 +703,8 @@ function CalendarContent() {
         fetchEvents();
         return;
       }
-      showToast("ลบข้อมูลสำเร็จ", "รายการจองถูกลบออกจากปฏิทินเรียบร้อยแล้ว", "info");
-      fetchEvents();
+      showToast("ลบข้อมูลสำเร็จ", "รายการจองถูกลบออกจากปฏิทินเรียบร้อยแล้ว", "delete");
+      fetchEvents(true);
     } catch (err) {
       console.error(err);
       showToast("เกิดข้อผิดพลาด", "ไม่สามารถลบข้อมูลได้", "error");
@@ -780,26 +905,32 @@ function CalendarContent() {
         {/* Toast Notification Alert */}
         {notification && notification.show && (
           <div className="fixed top-20 right-6 z-[100] animate-in fade-in slide-in-from-top-4 duration-300 max-w-md w-full px-4 sm:px-0 pointer-events-auto">
-            <div className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 backdrop-blur-xl transition-all ${
-              notification.type === 'success' 
-                ? 'bg-white/95 border-emerald-300 text-emerald-950 shadow-emerald-500/20' 
+            <div className={`p-4 rounded-2xl border flex items-start gap-3 bg-white transition-all ${
+              notification.type === 'delete' || notification.title.includes('ลบ')
+                ? 'border-rose-200 text-rose-950'
+                : notification.type === 'success' 
+                ? 'border-emerald-200 text-emerald-950' 
                 : notification.type === 'error'
-                ? 'bg-white/95 border-rose-300 text-rose-950 shadow-rose-500/20'
-                : 'bg-white/95 border-purple-300 text-purple-950 shadow-purple-500/20'
+                ? 'border-rose-200 text-rose-950'
+                : 'border-purple-200 text-purple-950'
             }`}>
               <div className={`p-2.5 rounded-xl shrink-0 ${
-                notification.type === 'success' 
+                notification.type === 'delete' || notification.title.includes('ลบ')
+                  ? 'bg-rose-100 text-rose-600'
+                  : notification.type === 'success' 
                   ? 'bg-emerald-100 text-emerald-700' 
                   : notification.type === 'error'
                   ? 'bg-rose-100 text-rose-700'
                   : 'bg-purple-100 text-[#311171]'
               }`}>
-                {notification.type === 'success' ? (
+                {notification.type === 'delete' || notification.title.includes('ลบ') ? (
+                  <Trash2 className="w-5 h-5 stroke-[2.5]" />
+                ) : notification.type === 'success' ? (
                   <Check className="w-5 h-5 stroke-[2.5]" />
                 ) : notification.type === 'error' ? (
                   <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
                 ) : (
-                  <Sparkles className="w-5 h-5 stroke-[2.5]" />
+                  <Check className="w-5 h-5 stroke-[2.5]" />
                 )}
               </div>
               <div className="flex-1 min-w-0 pt-0.5">
@@ -1291,6 +1422,14 @@ function CalendarContent() {
                     </div>
                   </div>
 
+                  <div className="flex gap-3">
+                    <Users size={16} className="text-[#311171] shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 mb-0.5">จำนวนผู้โดยสาร</p>
+                      <p className="text-[13px] font-bold text-gray-900">{selectedEvent.passengers ? `${selectedEvent.passengers} คน` : "1 คน"}</p>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 gap-3">
                     <div className="flex gap-3">
                       <Calendar size={16} className="text-[#311171] shrink-0 mt-0.5" />
@@ -1364,6 +1503,12 @@ function CalendarContent() {
             </div>
 
             <form onSubmit={handleSaveCalendarEvent} className="p-6 text-xs space-y-4">
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-2 text-rose-700 text-xs font-bold animate-in fade-in slide-in-from-top-1">
+                  <AlertTriangle size={16} className="text-rose-500 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                 {/* ฝั่งซ้าย: ขอบเขต, ปลายทาง, วัตถุประสงค์, ประเภทรถ, คณะ, คนขับ */}
                 <div className="space-y-3">
@@ -1443,7 +1588,7 @@ function CalendarContent() {
                         onClick={() => setEventFormData({ ...eventFormData, vanType: 'BORROW', vanId: '' })}
                         className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                           eventFormData.vanType === 'BORROW'
-                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            ? 'bg-[#311171] text-white border-[#311171] shadow-xs'
                             : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
                         }`}
                       >
@@ -1569,25 +1714,62 @@ function CalendarContent() {
                   {/* ผู้ขอใช้บริการ & เบอร์โทรศัพท์ */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block font-bold text-gray-700 mb-1">ผู้ขอใช้บริการ</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block font-bold text-gray-700">ผู้ขอใช้บริการ <span className="text-red-500">*</span></label>
+                      </div>
                       <input 
                         type="text"
+                        required
                         value={eventFormData.requester}
-                        onChange={e => setEventFormData({ ...eventFormData, requester: e.target.value })}
+                        onChange={e => {
+                          setFormError(null);
+                          setEventFormData({ ...eventFormData, requester: e.target.value });
+                        }}
                         placeholder="ชื่อ-นามสกุล"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
+                        className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${
+                          !eventFormData.requester.trim() && formError
+                            ? 'border-red-500 bg-red-50/30'
+                            : 'border-gray-200 focus:border-[#311171]'
+                        }`}
                       />
+                      {!eventFormData.requester.trim() && formError && (
+                        <p className="text-[10px] text-red-500 mt-1 font-medium">⚠️ กรุณากรอกชื่อผู้ขอใช้บริการ</p>
+                      )}
                     </div>
                     <div>
-                      <label className="block font-bold text-gray-700 mb-1">เบอร์โทรศัพท์ (10 หลัก)</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block font-bold text-gray-700">เบอร์โทรศัพท์ (10 หลัก) <span className="text-red-500">*</span></label>
+                        <span className={`text-[10px] font-bold ${eventFormData.phone.length === 10 ? 'text-emerald-600' : eventFormData.phone.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                          {eventFormData.phone.length}/10
+                        </span>
+                      </div>
                       <input 
                         type="text"
                         maxLength={10}
+                        required
                         value={eventFormData.phone}
-                        onChange={e => setEventFormData({ ...eventFormData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                        onChange={e => {
+                          setFormError(null);
+                          setEventFormData({ ...eventFormData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) });
+                        }}
                         placeholder="เช่น 0812345678"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
+                        className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${
+                          eventFormData.phone && eventFormData.phone.length < 10
+                            ? 'border-red-500 bg-red-50/30 text-red-900'
+                            : eventFormData.phone.length === 10
+                              ? 'border-emerald-500 bg-emerald-50/20'
+                              : 'border-gray-200 focus:border-[#311171]'
+                        }`}
                       />
+                      {eventFormData.phone && eventFormData.phone.length < 10 ? (
+                        <p className="text-[10px] text-red-500 mt-1 font-medium">
+                          ⚠️ เบอร์ไม่ครบ 10 ตัว (ขาดอีก {10 - eventFormData.phone.length} ตัว)
+                        </p>
+                      ) : !eventFormData.phone && formError ? (
+                        <p className="text-[10px] text-red-500 mt-1 font-medium">⚠️ กรุณากรอกเบอร์โทรศัพท์</p>
+                      ) : eventFormData.phone.length === 10 ? (
+                        <p className="text-[10px] text-emerald-600 mt-1 font-medium">✓ เบอร์โทรศัพท์ครบ 10 ตัว</p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1614,22 +1796,17 @@ function CalendarContent() {
                       );
 
                       return (
-                        <div className="mt-2.5 p-3 rounded-2xl bg-gradient-to-br from-amber-50/90 via-orange-50/60 to-purple-50/40 border border-amber-200/90 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
-                          <div className="flex items-start gap-2 mb-2">
-                            <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                              <Sparkles size={12} className="text-white" />
+                        <div className="mt-2.5 p-3 rounded-2xl bg-gradient-to-br from-purple-50 via-purple-50/80 to-purple-100/50 border border-purple-200 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+                          <div className="mb-2">
+                            <div className="font-bold text-[#311171] text-xs flex items-center gap-1.5 flex-wrap">
+                              <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
+                              <span className="px-1.5 py-0.5 bg-purple-100 text-[#311171] border border-purple-200/60 rounded-md text-[10px] font-bold">
+                                ผู้โดยสารเกิน 10 คน
+                              </span>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5 flex-wrap">
-                                <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
-                                <span className="px-1.5 py-0.2 bg-amber-200/80 text-amber-900 rounded-md text-[10px] font-bold">
-                                  ผู้โดยสารเกิน 10 คน
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-amber-800/90 mt-0.5 leading-snug">
-                                ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
-                              </p>
-                            </div>
+                            <p className="text-[11px] text-purple-900/80 mt-0.5 leading-snug">
+                              ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
+                            </p>
                           </div>
 
                           {recommendedVans.length > 0 ? (
@@ -1647,10 +1824,10 @@ function CalendarContent() {
                                         vanType: 'BORROW'
                                       }));
                                     }}
-                                    className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-amber-400 ${
+                                    className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-purple-300 ${
                                       isSelected 
                                         ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/50' 
-                                        : 'border-amber-200/80'
+                                        : 'border-purple-100'
                                     }`}
                                   >
                                     <div>
@@ -1700,7 +1877,7 @@ function CalendarContent() {
                               })}
                             </div>
                           ) : (
-                            <div className="p-2.5 rounded-xl bg-white/90 border border-amber-200/80 text-[11px] text-amber-800 font-medium text-center">
+                            <div className="p-2.5 rounded-xl bg-white/90 border border-purple-200/80 text-[11px] text-purple-900 font-medium text-center">
                               ไม่พบรถตู้ของคณะอื่นที่ว่างตรงกับช่วงวันที่เลือก กรุณาติดต่อส่วนกลาง
                             </div>
                           )}

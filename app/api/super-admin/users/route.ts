@@ -75,6 +75,20 @@ export async function POST(request: Request) {
       facultyId = facultyRecord.id;
     }
 
+    // Rule: Each faculty can only have 1 FACULTY_ADMIN
+    if (role === 'FACULTY_ADMIN') {
+      const existingAdmin = await prisma.user.findFirst({
+        where: { facultyId, role: 'FACULTY_ADMIN' }
+      });
+      if (existingAdmin) {
+        // Demote existing admin to USER so faculty strictly has only 1 admin
+        await prisma.user.update({
+          where: { id: existingAdmin.id },
+          data: { role: 'USER' }
+        });
+      }
+    }
+
     const createdUser = await prisma.user.create({
       data: {
         name,
@@ -131,13 +145,34 @@ export async function PUT(request: Request) {
       facultyId = facultyRecord.id;
     }
 
+    const targetUserId = Number(id);
+    const existingUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    const targetName = name || existingUser?.name || 'ผู้ใช้งาน';
+    const targetEmail = email || existingUser?.email || '';
+    const targetRole = role || existingUser?.role || 'USER';
+    const targetFacultyId = facultyId || existingUser?.facultyId || 1;
+
+    // Rule: Each faculty can only have 1 FACULTY_ADMIN
+    if (targetRole === 'FACULTY_ADMIN') {
+      const existingAdmin = await prisma.user.findFirst({
+        where: { facultyId: targetFacultyId, role: 'FACULTY_ADMIN', id: { not: targetUserId } }
+      });
+      if (existingAdmin) {
+        // Demote previous admin to USER to guarantee strictly 1 FACULTY_ADMIN per faculty
+        await prisma.user.update({
+          where: { id: existingAdmin.id },
+          data: { role: 'USER' }
+        });
+      }
+    }
+
     const updatedUser = await prisma.user.update({
-      where: { id: Number(id) },
+      where: { id: targetUserId },
       data: {
-        name,
-        email,
-        role: role || 'USER',
-        facultyId
+        name: targetName,
+        email: targetEmail,
+        role: targetRole,
+        facultyId: targetFacultyId
       }
     });
 

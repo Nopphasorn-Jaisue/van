@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getDrivers, getFaculties } from "@/app/actions/superadmin";
+// Used REST API for stable real-time data loading
 import { 
   UserCheck, Users, Calendar,
   Search, Phone, Mail, ChevronLeft, ChevronRight, X, MapPin,
@@ -43,29 +43,57 @@ export default function SuperAdminDrivers() {
   const [facultiesList, setFacultiesList] = useState<{id: number, name: string}[]>([]);
 
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [driversData, facultiesData] = await Promise.all([
-          getDrivers(),
-          getFaculties()
-        ]);
-        setDrivers(driversData.map(d => ({
-          ...d,
-          type: d.type as "MAIN" | "SUB",
-          status: d.status as "READY" | "SUBBING" | "SICK",
-          recentTrips: d.recentTrips,
-          availabilities: d.availabilities
-        })));
-        
-        // Remove duplicates if the database was seeded multiple times
-        const uniqueFaculties = facultiesData.filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
-        setFacultiesList(uniqueFaculties);
-      } catch (error) {
-        console.error("Failed to load drivers", error);
-        showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลพนักงานขับรถ");
+  const loadData = async () => {
+    try {
+      const [resDrivers, resFacs] = await Promise.all([
+        fetch('/api/drivers'),
+        fetch('/api/super-admin/faculties')
+      ]);
+
+      if (resDrivers.ok) {
+        const driversJson = await resDrivers.json();
+        const rawDrivers = Array.isArray(driversJson) ? driversJson : (driversJson.drivers || []);
+        const formatted: DriverItem[] = rawDrivers.map((d: any) => ({
+          id: d.id,
+          avatar: d.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
+          name: d.name || d.user?.name || 'ไม่ระบุชื่อ',
+          employeeId: d.employeeId || `DRV-${String(d.id).padStart(3, '0')}`,
+          faculty: d.faculty?.nameTh || d.faculty || 'ส่วนกลาง',
+          type: (d.type === 'PRIMARY' || d.type === 'MAIN') ? 'MAIN' : 'SUB',
+          assignedVan: d.assignedVan || (d.assignedVanInfo?.plate || 'ไม่มีรถประจำ'),
+          vanModel: d.vanModel || 'Toyota Commuter',
+          phone: d.phone || '-',
+          email: d.email || d.user?.email || '-',
+          status: d.isActive === false ? 'SICK' : (d.status || 'READY'),
+          recentTrips: d.recentTrips || [],
+          availabilities: d.availabilities || []
+        }));
+        setDrivers(formatted);
+        try { sessionStorage.setItem('cached_superadmin_drivers', JSON.stringify(formatted)); } catch {}
       }
+
+      if (resFacs.ok) {
+        const facsJson = await resFacs.json();
+        if (facsJson.success && Array.isArray(facsJson.data)) {
+          const uniqueFaculties = facsJson.data.filter((v: any, i: number, a: any[]) => a.findIndex(t => t.name === v.name) === i);
+          const facList = uniqueFaculties.map((f: any) => ({ id: f.id, name: f.name }));
+          setFacultiesList(facList);
+          try { sessionStorage.setItem('cached_superadmin_faculties_list', JSON.stringify(facList)); } catch {}
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load drivers", error);
+      showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลพนักงานขับรถ");
     }
+  };
+
+  useEffect(() => {
+    try {
+      const cachedDrivers = sessionStorage.getItem('cached_superadmin_drivers');
+      if (cachedDrivers) setDrivers(JSON.parse(cachedDrivers));
+      const cachedFacs = sessionStorage.getItem('cached_superadmin_faculties_list');
+      if (cachedFacs) setFacultiesList(JSON.parse(cachedFacs));
+    } catch {}
     loadData();
   }, []);
 

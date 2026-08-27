@@ -4,7 +4,7 @@ import AppShell from '@/components/AppShell';
 import { 
   MapPin, Users, FileText, Send, 
   Paperclip, UploadCloud, X,
-  CheckCircle, ChevronLeft, ChevronRight, Check, Sparkles,
+  CheckCircle, ChevronLeft, ChevronRight, Check,
   AlertTriangle, Plus
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -66,13 +66,29 @@ function BookingFormContent() {
 
   const [attachments, setAttachments] = useState<File[]>([]);
 
-  // จำลองข้อมูลผู้จอง
-  const userProfile = {
-    name: "ดร.สมเกียรติ เรียนดี",
-    position: "อาจารย์ประจำหลักสูตร",
+  // ดึงข้อมูลผู้ใช้งานจริงจากระบบ
+  const [userProfile, setUserProfile] = useState({
+    name: "กำลังโหลดข้อมูล...",
+    position: "อาจารย์ / บุคลากร",
     faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-    email: "somkiat.re@up.ac.th"
-  };
+    email: ""
+  });
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data && (data.name || data.fullName)) {
+          setUserProfile({
+            name: data.name || data.fullName || "ผู้ขอใช้บริการ",
+            position: data.role === 'FACULTY_ADMIN' ? "ผู้ดูแลระบบคณะ" : data.role === 'EXECUTIVE' ? "ผู้บริหาร" : "อาจารย์ / บุคลากร",
+            faculty: data.faculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+            email: data.email || ""
+          });
+        }
+      })
+      .catch(err => console.error("Error fetching user profile:", err));
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -86,8 +102,40 @@ function BookingFormContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     
+    if (!form.destination.trim()) {
+      alert("กรุณาระบุสถานที่ปลายทาง");
+      return;
+    }
+
+    if (!form.purpose.trim()) {
+      alert("กรุณาระบุวัตถุประสงค์การเดินทาง");
+      return;
+    }
+
+    const rawPhone = (form.phone || '').trim();
+    if (!rawPhone) {
+      alert("กรุณากรอกเบอร์โทรศัพท์สำหรับติดต่อ");
+      return;
+    }
+
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      alert(`เบอร์ไม่ครบ 10 ตัว (ปัจจุบันมี ${cleanPhone.length} ตัว กรุณากรอกให้ครบ 10 หลัก)`);
+      return;
+    }
+
+    if (cleanPhone.length > 10) {
+      alert("เบอร์โทรศัพท์เกิน 10 ตัว กรุณาตรวจสอบอีกครั้ง");
+      return;
+    }
+
+    if (!cleanPhone.startsWith('0')) {
+      alert("เบอร์โทรศัพท์ต้องขึ้นต้นด้วยเลข 0");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const res = await fetch('/api/bookings', {
         method: 'POST',
@@ -231,7 +279,7 @@ function BookingFormContent() {
                   onClick={() => setForm({ ...form, vanId: "borrow" })}
                   className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                     form.vanId === "borrow" || (form.vanId && form.vanId !== "v-ict")
-                      ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                      ? "bg-[#311171] text-white border-[#311171] shadow-xs"
                       : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
                   }`}
                 >
@@ -253,7 +301,7 @@ function BookingFormContent() {
                   <select 
                     value={form.targetFaculties.length > 0 ? form.targetFaculties[0] : ""}
                     onChange={e => setForm({...form, targetFaculties: [e.target.value], vanId: "borrow"})}
-                    className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500 outline-none text-xs font-bold text-gray-800"
+                    className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171] outline-none text-xs font-bold text-gray-800"
                   >
                     <option value="">-- เลือกคณะและรถตู้ที่ต้องการยืม --</option>
                     {availableVans.map(van => (
@@ -418,23 +466,18 @@ function BookingFormContent() {
                 }).slice(0, 2);
 
                 return (
-                  <div className="mt-3 p-3.5 rounded-2xl bg-gradient-to-br from-amber-50/95 via-orange-50/60 to-purple-50/40 border border-amber-200/90 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div className="flex items-start gap-2 mb-2">
-                      <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                        <Sparkles size={12} className="text-white" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5 flex-wrap">
-                          <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
-                          <span className="px-1.5 py-0.2 bg-amber-200/80 text-amber-900 rounded-md text-[10px] font-bold">
-                            ผู้โดยสารเกิน 10 คน
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-amber-800/90 mt-0.5 leading-snug">
-                          ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
-                        </p>
-                      </div>
-                    </div>
+                  <div className="mt-3 p-3.5 rounded-2xl bg-gradient-to-br from-purple-50 via-purple-50/80 to-purple-100/50 border border-purple-200 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="mb-2">
+                            <div className="font-bold text-[#311171] text-xs flex items-center gap-1.5 flex-wrap">
+                              <span>แนะนำรถตู้ของคณะที่ว่างตรงกับวันที่จอง</span>
+                              <span className="px-1.5 py-0.5 bg-purple-100 text-[#311171] border border-purple-200/60 rounded-md text-[10px] font-bold">
+                                ผู้โดยสารเกิน 10 คน
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-purple-900/80 mt-0.5 leading-snug">
+                              ความจุมาตรฐานรถตู้ 1 คัน (10-12 ที่นั่ง) แนะนำให้ยืมรถตู้จากคณะที่ว่างเพิ่มเติม ({recommendedVans.length} คณะ):
+                            </p>
+                          </div>
 
                     {recommendedVans.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
@@ -450,10 +493,10 @@ function BookingFormContent() {
                                   : [...prev.targetFaculties, facultyName];
                                 return { ...prev, targetFaculties: newTargetFaculties, vanId: "borrow" };
                               })}
-                              className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-amber-400 ${
+                              className={`p-2.5 rounded-xl border bg-white transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-purple-300 ${
                                 isSelected 
                                   ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/50' 
-                                  : 'border-amber-200/80'
+                                  : 'border-purple-100'
                               }`}
                             >
                               <div>
@@ -504,7 +547,7 @@ function BookingFormContent() {
                         })}
                       </div>
                     ) : (
-                      <div className="p-2.5 rounded-xl bg-white/90 border border-amber-200/80 text-[11px] text-amber-800 font-medium text-center">
+                      <div className="p-2.5 rounded-xl bg-white/90 border border-purple-200/80 text-[11px] text-purple-900 font-medium text-center">
                         ไม่พบรถตู้ของคณะอื่นที่ว่างตรงกับช่วงวันที่เลือก กรุณาติดต่อส่วนกลาง
                       </div>
                     )}
@@ -538,15 +581,34 @@ function BookingFormContent() {
             />
           </div>
           <div className="mt-4">
-            <label className="block text-xs font-bold text-gray-700 mb-1">เบอร์โทรศัพท์สำหรับติดต่อ <span className="text-red-500">*</span></label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-bold text-gray-700">เบอร์โทรศัพท์สำหรับติดต่อ <span className="text-red-500">*</span></label>
+              <span className={`text-xs font-bold ${form.phone.replace(/\D/g, '').length === 10 ? 'text-emerald-600' : form.phone ? 'text-amber-600' : 'text-gray-400'}`}>
+                {form.phone.replace(/\D/g, '').length}/10
+              </span>
+            </div>
             <input 
               type="tel"
+              maxLength={10}
               required
               value={form.phone}
-              onChange={e => setForm({...form, phone: e.target.value})}
-              placeholder="08X-XXX-XXXX" 
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171] outline-none transition-all text-sm font-medium"
+              onChange={e => setForm({...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+              placeholder="เช่น 0812345678" 
+              className={`w-full px-3 py-2 rounded-xl border transition-all text-sm font-medium outline-none ${
+                form.phone && form.phone.replace(/\D/g, '').length < 10
+                  ? 'border-red-500 bg-red-50/30 text-red-900 focus:ring-4 focus:ring-red-500/10'
+                  : form.phone.replace(/\D/g, '').length === 10
+                    ? 'border-emerald-500 bg-emerald-50/20 focus:ring-4 focus:ring-emerald-500/10'
+                    : 'border-gray-200 bg-gray-50/50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#311171]/10 focus:border-[#311171]'
+              }`}
             />
+            {form.phone && form.phone.replace(/\D/g, '').length < 10 ? (
+              <p className="text-xs text-red-500 mt-1 font-medium">
+                ⚠️ เบอร์ไม่ครบ 10 ตัว (ขาดอีก {10 - form.phone.replace(/\D/g, '').length} ตัว)
+              </p>
+            ) : form.phone.replace(/\D/g, '').length === 10 ? (
+              <p className="text-xs text-emerald-600 mt-1 font-medium">✓ เบอร์โทรศัพท์ครบ 10 ตัว</p>
+            ) : null}
           </div>
         </div>
 

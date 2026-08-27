@@ -14,34 +14,68 @@ import { Role } from '@prisma/client';
 
 import { getAuthUser, clearSession } from '@/app/actions/auth';
 
+const getInitialRole = (path: string) => {
+  if (!path) return 'FACULTY_ADMIN';
+  if (path.startsWith('/faculty-admin')) return 'FACULTY_ADMIN';
+  if (path.startsWith('/executive')) return 'EXECUTIVE';
+  if (path.startsWith('/driver')) return 'DRIVER';
+  if (path.startsWith('/super-admin')) return 'SUPER_ADMIN';
+  return 'USER';
+};
+
+const getInitialFaculty = (path: string) => {
+  if (!path) return 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+  if (path.startsWith('/super-admin')) return 'ศูนย์จัดการระบบส่วนกลาง';
+  if (path.startsWith('/executive')) return 'สำนักงานคณบดี';
+  if (path.startsWith('/driver')) return 'ทีมพนักงานขับรถประจำคณะ';
+  return 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+};
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState<string>('');
-  const [displayName, setDisplayName] = useState('ผู้ใช้งานระบบ');
-  const [facultyName, setFacultyName] = useState<string>('');
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>(() => getInitialRole(pathname));
+  const [displayName, setDisplayName] = useState<string>('ผู้ใช้งานระบบ');
+  const [facultyName, setFacultyName] = useState<string>(() => getInitialFaculty(pathname));
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   useEffect(() => {
+    // Hydrate from cached auth safely after mount
+    try {
+      const cached = sessionStorage.getItem('cached_auth_user');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.role) setUserRole(parsed.role);
+        if (parsed.name) setDisplayName(parsed.name);
+        if (parsed.facultyName) setFacultyName(parsed.facultyName);
+      }
+    } catch {}
+
+    const pathRole = getInitialRole(pathname);
+    setUserRole(prev => (prev && prev === pathRole ? prev : pathRole));
+
     const fetchUser = async () => {
       try {
         const user = await getAuthUser();
         if (user) {
           setUserRole(user.role);
           setDisplayName(user.name || 'ผู้ใช้งานระบบ');
-          if (user.faculty?.nameTh) {
-            setFacultyName(user.faculty.nameTh);
-          } else {
-            setFacultyName(
-              user.role === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
-              user.role === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
-              user.role === 'DRIVER' ? 'ทีมพนักงานขับรถประจำคณะ' :
-              'ไม่ระบุคณะ'
-            );
-          }
-        } else {
-          // If no user is returned, they shouldn't be here (middleware will catch them, but just in case)
-          setUserRole('');
+          const fName = user.faculty?.nameTh || (
+            user.role === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
+            user.role === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
+            user.role === 'DRIVER' ? 'ทีมพนักงานขับรถประจำคณะ' :
+            'คณะเทคโนโลยีสารสนเทศและการสื่อสาร'
+          );
+          setFacultyName(fName);
+          try {
+            sessionStorage.setItem('cached_auth_user', JSON.stringify({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              facultyName: fName
+            }));
+          } catch {}
         }
       } catch (err) {
         console.error(err);
@@ -50,7 +84,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
     };
     fetchUser();
-  }, [pathname]);
+  }, []);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showDutiesModal, setShowDutiesModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -431,8 +465,8 @@ function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { us
             </>
           ) : (
             <>
-              <h1 className="font-black text-lg tracking-tight leading-tight">{userFaculty}</h1>
-              <p className="text-xs text-purple-200">{getRoleDisplayName(userRole)}</p>
+              <h1 className="font-black text-lg tracking-tight leading-tight" suppressHydrationWarning>{userFaculty}</h1>
+              <p className="text-xs text-purple-200" suppressHydrationWarning>{getRoleDisplayName(userRole)}</p>
             </>
           )}
           <div className="mt-2 flex items-center gap-1.5">

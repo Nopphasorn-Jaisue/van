@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getFaculties, deleteFaculty } from "@/app/actions/superadmin";
+// Used REST API for stable real-time data loading
 import { 
   Building2, Users, Bus, UserCheck, Plus, MoreVertical, X,
   Phone, Mail, MapPin, Edit, UserCog, History, ChevronLeft, ChevronRight,
@@ -41,37 +41,44 @@ export default function SuperAdminFaculties() {
   const [historyFaculty, setHistoryFaculty] = useState<FacultyItem | null>(null);
   const [deleteConfirmFaculty, setDeleteConfirmFaculty] = useState<FacultyItem | null>(null);
 
+  const [allUsersList, setAllUsersList] = useState<any[]>([]);
   const [faculties, setFaculties] = useState<FacultyItem[]>([]);
 
+  const loadData = async () => {
+    try {
+      const res = await fetch('/api/super-admin/faculties');
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success && Array.isArray(result.data)) {
+          setFaculties(result.data);
+          try { sessionStorage.setItem('cached_superadmin_faculties_v3', JSON.stringify(result.data)); } catch {}
+          return;
+        }
+      }
+      showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลคณะ");
+    } catch (error) {
+      console.error("Failed to load faculties", error);
+      showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลคณะ");
+    }
+  };
+
+  const fetchUsersList = async () => {
+    try {
+      const res = await fetch('/api/super-admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.users) setAllUsersList(data.users);
+      }
+    } catch (e) {}
+  };
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await getFaculties();
-        // map data to the expected type
-        setFaculties(data.map(d => ({
-          ...d,
-          code: d.name.substring(0, 3).toUpperCase(), // mock code if not present
-          adminTitle: "ผู้ดูแลระบบคณะ",
-          adminEmail: "-",
-          executiveName: "-",
-          executiveTitle: "-",
-          executivePhone: "-",
-          executiveEmail: "-",
-          mainDrivers: d.driversCount,
-          subDrivers: 0,
-          totalVans: d.vansCount,
-          phone: "-",
-          email: "-",
-          address: "-",
-          status: "ACTIVE"
-        })));
-      } catch (error) {
-        console.error("Failed to load faculties", error);
-        showToast("เกิดข้อผิดพลาดในการโหลดข้อมูลคณะ");
-      }
-    }
+    try {
+      const cached = sessionStorage.getItem('cached_superadmin_faculties_v3');
+      if (cached) setFaculties(JSON.parse(cached));
+    } catch {}
     loadData();
+    fetchUsersList();
   }, []);
 
   const selectedFaculty = selectedFacultyId ? faculties.find(f => f.id === selectedFacultyId) : null;
@@ -83,13 +90,16 @@ export default function SuperAdminFaculties() {
 
   const handleDeleteFaculty = async (faculty: FacultyItem) => {
     try {
-      const result = await deleteFaculty(faculty.id);
-      if (result.success) {
-        showToast(result.message);
-        setFaculties(faculties.filter(f => f.id !== faculty.id));
+      const res = await fetch(`/api/super-admin/faculties?id=${faculty.id}`, {
+        method: 'DELETE'
+      });
+      const result = await res.json().catch(() => ({ success: false, error: 'เกิดข้อผิดพลาดในการลบคณะ' }));
+      if (res.ok && result.success) {
+        showToast(result.message || "ลบคณะเรียบร้อยแล้ว");
+        setFaculties(prev => prev.filter(f => f.id !== faculty.id));
         if (selectedFacultyId === faculty.id) setSelectedFacultyId(null);
       } else {
-        showToast(result.message);
+        showToast(result.error || result.message || "ไม่สามารถลบคณะได้");
       }
     } catch (error) {
       console.error("Failed to delete faculty", error);
@@ -224,8 +234,7 @@ export default function SuperAdminFaculties() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/80 text-[11px] font-bold text-gray-500">
-                    <th className="py-3 px-3 text-center">#</th>
-                    <th className="py-3 px-4">คณะ</th>
+                    <th className="py-3 px-5">คณะ</th>
                     <th className="py-3 px-3">ชื่อย่อ</th>
                     <th className="py-3 px-3">ผู้ดูแลคณะ</th>
                     <th className="py-3 px-3 text-center">รถประจำคณะ</th>
@@ -248,14 +257,7 @@ export default function SuperAdminFaculties() {
                             : "hover:bg-gray-50/80"
                         }`}
                       >
-                        <td className="py-3 px-3 text-center">
-                          <span className={`w-6 h-6 inline-flex items-center justify-center rounded-lg text-xs font-bold ${
-                            isSelected ? "bg-[#311171] text-white" : "bg-gray-100 text-gray-600"
-                          }`}>
-                            {f.id}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-bold text-gray-900 whitespace-nowrap">{f.name}</td>
+                        <td className="py-3 px-5 font-bold text-gray-900 whitespace-nowrap">{f.name}</td>
                         <td className="py-3 px-3 font-mono font-bold text-purple-700">{f.code}</td>
                         <td className="py-3 px-3 text-gray-700 whitespace-nowrap">{f.adminName}</td>
                         <td className="py-3 px-3 text-center font-bold text-gray-900">{f.totalVans} คัน</td>

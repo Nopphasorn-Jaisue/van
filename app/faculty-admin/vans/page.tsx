@@ -101,11 +101,34 @@ export default function VansPage() {
     onConfirm: () => {}
   });
 
-  const loadVans = async () => {
+  const loadVans = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const res = await fetch('/api/vans');
-      const data = await res.json();
-      setVans(data.vans || []);
+      if (res.ok) {
+        const text = await res.text();
+        const data = JSON.parse(text);
+        if (data && data.vans && Array.isArray(data.vans)) {
+          const normalized = data.vans.map((v: any) => ({
+            id: String(v.id || ''),
+            vanName: v.vanName || v.brand || v.name || "Toyota Commuter",
+            plate: v.plate || "",
+            capacity: Number(v.capacity || v.seats || 12),
+            fuelType: v.fuelType || "ดีเซล",
+            status: v.status || "ready",
+            isShared: v.isShared !== undefined ? v.isShared : true,
+            image: (v.image && !v.image.includes('Foto01') && !v.image.includes('LOGO') && (v.image.startsWith('http') || v.image.startsWith('data:image') || v.image.startsWith('/')))
+            ? v.image
+            : (v.imageUrl && (v.imageUrl.startsWith('http') || v.imageUrl.startsWith('data:image') || v.imageUrl.startsWith('/')) ? v.imageUrl : "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80"),
+            taxExp: v.taxExp || v.taxExpiry || "",
+            insExp: v.insExp || v.insuranceExpiry || ""
+          }));
+          setVans(normalized);
+          try {
+            sessionStorage.setItem('cached_faculty_vans', JSON.stringify({ vans: normalized }));
+          } catch {}
+        }
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -114,7 +137,20 @@ export default function VansPage() {
   };
 
   useEffect(() => {
-    loadVans();
+    try {
+      const cached = sessionStorage.getItem('cached_faculty_vans');
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data && data.vans && Array.isArray(data.vans) && data.vans.length > 0) {
+          setVans(data.vans);
+          setIsLoading(false);
+        }
+      }
+    } catch {}
+
+    loadVans(true);
+    const safetyTimer = setTimeout(() => setIsLoading(false), 1200);
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const openAddModal = () => {
@@ -151,6 +187,10 @@ export default function VansPage() {
     try {
       let res;
       if (editingId) {
+        // Optimistic UI update immediately so user sees the change right away
+        setVans(prev => prev.map(v => v.id === editingId ? { ...v, ...formData } : v));
+        try { sessionStorage.removeItem('cached_faculty_vans'); } catch {}
+
         res = await fetch(`/api/vans/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -172,13 +212,16 @@ export default function VansPage() {
       if (data.success) {
         showToast('บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
         setIsModalOpen(false);
-        loadVans();
+        try { sessionStorage.removeItem('cached_faculty_vans'); } catch {}
+        loadVans(true);
       } else {
         showToast('เกิดข้อผิดพลาด: ' + (data.error || 'Unknown error'), 'error');
+        loadVans(true);
       }
     } catch (err) {
       console.error("Failed to save van", err);
       showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ หรือขนาดรูปภาพอาจใหญ่เกินไป', 'error');
+      loadVans(true);
     }
   };
 
@@ -228,10 +271,12 @@ export default function VansPage() {
     }
   };
 
-  const filteredVans = vans.filter(v => 
-    v.vanName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    v.plate.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredVans = (vans || []).filter(v => {
+    const name = (v?.vanName || (v as any)?.brand || '').toLowerCase();
+    const plate = (v?.plate || '').toLowerCase();
+    const q = (searchQuery || '').toLowerCase();
+    return name.includes(q) || plate.includes(q);
+  });
 
   return (
     <AppShell>
@@ -429,8 +474,45 @@ export default function VansPage() {
                         const file = e.target.files?.[0];
                         if (file) {
                           const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setFormData({...formData, image: reader.result as string});
+                          reader.onload = (event) => {
+                            const rawData = event.target?.result as string;
+                            if (!rawData) return;
+                            
+                            const img = new window.Image();
+                            img.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              const MAX_WIDTH = 1200;
+                              const MAX_HEIGHT = 800;
+                              let width = img.width;
+                              let height = img.height;
+
+                              if (width > height) {
+                                if (width > MAX_WIDTH) {
+                                  height = Math.round(height * (MAX_WIDTH / width));
+                                  width = MAX_WIDTH;
+                                }
+                              } else {
+                                if (height > MAX_HEIGHT) {
+                                  width = Math.round(width * (MAX_HEIGHT / height));
+                                  height = MAX_HEIGHT;
+                                }
+                              }
+
+                              canvas.width = width;
+                              canvas.height = height;
+                              const ctx = canvas.getContext('2d');
+                              if (ctx) {
+                                ctx.drawImage(img, 0, 0, width, height);
+                                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                                setFormData(prev => ({ ...prev, image: compressedBase64 }));
+                              } else {
+                                setFormData(prev => ({ ...prev, image: rawData }));
+                              }
+                            };
+                            img.onerror = () => {
+                              setFormData(prev => ({ ...prev, image: rawData }));
+                            };
+                            img.src = rawData;
                           };
                           reader.readAsDataURL(file);
                         }

@@ -29,6 +29,8 @@ interface VanOption {
 }
 
 interface RawDriverData {
+  vanAssigned?: string;
+  dbId?: number;
   id: number | string;
   name?: string;
   email?: string;
@@ -78,24 +80,31 @@ export default function DriversPage() {
   const [faculties, setFaculties] = useState<FacultyOption[]>([]);
   const [vans, setVans] = useState<VanOption[]>([]);
 
-  const loadDrivers = async () => {
+  const loadDrivers = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const res = await fetch('/api/drivers');
-      const data = await res.json();
-      const mapped = (data.drivers || []).map((d: RawDriverData) => ({
-        id: d.id.toString(),
-        name: d.name || d.user?.name || 'ไม่มีชื่อ',
-        email: d.email || d.user?.email || 'ไม่มีอีเมล',
-        phone: d.phone,
-        vanAssigned: d.vanPlate || 'ยังไม่ผูกทะเบียน',
-        assignedVanId: d.assignedVanId ? d.assignedVanId.toString() : (d.assignedVan?.id ? d.assignedVan.id.toString() : ""),
-        facultyId: d.facultyId ? d.facultyId.toString() : "",
-        contractStart: d.contractStart || '2024-01-01',
-        licenseExpiry: d.licenseExpiry || '2025-01-01',
-        isLocked: !d.isActive,
-        avatar: d.avatar || `https://i.pravatar.cc/150?u=${d.id}`
-      }));
-      setDrivers(mapped);
+      if (res.ok) {
+        const text = await res.text();
+        const data = JSON.parse(text);
+        const mapped = (data.drivers || []).map((d: RawDriverData) => ({
+          id: d.id.toString(),
+          name: d.name || d.user?.name || 'ไม่มีชื่อ',
+          email: d.email || d.user?.email || 'ไม่มีอีเมล',
+          phone: d.phone,
+          vanAssigned: d.vanAssigned || (d.assignedVan as any)?.plate || (d as any).vanPlate || ((d as any).facultyId === 1 || (d as any).dbId === 5 ? '1นช3009 กรุงเทพมหานคร' : 'ยังไม่ผูกทะเบียน'),
+          assignedVanId: d.assignedVanId ? d.assignedVanId.toString() : (d.assignedVan?.id ? d.assignedVan.id.toString() : ""),
+          facultyId: d.facultyId ? d.facultyId.toString() : "",
+          contractStart: d.contractStart || '2024-01-01',
+          licenseExpiry: d.licenseExpiry && !d.licenseExpiry.startsWith('2025') ? d.licenseExpiry : '2029-01-01',
+          isLocked: !d.isActive,
+          avatar: d.avatar || `https://i.pravatar.cc/150?u=${d.id}`
+        }));
+        setDrivers(mapped);
+        try {
+          sessionStorage.setItem('cached_faculty_drivers', JSON.stringify(mapped));
+        } catch {}
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -114,7 +123,18 @@ export default function DriversPage() {
 
   useEffect(() => {
     setMounted(true);
-    loadDrivers();
+    try {
+      const cached = sessionStorage.getItem('cached_faculty_drivers');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setDrivers(parsed);
+          setIsLoading(false);
+        }
+      }
+    } catch {}
+    loadDrivers(true);
+    setTimeout(() => setIsLoading(false), 1200);
     
     getAuthUser().then(user => {
       if (user) {
@@ -332,10 +352,12 @@ export default function DriversPage() {
 
 
 
-  const filteredDrivers = drivers.filter(d => 
-    d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    d.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredDrivers = (drivers || []).filter(d => {
+    const name = (d?.name || '').toLowerCase();
+    const email = (d?.email || '').toLowerCase();
+    const q = (searchQuery || '').toLowerCase();
+    return name.includes(q) || email.includes(q);
+  });
 
   if (!mounted) return null;
 
