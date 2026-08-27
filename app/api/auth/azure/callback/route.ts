@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     } else if (dbUser.role === "FACULTY_ADMIN") {
       return NextResponse.redirect(`${origin}/faculty-admin/dashboard`);
     } else if (dbUser.role === "DRIVER") {
-      return NextResponse.redirect(`${origin}/driver/trips`);
+      return NextResponse.redirect(`${origin}/driver/dashboard`);
     } else {
       return NextResponse.redirect(`${origin}/user/calendar`);
     }
