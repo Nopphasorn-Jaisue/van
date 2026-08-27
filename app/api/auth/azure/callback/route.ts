@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     if (!tokenResponse.ok || !tokenData.access_token) {
       console.error("Token exchange failed:", tokenData);
-      return NextResponse.redirect(`${origin}/login?error=Token+exchange+failed`);
+      return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(tokenData.error_description || tokenData.error || "Token exchange failed")}`);
     }
 
     // 2. Fetch user profile from Microsoft Graph
