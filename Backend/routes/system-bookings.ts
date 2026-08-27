@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SystemBookingStatus } from "@/lib/booking-system-types";
@@ -5,7 +6,7 @@ import { getAuthUser } from "@/app/actions/auth";
 import { invalidateDbBookingsCache, pushBookingToGoogleCalendar } from "@/Backend/routes/system-calendar";
 import { BookingStatus } from "@prisma/client";
 
-let cachedBookings: { [key: string]: { data: any[]; timestamp: number } } = {};
+let cachedBookings: { [key: string]: { data: unknown[]; timestamp: number } } = {};
 
 export function invalidateBookingsCache() {
   cachedBookings = {};
@@ -91,12 +92,12 @@ export async function handleListBookings(request: Request) {
 
     cachedBookings[cacheKey] = { data: mapped, timestamp: Date.now() };
     return NextResponse.json({ bookings: mapped });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching live bookings with single SQL:", error);
     if (existing) {
       return NextResponse.json({ bookings: existing.data });
     }
-    return NextResponse.json({ bookings: [], error: error.message }, { status: 500 });
+    return NextResponse.json({ bookings: [], error: (error as Error)?.message || String(error) }, { status: 500 });
   }
 }
 
@@ -134,9 +135,9 @@ export async function handleCreateSystemBooking(request: Request) {
     invalidateDbBookingsCache();
 
     return NextResponse.json({ success: true, booking: created });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error creating booking:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: (error as Error)?.message || String(error) }, { status: 500 });
   }
 }
 
@@ -154,15 +155,15 @@ export async function handleGetBookingDetail(request: Request, id: string) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
     return NextResponse.json({ booking });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
 export async function handleUpdateSystemBooking(request: Request, id: string) {
   try {
     const body = await request.json();
-    const updateData: any = {
+    const updateData: Prisma.BookingUpdateInput = {
       destination: body.destination,
       objective: body.purpose || body.objective || body.reason,
       passengersCount: body.passengers ? Number(body.passengers) : (body.passengersCount ? Number(body.passengersCount) : undefined),
@@ -184,8 +185,8 @@ export async function handleUpdateSystemBooking(request: Request, id: string) {
     invalidateBookingsCache();
     invalidateDbBookingsCache();
     return NextResponse.json({ success: true, booking: updated });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
@@ -197,9 +198,9 @@ export async function handleDeleteSystemBooking(request: Request, id: string) {
     invalidateBookingsCache();
     invalidateDbBookingsCache();
     return NextResponse.json({ success: true, message: `ลบคำขอ ${id} เรียบร้อยแล้ว` });
-  } catch (err: any) {
+  } catch (err) {
     console.error("Failed to delete booking:", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
@@ -207,7 +208,7 @@ export async function handleBookingStatusUpdate(request: Request, id: string) {
   try {
     const body = await request.json();
     const { status, rejectReason } = body;
-    const updateData: any = { status: status as BookingStatus };
+    const updateData: Prisma.BookingUpdateInput = { status: status as BookingStatus };
     if (rejectReason) updateData.rejectReason = rejectReason;
 
     const updated = await prisma.booking.update({
@@ -241,8 +242,8 @@ export async function handleBookingStatusUpdate(request: Request, id: string) {
     invalidateBookingsCache();
     invalidateDbBookingsCache();
     return NextResponse.json({ success: true, booking: updated });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
@@ -259,7 +260,7 @@ export async function handleAssignDriverToBooking(request: Request, id: string) 
     invalidateBookingsCache();
     invalidateDbBookingsCache();
     return NextResponse.json({ success: true, booking: updated });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }

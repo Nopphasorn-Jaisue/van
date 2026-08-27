@@ -28,7 +28,7 @@ export async function handleGetCurrentUser() {
       faculty: user.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
       facultyName: user.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
     });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json({
       authenticated: false,
       role: "USER",

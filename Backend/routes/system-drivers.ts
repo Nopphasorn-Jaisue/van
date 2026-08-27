@@ -1,9 +1,10 @@
+import type { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/actions/auth";
 
 
-let cachedDrivers: { [key: string]: { data: any[]; timestamp: number } } = {};
+let cachedDrivers: { [key: string]: { data: unknown[]; timestamp: number } } = {};
 
 export function invalidateDriversCache() {
   cachedDrivers = {};
@@ -21,7 +22,7 @@ export async function handleListDrivers(request?: Request) {
   }
 
   try {
-    const where: any = {};
+    const where: Prisma.DriverWhereInput = {};
     if (user?.role === "FACULTY_ADMIN" || user?.role === "EXECUTIVE") {
       if (facultyId) where.facultyId = facultyId;
       else if (facultyName) where.faculty = { nameTh: facultyName };
@@ -55,12 +56,12 @@ export async function handleListDrivers(request?: Request) {
 
     cachedDrivers[cacheKey] = { data: mapped, timestamp: Date.now() };
     return NextResponse.json({ drivers: mapped });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching live drivers from database:", error);
     if (existing) {
       return NextResponse.json({ drivers: existing.data });
     }
-    return NextResponse.json({ drivers: [], error: error.message }, { status: 500 });
+    return NextResponse.json({ drivers: [], error: (error as Error)?.message || String(error) }, { status: 500 });
   }
 }
 
@@ -96,8 +97,8 @@ export async function handleCreateDriver(request: Request) {
 
     invalidateDriversCache();
     return NextResponse.json({ success: true, driver: createdDriver });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to create driver" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error)?.message || String(error) || "Failed to create driver" }, { status: 500 });
   }
 }
 
@@ -119,8 +120,8 @@ export async function handleGetDriverDashboard(request: Request, id: string) {
         upcomingMissions: [],
       }
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
@@ -128,8 +129,8 @@ export async function handleCreateDriverLog(request: Request, id: string) {
   try {
     const body = await request.json().catch(() => ({}));
     return NextResponse.json({ success: true, log: { id: Date.now(), driverId: id, ...body } });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
@@ -150,8 +151,8 @@ export async function handleUpdateDriver(request: Request, id: string) {
     }
     invalidateDriversCache();
     return NextResponse.json({ success: true, driver: { id, ...body } });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
@@ -163,7 +164,7 @@ export async function handleDeleteDriver(request: Request, id: string) {
     }
     invalidateDriversCache();
     return NextResponse.json({ success: true, id });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }

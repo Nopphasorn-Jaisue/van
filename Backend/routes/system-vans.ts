@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 
 export function formatVanImage(img?: string | null): string {
   if (!img || typeof img !== 'string') {
@@ -27,7 +28,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/app/actions/auth";
 
 
-let cachedVans: { [key: string]: { data: any[]; timestamp: number } } = {};
+let cachedVans: { [key: string]: { data: unknown[]; timestamp: number } } = {};
 
 export function invalidateVansCache() {
   cachedVans = {};
@@ -46,7 +47,7 @@ export async function handleListVans(request?: Request) {
   }
 
   try {
-    const where: any = {};
+    const where: Prisma.VanWhereInput = {};
     if (user?.role === "FACULTY_ADMIN" || user?.role === "EXECUTIVE") {
       if (facultyId) where.facultyId = facultyId;
       else if (facultyName) where.faculty = { nameTh: facultyName };
@@ -84,12 +85,12 @@ export async function handleListVans(request?: Request) {
 
     cachedVans[cacheKey] = { data: mapped, timestamp: Date.now() };
     return NextResponse.json({ vans: mapped });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching live vans from database:", error);
     if (existing) {
       return NextResponse.json({ vans: existing.data });
     }
-    return NextResponse.json({ vans: [], error: error.message }, { status: 500 });
+    return NextResponse.json({ vans: [], error: (error as Error)?.message || String(error) }, { status: 500 });
   }
 }
 
@@ -118,8 +119,8 @@ export async function handleCreateVan(request: Request) {
     });
     invalidateVansCache();
     return NextResponse.json({ success: true, van: created });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to create van" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error)?.message || String(error) || "Failed to create van" }, { status: 500 });
   }
 }
 
@@ -128,7 +129,7 @@ export async function handleUpdateVan(request: Request, id: string) {
     const body = await request.json().catch(() => ({}));
     const numericId = parseInt(id.replace('van-', ''));
     if (!isNaN(numericId)) {
-      const updateData: any = {};
+      const updateData: Prisma.VanUpdateInput = {};
       if (body.plate !== undefined) updateData.plate = body.plate;
       if (body.vanName !== undefined || body.brand !== undefined) updateData.name = body.vanName || body.brand;
       if (body.capacity !== undefined || body.seats !== undefined) updateData.capacity = Number(body.capacity || body.seats);
@@ -147,8 +148,8 @@ export async function handleUpdateVan(request: Request, id: string) {
     }
     invalidateVansCache();
     return NextResponse.json({ success: true, van: { id, ...body } });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }
 
@@ -160,7 +161,7 @@ export async function handleDeleteVan(request: Request, id: string) {
     }
     invalidateVansCache();
     return NextResponse.json({ success: true, id });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });
   }
 }

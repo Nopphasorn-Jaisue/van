@@ -12,6 +12,27 @@ import {
 import { getGoogleCalendarClient } from "@/Backend/services/google-calendar";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+
+export interface MappedDbBooking {
+  id: string;
+  requester: string;
+  phone: string;
+  requesterFaculty: string;
+  requesterFacultyId: number;
+  targetFaculty: string;
+  targetFacultyId: number;
+  destination: string;
+  purpose: string;
+  passengers: number;
+  startAt: string;
+  endAt: string;
+  submittedAt: string;
+  budgetSource: string;
+  tripType: string;
+  status: string;
+  assignedDriverName: string;
+  assignedVanPlate: string;
+}
 import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
 import { getAuthUser } from "@/app/actions/auth";
 
@@ -49,7 +70,7 @@ function saveGcalCacheToFile(cacheData: Record<string, GoogleCalendarCache>) {
 const globalForGcal = globalThis as unknown as { 
   gcalCache?: Record<string, GoogleCalendarCache>;
   isFetching?: Record<string, boolean>;
-  cachedVans?: { data: UnifiedVanInfo[]; timestamp: number };
+  cachedVans?: { data: UnifiedVanInfo[]; timestamp: number } | null;
 };
 
 if (!globalForGcal.gcalCache) {
@@ -262,7 +283,7 @@ async function fetchGoogleCalendarEvents(year: number): Promise<CalendarEventRec
           cleanSummary = match[1].trim();
         }
 
-        const correctVanId = (res.meta as any).vanId || (facultyId === '6' ? '6' : facultyId === '2' ? '2' : '1');
+        const correctVanId = res.meta.vanId || (facultyId === '6' ? '6' : facultyId === '2' ? '2' : '1');
 
         const startDateStr = formatBangkokDate(rawStart);
         let returnDateStr = startDateStr;
@@ -325,14 +346,14 @@ async function fetchGoogleCalendarEvents(year: number): Promise<CalendarEventRec
 }
 
 
-let cachedDbBookings: { data: any[]; timestamp: number } | null = null;
+let cachedDbBookings: { data: MappedDbBooking[]; timestamp: number } | null = null;
 
 export function invalidateDbBookingsCache() {
   cachedDbBookings = null;
-  if (globalForGcal.cachedVans) globalForGcal.cachedVans = null as any;
+  if (globalForGcal.cachedVans) globalForGcal.cachedVans = null;
 }
 
-async function getCachedDbBookings(): Promise<any[]> {
+async function getCachedDbBookings(): Promise<MappedDbBooking[]> {
   if (cachedDbBookings && (Date.now() - cachedDbBookings.timestamp < 30 * 1000)) {
     return cachedDbBookings.data;
   }
@@ -437,13 +458,13 @@ export async function handleSystemCalendarEvents(request: Request) {
       const endTime = isNaN(endDate.getTime()) ? "16:30" : endDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
       
       const isApproved = b.status === "APPROVED" || b.status === "COMPLETED";
-      const vanIdentifier = b.targetFacultyId ? String(b.targetFacultyId) : (b.assignedVanId ? String(b.assignedVanId) : (b.requesterFacultyId ? String(b.requesterFacultyId) : "1"));
+      const facultyIdStr = b.targetFacultyId ? String(b.targetFacultyId) : String(b.requesterFacultyId || "1");
 
       return {
         id: `bk-${b.id}`,
-        vanId: vanIdentifier,
-        facultyId: b.targetFacultyId ? String(b.targetFacultyId) : (b.requesterFacultyId ? String(b.requesterFacultyId) : "1"),
-        bookingFaculty: b.requesterFaculty || (b.requesterFacultyId === 6 ? "คณะเภสัชฯ" : "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"),
+        vanId: facultyIdStr,
+        facultyId: facultyIdStr,
+        bookingFaculty: b.targetFaculty || b.requesterFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
         destination: b.destination,
         purpose: b.purpose,
         purposeDetail: b.purpose,
@@ -453,10 +474,10 @@ export async function handleSystemCalendarEvents(request: Request) {
         time: `${startTime} - ${endTime} น.`,
         passengers: b.passengers || 1,
         requester: b.requester || "ผู้ขอใช้รถ",
-        phone: (b as any).phone || b.phone || "",
-        department: "ระบบจองรถตู้",
+        phone: b.phone || "",
+        department: b.requesterFaculty || "ระบบจองรถตู้",
         status: isApproved ? "approved" : "pending",
-        statusText: isApproved ? (b.status === "COMPLETED" ? "เสร็จสิ้นภารกิจ" : "อนุมัติแล้ว") : "รอดำเนินการ (รอคณบดีอนุมัติ)",
+        statusText: isApproved ? "อนุมัติแล้ว" : "รอดำเนินการ (รอคณบดีอนุมัติ)",
         statusTime: "ระบบการจอง",
         tripType: (b.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || "ในจังหวัดพะเยา",
         createdAt: b.submittedAt || new Date().toISOString()
