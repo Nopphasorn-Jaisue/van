@@ -11,7 +11,7 @@ import {
 } from "@/Backend/services/calendar-store";
 import { getGoogleCalendarClient } from "@/Backend/services/google-calendar";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
 import { getAuthUser } from "@/app/actions/auth";
 
@@ -227,7 +227,7 @@ async function fetchGoogleCalendarEvents(year: number): Promise<CalendarEventRec
 
         const response = await fetchWithTimeout;
         return { items: response.data.items || [], meta: cal };
-      } catch (err) {
+      } catch {
         console.warn(`Notice: Google Calendar fetch completed/bypassed for ${cal.id}`);
         return null;
       }
@@ -326,7 +326,6 @@ async function fetchGoogleCalendarEvents(year: number): Promise<CalendarEventRec
 
 
 let cachedDbBookings: { data: any[]; timestamp: number } | null = null;
-let isFetchingDbBookings = false;
 
 export function invalidateDbBookingsCache() {
   cachedDbBookings = null;
