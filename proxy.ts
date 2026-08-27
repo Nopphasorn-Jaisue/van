@@ -13,6 +13,7 @@ export async function proxy(request: NextRequest) {
   const isPublicPath =
     path === '/login' ||
     path === '/auth/callback' ||
+    path.startsWith('/api/auth') ||
     path === '/' ||
     path === '/landing' ||
     (request.method === 'GET' && (
