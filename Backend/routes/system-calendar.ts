@@ -732,6 +732,17 @@ export async function POST(request: Request) {
       const endDateTime = new Date(`${endDateRaw}T${endTime}+07:00`);
 
       let targetFaculty = faculty;
+      const targetFacultyName = body.targetFaculty || body.ownerFacultyName || body.borrowFromFaculty || body.targetFacultyName;
+      if (targetFacultyName) {
+        const foundTarget = await prisma.faculty.findFirst({
+          where: { nameTh: { contains: targetFacultyName.replace('คณะ', '') } }
+        });
+        if (foundTarget) targetFaculty = foundTarget;
+      }
+      if (body.targetFacultyId) {
+        const foundTarget = await prisma.faculty.findUnique({ where: { id: Number(body.targetFacultyId) } });
+        if (foundTarget) targetFaculty = foundTarget;
+      }
       if (body.vanId) {
         const vanNum = parseInt(String(body.vanId).replace(/\D/g, ''));
         if (!isNaN(vanNum)) {

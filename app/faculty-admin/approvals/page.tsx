@@ -94,16 +94,16 @@ export default function ApprovalsPage() {
         };
         
         const mapped = (data.bookings || []).map((b: any) => {
-          const isCross = b.status === 'WAITING_EXEC' || (b.requesterFacultyId && b.targetFacultyId && b.requesterFacultyId !== b.targetFacultyId);
+          const isCross = (b.requesterFacultyId && b.targetFacultyId && Number(b.requesterFacultyId) !== Number(b.targetFacultyId)) || b.status === 'WAITING_EXEC';
           let statusLabel = 'pending';
-          if (isCross) {
-            statusLabel = 'cross_faculty_pending';
-          } else if (b.status === 'WAITING_ADMIN') {
-            statusLabel = 'pending';
-          } else if (b.status === 'APPROVED') {
+          if (b.status === 'APPROVED') {
             statusLabel = 'approved';
           } else if (b.status === 'REJECTED') {
             statusLabel = 'rejected';
+          } else if (isCross) {
+            statusLabel = 'cross_faculty_pending';
+          } else if (b.status === 'WAITING_ADMIN') {
+            statusLabel = 'pending';
           }
           
           const startDate = new Date(b.startAt);
@@ -309,9 +309,9 @@ export default function ApprovalsPage() {
   const filteredRequests = requests.filter(req => {
     const matchesTab = 
       activeTab === 'all' ? true :
-      activeTab === 'pending' ? req.status === 'pending' :
+      activeTab === 'pending' ? (req.status === 'pending' || req.status === 'cross_faculty_pending') :
       activeTab === 'need_info' ? req.status === 'need_info' :
-      activeTab === 'cross_faculty' ? req.status === 'cross_faculty_pending' : true;
+      activeTab === 'cross_faculty' ? (req.isCrossFaculty && (req.status === 'cross_faculty_pending' || req.status === 'pending')) : true;
       
     const matchesSearch = 
       req.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -324,8 +324,8 @@ export default function ApprovalsPage() {
   const selectedRequest = requests.find(r => r.id === selectedRequestId);
   const isCrossFacultyRequest = selectedRequest ? (selectedRequest.isCrossFaculty || selectedRequest.status === 'cross_faculty_pending' || activeTab === 'cross_faculty') : false;
 
-  const pendingCount = requests.filter(r => r.status === 'pending').length;
-  const crossFacultyCount = requests.filter(r => r.status === 'cross_faculty_pending').length;
+  const pendingCount = requests.filter(r => r.status === 'pending' || r.status === 'cross_faculty_pending').length;
+  const crossFacultyCount = requests.filter(r => r.isCrossFaculty && (r.status === 'cross_faculty_pending' || r.status === 'pending')).length;
   const needInfoCount = requests.filter(r => r.status === 'need_info').length;
 
   return (
