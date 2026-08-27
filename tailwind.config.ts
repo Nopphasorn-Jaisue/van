@@ -13,12 +13,13 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["'Google Sans'", "'IBM Plex Sans Thai Looped'", "Kanit", "'Chakra Petch'", "'Roboto Condensed'", "sans-serif"],
-        google: ["'Google Sans'", "sans-serif"],
-        ibm: ["'IBM Plex Sans Thai Looped'", "sans-serif"],
-        kanit: ["Kanit", "sans-serif"],
-        chakra: ["'Chakra Petch'", "sans-serif"],
-        roboto: ["'Roboto Condensed'", "sans-serif"],
+        sans: ["'TH Sarabun PSK'", "'TH Sarabun New'", "'Sarabun'", "sans-serif"],
+        sarabun: ["'TH Sarabun PSK'", "'TH Sarabun New'", "'Sarabun'", "sans-serif"],
+        google: ["'TH Sarabun PSK'", "'TH Sarabun New'", "'Sarabun'", "sans-serif"],
+        ibm: ["'TH Sarabun PSK'", "'TH Sarabun New'", "'Sarabun'", "sans-serif"],
+        kanit: ["'TH Sarabun PSK'", "'TH Sarabun New'", "'Sarabun'", "sans-serif"],
+        chakra: ["'TH Sarabun PSK'", "'TH Sarabun New'", "'Sarabun'", "sans-serif"],
+        roboto: ["'TH Sarabun PSK'", "'TH Sarabun New'", "'Sarabun'", "sans-serif"],
       },
       colors: {
         background: "hsl(var(--background))",
