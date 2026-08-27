@@ -41,6 +41,7 @@ export default function SuperAdminFaculties() {
   const [historyFaculty, setHistoryFaculty] = useState<FacultyItem | null>(null);
   const [deleteConfirmFaculty, setDeleteConfirmFaculty] = useState<FacultyItem | null>(null);
 
+  
   const [allUsersList, setAllUsersList] = useState<any[]>([]);
   const [faculties, setFaculties] = useState<FacultyItem[]>([]);
 
@@ -69,7 +70,7 @@ export default function SuperAdminFaculties() {
         const data = await res.json();
         if (data.users) setAllUsersList(data.users);
       }
-    } catch (e) {}
+    } catch {}
   };
 
   useEffect(() => {
