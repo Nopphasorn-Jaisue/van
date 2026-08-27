@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 import { FacultyGlyph } from '@/Frontend/components/FacultyGlyph';
-import VanLoadingScreen from '@/components/VanLoadingScreen';
 import { AnimatePresence } from 'framer-motion';
 import { facultiesList } from '@/Frontend/data/faculties';
 import {
@@ -268,7 +267,6 @@ export default function LandingPage() {
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [networkEvents, setNetworkEvents] = useState<NetworkCalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPageReady, setIsPageReady] = useState(false);
   const [showAllFaculties, setShowAllFaculties] = useState(false);
   const [showEventDetailModal, setShowEventDetailModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<NetworkCalendarEvent | null>(null);
@@ -288,7 +286,6 @@ export default function LandingPage() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           setNetworkEvents(parsed);
           setIsLoading(false);
-        setTimeout(() => setIsPageReady(true), 600);
         }
       }
     } catch {
