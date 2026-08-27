@@ -16,44 +16,9 @@ function LoginForm() {
 
   const supabase = createClient();
 
-  const handleMicrosoftLogin = async (role: 'ADMIN' | 'DRIVER') => {
+    const handleMicrosoftLogin = (role: 'EXECUTIVE' | 'SUPER_ADMIN' | 'DRIVER' | 'ADMIN' | 'GUEST' = 'GUEST') => {
     setLoadingRole(role);
-    setErrorMessage(null);
-
-    try {
-      const redirectUrl = `${window.location.origin}/auth/callback?role=${role}`;
-      
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'azure',
-        options: {
-          scopes: 'openid profile email',
-          redirectTo: redirectUrl,
-        },
-      });
-
-      if (error) {
-        console.error('Microsoft login error:', error);
-        // Fallback for development/testing if OAuth is not fully set up in Supabase yet
-        setErrorMessage('ไม่สามารถเชื่อมต่อ Microsoft 365 OAuth ได้ (สลับเป็นระบบทดลองเข้าสู่ระบบ)');
-        setTimeout(() => {
-          if (role === 'ADMIN') {
-            router.push('/faculty-admin/dashboard');
-          } else {
-            router.push('/driver/dashboard');
-          }
-        }, 1200);
-      }
-    } catch (err) {
-      console.error('Login error:', err);
-      // Fallback redirect for testing
-      if (role === 'ADMIN') {
-        router.push('/faculty-admin/dashboard');
-      } else {
-        router.push('/driver/dashboard');
-      }
-    } finally {
-      setLoadingRole(null);
-    }
+    window.location.href = `/api/auth/azure/login?role=${role}`;
   };
 
   const handleDirectLogin = async (e?: React.FormEvent) => {
@@ -183,7 +148,7 @@ function LoginForm() {
             <button 
               disabled={loadingRole !== null}
               onClick={() => handleMicrosoftLogin('ADMIN')}
-              className="w-full bg-gray-50 hover:bg-gray-100 active:scale-[0.99] border border-gray-200 text-gray-500 font-semibold text-[13px] py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+              className="w-full bg-white hover:bg-gray-50 active:scale-[0.99] border border-gray-300 text-gray-700 font-bold text-[14px] py-3 shadow-xs rounded-xl flex items-center justify-center gap-2 transition-all"
             >
               <div className="grid grid-cols-2 gap-[1px] w-3.5 h-3.5 shrink-0 opacity-60">
                 <div className="bg-[#f25022]"></div>
@@ -191,7 +156,7 @@ function LoginForm() {
                 <div className="bg-[#00a4ef]"></div>
                 <div className="bg-[#ffb900]"></div>
               </div>
-              <span>Login with Microsoft 365 (เปิดภายหลัง)</span>
+              <span>Login with Microsoft 365 (@up.ac.th)</span>
             </button>
 
           </div>
