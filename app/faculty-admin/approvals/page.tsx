@@ -1,20 +1,21 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   FileText, Search, Filter,
   CheckCircle2, XCircle, Info, Calendar,
   MapPin, Users, User, Clock, 
-  X, Download, Edit, Trash2
+  X, Download, Edit, Trash2, Printer, ArrowLeftRight, Check, AlertCircle, ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
 
 interface MappedRequest {
-  assignedVanPlate?: string;
-  assignedDriverName?: string;
   id: string;
   time: string;
   requester: string;
   department: string;
+  requesterFacultyId: number;
+  targetFaculty: string;
+  targetFacultyId: number;
   date: string;
   returnDateStr?: string;
   timeRange: string;
@@ -22,8 +23,14 @@ interface MappedRequest {
   passengers: number;
   reason: string;
   status: string;
+  rawStatus: string;
+  rejectReason?: string | null;
   files: number;
-  isCrossFaculty: boolean;
+  isIncomingBorrow: boolean;
+  isOutgoingBorrow: boolean;
+  isOwnerOfVan: boolean;
+  assignedVanPlate?: string;
+  assignedDriverName?: string;
   coordinator: {
     name: string;
     role: string;
@@ -46,6 +53,7 @@ export default function ApprovalsPage() {
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{id: string, type: string} | null>(null);
   const [infoReason, setInfoReason] = useState("");
+  const [currentAdminFacultyId, setCurrentAdminFacultyId] = useState<number>(1);
 
   // Modals for Edit and Delete
   const [deleteConfirmBooking, setDeleteConfirmBooking] = useState<MappedRequest | null>(null);
@@ -64,7 +72,7 @@ export default function ApprovalsPage() {
   });
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const id = params.get('id');
@@ -76,12 +84,25 @@ export default function ApprovalsPage() {
   }, []);
 
   const [requests, setRequests] = useState<MappedRequest[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isLoading, setIsLoading] = useState(true);
 
   const loadRequests = async (silent = false) => {
     if (!silent) setIsLoading(true);
     try {
+      // 1. Fetch current admin user
+      let myFacultyId = currentAdminFacultyId;
+      try {
+        const meRes = await fetch('/api/me');
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.user?.facultyId) {
+            myFacultyId = Number(meData.user.facultyId);
+            setCurrentAdminFacultyId(myFacultyId);
+          }
+        }
+      } catch {}
+
+      // 2. Fetch bookings
       const res = await fetch('/api/bookings');
       if (res.ok) {
         const text = await res.text();
@@ -93,16 +114,20 @@ export default function ApprovalsPage() {
                  ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
         };
         
-        const mapped = (data.bookings || []).map((b: any) => {
-          const isCross = (b.requesterFacultyId && b.targetFacultyId && Number(b.requesterFacultyId) !== Number(b.targetFacultyId)) || b.status === 'WAITING_EXEC';
+        const mapped: MappedRequest[] = (data.bookings || []).map((b: any) => {
+          const reqFacId = Number(b.requesterFacultyId || 1);
+          const tgtFacId = Number(b.targetFacultyId || 1);
+
+          const isIncoming = (tgtFacId === myFacultyId && reqFacId !== myFacultyId);
+          const isOutgoing = (reqFacId === myFacultyId && tgtFacId !== myFacultyId);
+          const isOwner = (tgtFacId === myFacultyId);
+
           let statusLabel = 'pending';
           if (b.status === 'APPROVED') {
             statusLabel = 'approved';
           } else if (b.status === 'REJECTED') {
             statusLabel = 'rejected';
-          } else if (isCross) {
-            statusLabel = 'cross_faculty_pending';
-          } else if (b.status === 'WAITING_ADMIN') {
+          } else if (b.status === 'WAITING_ADMIN' || b.status === 'WAITING_EXEC') {
             statusLabel = 'pending';
           }
           
@@ -114,6 +139,9 @@ export default function ApprovalsPage() {
             time: formatThaiDateTime(b.submittedAt),
             requester: b.requester,
             department: b.requesterFaculty,
+            requesterFacultyId: reqFacId,
+            targetFaculty: b.targetFaculty,
+            targetFacultyId: tgtFacId,
             date: startDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }),
             returnDateStr: endDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }),
             timeRange: `${startDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${endDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
@@ -121,8 +149,14 @@ export default function ApprovalsPage() {
             passengers: b.passengers || 1,
             reason: b.purpose,
             status: statusLabel,
+            rawStatus: b.status,
+            rejectReason: b.rejectReason,
             files: 0,
-            isCrossFaculty: isCross,
+            isIncomingBorrow: isIncoming,
+            isOutgoingBorrow: isOutgoing,
+            isOwnerOfVan: isOwner,
+            assignedVanPlate: b.assignedVanPlate,
+            assignedDriverName: b.assignedDriverName,
             coordinator: {
               name: b.requester,
               role: "ผู้ใช้งาน",
@@ -150,7 +184,7 @@ export default function ApprovalsPage() {
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       const cached = sessionStorage.getItem('cached_faculty_approvals');
       if (cached) {
@@ -176,7 +210,7 @@ export default function ApprovalsPage() {
     const { id, type: actionType } = pendingAction;
     
     let dbStatus = '';
-    if (actionType === 'อนุมัติ' || actionType === 'อนุญาตให้ยืม') dbStatus = 'WAITING_EXEC';
+    if (actionType === 'อนุมัติ' || actionType === 'อนุญาตให้ยืม') dbStatus = 'APPROVED';
     if (actionType === 'ปฏิเสธ') dbStatus = 'REJECTED';
 
     if (dbStatus) {
@@ -184,10 +218,10 @@ export default function ApprovalsPage() {
         await fetch(`/api/bookings/${id}/status`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: dbStatus, reason: infoReason || actionType })
+          body: JSON.stringify({ status: dbStatus, rejectReason: infoReason || actionType })
         });
         await loadRequests();
-        setAlertMessage(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จ`);
+        setAlertMessage(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จเรียบร้อยแล้ว`);
         if (selectedRequestId === id) setSelectedRequestId(null);
       } catch (err) {
         console.error(err);
@@ -306,27 +340,30 @@ export default function ApprovalsPage() {
     }
   };
 
+  // Tabs Filtering
+  const pendingCount = requests.filter(r => r.isOwnerOfVan && r.status === 'pending').length;
+  const incomingCount = requests.filter(r => r.isIncomingBorrow && r.status === 'pending').length;
+  const outgoingCount = requests.filter(r => r.isOutgoingBorrow).length;
+  const needInfoCount = requests.filter(r => r.status === 'need_info').length;
+
   const filteredRequests = requests.filter(req => {
     const matchesTab = 
       activeTab === 'all' ? true :
-      activeTab === 'pending' ? (req.status === 'pending' || req.status === 'cross_faculty_pending') :
-      activeTab === 'need_info' ? req.status === 'need_info' :
-      activeTab === 'cross_faculty' ? (req.isCrossFaculty && (req.status === 'cross_faculty_pending' || req.status === 'pending')) : true;
+      activeTab === 'pending' ? (req.isOwnerOfVan && req.status === 'pending') :
+      activeTab === 'incoming' ? req.isIncomingBorrow :
+      activeTab === 'outgoing' ? req.isOutgoingBorrow :
+      activeTab === 'need_info' ? req.status === 'need_info' : true;
       
     const matchesSearch = 
       req.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       req.requester.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      req.destination.toLowerCase().includes(searchQuery.toLowerCase());
+      req.destination.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      req.department.toLowerCase().includes(searchQuery.toLowerCase());
       
     return matchesTab && matchesSearch;
   });
 
   const selectedRequest = requests.find(r => r.id === selectedRequestId);
-  const isCrossFacultyRequest = selectedRequest ? (selectedRequest.isCrossFaculty || selectedRequest.status === 'cross_faculty_pending' || activeTab === 'cross_faculty') : false;
-
-  const pendingCount = requests.filter(r => r.status === 'pending' || r.status === 'cross_faculty_pending').length;
-  const crossFacultyCount = requests.filter(r => r.isCrossFaculty && (r.status === 'cross_faculty_pending' || r.status === 'pending')).length;
-  const needInfoCount = requests.filter(r => r.status === 'need_info').length;
 
   return (
     <AppShell>
@@ -335,29 +372,37 @@ export default function ApprovalsPage() {
         {/* ----- Header ----- */}
         <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4 shrink-0">
           <div>
-            <h1 className="text-[26px] font-black text-gray-900 leading-tight mb-2">คำขอที่ต้องอนุมัติ</h1>
-            <p className="text-sm text-gray-500">จัดการและตรวจสอบคำขอใช้รถตู้ทั้งหมดของคณะ</p>
+            <h1 className="text-[26px] font-black text-gray-900 leading-tight mb-1">คำขอที่ต้องอนุมัติ & จัดการการยืมรถ</h1>
+            <p className="text-xs text-gray-500">จัดการคำขอใช้รถตู้ของคณะ คำขอยืมรถจากคณะอื่น และติดตามสถานะคำขอที่ส่งไปขอยืม</p>
           </div>
           
           {/* Minimalist Stats Badges */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-200 bg-yellow-50/50 text-yellow-700 text-sm font-bold">
-              <Clock size={16} /> รอพิจารณา {pendingCount}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-yellow-200 bg-yellow-50 text-yellow-800 text-xs font-bold shadow-2xs">
+              <Clock size={15} className="text-yellow-600" /> รอเราพิจารณา: {pendingCount}
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 bg-purple-50/50 text-purple-700 text-sm font-bold">
-              <Users size={16} /> ยืมคณะ {crossFacultyCount}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-purple-200 bg-purple-50 text-purple-800 text-xs font-bold shadow-2xs">
+              <ArrowDownLeft size={15} className="text-purple-600" /> เขามายืมเรา: {incomingCount}
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50/50 text-blue-700 text-sm font-bold">
-              <Info size={16} /> รอข้อมูล {needInfoCount}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-800 text-xs font-bold shadow-2xs">
+              <ArrowUpRight size={15} className="text-blue-600" /> เราไปยืมเขา: {outgoingCount}
             </div>
           </div>
         </div>
 
+        {/* Alert Feedback Notification */}
+        {alertMessage && (
+          <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in">
+            <span>{alertMessage}</span>
+            <button onClick={() => setAlertMessage(null)} className="text-emerald-600 hover:text-emerald-900 font-black">✕</button>
+          </div>
+        )}
+
         {/* ----- Main Grid Layout ----- */}
-        <div className={`flex-1 min-h-0 flex gap-6 ${selectedRequestId ? 'grid grid-cols-1 xl:grid-cols-[1fr_400px]' : ''}`}>
+        <div className={`flex-1 min-h-0 flex gap-6 ${selectedRequestId ? 'grid grid-cols-1 xl:grid-cols-[1fr_420px]' : ''}`}>
           
           {/* ----- Left Table Area ----- */}
-          <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-2xs flex flex-col min-h-0 overflow-hidden">
             
             {/* Top Toolbar (Tabs & Search) */}
             <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white shrink-0">
@@ -368,172 +413,178 @@ export default function ApprovalsPage() {
                   onClick={() => setActiveTab('pending')}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
                     activeTab === 'pending'
-                      ? 'bg-yellow-50 text-yellow-800 border border-yellow-300'
+                      ? 'bg-yellow-50 text-yellow-800 border border-yellow-300 shadow-2xs'
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  รอการพิจารณา <span className="ml-1 opacity-70">{pendingCount}</span>
+                  รอการพิจารณา <span className="ml-1 opacity-75">({pendingCount})</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('cross_faculty')}
+                  onClick={() => setActiveTab('incoming')}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
-                    activeTab === 'cross_faculty'
-                      ? 'bg-purple-50 text-purple-800 border border-purple-300'
+                    activeTab === 'incoming'
+                      ? 'bg-purple-50 text-purple-800 border border-purple-300 shadow-2xs'
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  ยืมข้ามคณะ <span className="ml-1 opacity-70">{crossFacultyCount}</span>
+                  คำขอเข้า (ยืมรถเรา) <span className="ml-1 opacity-75">({incomingCount})</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('need_info')}
+                  onClick={() => setActiveTab('outgoing')}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
-                    activeTab === 'need_info'
-                      ? 'bg-blue-50 text-blue-800 border border-blue-300'
+                    activeTab === 'outgoing'
+                      ? 'bg-blue-50 text-blue-800 border border-blue-300 shadow-2xs'
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  รอข้อมูลเพิ่ม <span className="ml-1 opacity-70">{needInfoCount}</span>
+                  คำขอออก (เราไปยืมเขา) <span className="ml-1 opacity-75">({outgoingCount})</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('all')}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
                     activeTab === 'all'
-                      ? 'bg-gray-100 text-gray-800'
+                      ? 'bg-gray-100 text-gray-900 font-black'
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  ทั้งหมด
+                  ทั้งหมด ({requests.length})
                 </button>
               </div>
 
-              {/* Search & Actions */}
+              {/* Search */}
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="ค้นหาเลขคำขอ, ผู้ขอ, ปลายทาง..."
+                    placeholder="ค้นหาเลขคำขอ, ผู้ขอ, คณะ..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 pr-4 py-1.5 text-xs bg-gray-50/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171] w-48 sm:w-64 transition-all"
+                    className="pl-8 pr-4 py-1.5 text-xs bg-gray-50/70 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171] w-48 sm:w-60 transition-all"
                   />
                 </div>
-                <button className="p-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1.5 text-xs font-bold">
-                  <Filter size={14} />
-                  <span className="hidden sm:inline">ตัวกรอง</span>
-                </button>
               </div>
-
             </div>
 
             {/* Table */}
-            <div className="flex-1 overflow-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <table className="w-full text-left border-collapse min-w-[600px]">
-                <thead>
-                  <tr className="border-b border-gray-100 text-[11px] font-bold text-gray-600 bg-white sticky top-0 z-10">
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-left border-collapse min-w-[700px]">
+                <thead className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-black text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50 z-10">
+                  <tr>
                     <th className="py-3 px-4">เลขคำขอ</th>
-                    <th className="py-3 px-4">ผู้ขอใช้รถ</th>
+                    <th className="py-3 px-4">ผู้ขอใช้รถ / คณะ</th>
                     <th className="py-3 px-4">กำหนดการ</th>
                     <th className="py-3 px-4">รายละเอียดการเดินทาง</th>
                     <th className="py-3 px-4 text-center">สถานะ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50 text-[12px]">
+                <tbody className="divide-y divide-gray-50 text-xs">
                   {filteredRequests.length > 0 ? filteredRequests.map((req) => (
-                    <tr
+                    <tr 
                       key={req.id}
                       onClick={() => setSelectedRequestId(req.id)}
-                      className={`cursor-pointer transition-colors group ${
-                        selectedRequestId === req.id 
-                          ? 'bg-[#f0eaff]/80' 
-                          : 'hover:bg-gray-50/80'
-                      }`}
+                      className={`hover:bg-purple-50/40 transition-colors cursor-pointer ${selectedRequestId === req.id ? 'bg-purple-50/70' : ''}`}
                     >
-                      {/* เลขคำขอ */}
-                      <td className="py-5 px-4 align-top">
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${req.isCrossFaculty ? 'bg-purple-100 text-purple-700' : 'bg-[#f0eaff] text-[#311171]'}`}>
-                            <FileText size={16} />
+                      {/* ID */}
+                      <td className="py-3.5 px-4 font-bold text-gray-900 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg ${req.isIncomingBorrow ? 'bg-purple-100 text-purple-700' : req.isOutgoingBorrow ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                            <FileText size={15} />
                           </div>
                           <div>
-                            <span className="font-bold text-gray-900 block leading-tight">{req.id}</span>
-                            <span className="text-[11px] text-gray-400 flex items-center gap-1 mt-1 font-medium">
-                              <Clock size={12} /> {req.time}
+                            <div className="text-xs font-black text-slate-900">{req.id}</div>
+                            <div className="text-[10px] text-gray-400 font-normal">{req.time}</div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Requester & Faculty */}
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                          <User size={13} className="text-gray-400" />
+                          <span>{req.requester}</span>
+                        </div>
+                        <div className="text-[11px] text-purple-700 font-bold mt-0.5">
+                          {req.department}
+                        </div>
+                      </td>
+
+                      {/* Schedule */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 font-bold text-gray-800">
+                          <Calendar size={13} className="text-gray-400" />
+                          <span>{req.date}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 font-medium ml-4">
+                          {req.timeRange}
+                        </div>
+                      </td>
+
+                      {/* Destination & Purpose */}
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                          <MapPin size={13} className="text-emerald-500 shrink-0" />
+                          <span className="truncate max-w-[200px]">{req.destination}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 truncate max-w-[200px] mt-0.5">
+                          {req.passengers} คน • {req.reason}
+                        </div>
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        {req.isIncomingBorrow ? (
+                          req.status === 'approved' ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              อนุมัติให้ยืมแล้ว
                             </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* ผู้ขอใช้รถ */}
-                      <td className="py-5 px-4 align-top">
-                        <div>
-                          <span className="font-bold text-gray-900 flex items-center gap-1.5 leading-tight">
-                            <User size={14} className="text-gray-400" />
-                            {req.requester}
-                          </span>
-                          <span className="text-[11px] text-gray-400 block mt-1 ml-5 font-medium">{req.department}</span>
-                        </div>
-                      </td>
-
-                      {/* กำหนดการ */}
-                      <td className="py-5 px-4 align-top">
-                        <div>
-                          <span className="font-bold text-gray-900 flex items-center gap-1.5 leading-tight">
-                            <Calendar size={14} className="text-gray-400" />
-                            {req.date}
-                          </span>
-                          <span className="text-[11px] text-gray-400 block mt-1 ml-5 font-medium">{req.timeRange}</span>
-                        </div>
-                      </td>
-
-                      {/* รายละเอียดการเดินทาง */}
-                      <td className="py-5 px-4 align-top">
-                        <div className="space-y-1">
-                          <span className="font-bold text-gray-900 flex items-center gap-1.5 leading-tight">
-                            <MapPin size={14} className="text-purple-600 shrink-0" />
-                            {req.destination}
-                          </span>
-                          <div className="flex items-center gap-3 text-[11px] text-gray-400 ml-5">
-                            <div className="flex items-center gap-1">
-                              <Users size={12} className="text-gray-400" /> {req.passengers} คน
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <FileText size={12} className="text-gray-400" /> แนบ {req.files} ไฟล์
-                            </div>
-                          </div>
-                          <div className="text-[11px] text-gray-400 ml-5 line-clamp-1" title={req.reason}>
-                            เหตุผล: {req.reason}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* สถานะ */}
-                      <td className="py-5 px-4 align-top text-center">
-                        {req.status === 'pending' ? (
-                          <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-yellow-50 text-yellow-700 text-[11px] font-bold">
-                            รอพิจารณา
-                          </div>
-                        ) : req.status === 'cross_faculty_pending' ? (
-                          <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 text-[11px] font-bold">
-                            ขอยืมจากคณะอื่น
-                          </div>
+                          ) : req.status === 'rejected' ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                              ปฏิเสธการให้ยืม
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 animate-pulse">
+                              ขอยืมรถเรา (รออนุมัติ)
+                            </span>
+                          )
+                        ) : req.isOutgoingBorrow ? (
+                          req.status === 'approved' ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              ปลายทางอนุมัติแล้ว
+                            </span>
+                          ) : req.status === 'rejected' ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                              ปลายทางปฏิเสธ
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              รอคณะปลายทางอนุมัติ
+                            </span>
+                          )
                         ) : (
-                          <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold">
-                            รอข้อมูลเพิ่ม
-                          </div>
+                          req.status === 'approved' ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                              อนุมัติแล้ว
+                            </span>
+                          ) : req.status === 'rejected' ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700">
+                              ปฏิเสธ
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-yellow-50 text-yellow-800 border border-yellow-200">
+                              รอพิจารณา
+                            </span>
+                          )
                         )}
                       </td>
-
                     </tr>
                   )) : (
                     <tr>
                       <td colSpan={5} className="py-16 text-center">
                         <div className="flex flex-col items-center justify-center text-gray-400">
-                          <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center mb-4">
-                            <CheckCircle2 size={32} className="text-gray-300" />
-                          </div>
-                          <p className="text-lg font-bold text-gray-900 mb-1">ไม่มีคำขอรอพิจารณา</p>
-                          <p className="text-sm">คุณจัดการคำขอใช้รถตู้ครบหมดแล้วในขณะนี้</p>
+                          <CheckCircle2 size={36} className="text-gray-300 mb-2" />
+                          <p className="text-base font-bold text-gray-800">ไม่มีรายการคำขอในแท็บนี้</p>
+                          <p className="text-xs text-gray-400 mt-0.5">คุณจัดการคำขอในส่วนนี้ครบถ้วนแล้ว</p>
                         </div>
                       </td>
                     </tr>
@@ -541,571 +592,419 @@ export default function ApprovalsPage() {
                 </tbody>
               </table>
             </div>
-            
-            {/* Footer Pagination */}
-            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between text-[13px] bg-white">
-              <p className="text-gray-500 font-medium">
-                แสดง 1 ถึง {filteredRequests.length} จาก {filteredRequests.length} รายการ
-              </p>
-              <div className="flex gap-2">
-                <button disabled className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 bg-gray-50 font-medium">
-                  ก่อนหน้า
-                </button>
-                <button className="px-3 py-1.5 rounded-lg border border-[#311171] text-white bg-[#311171] font-bold">
-                  1
-                </button>
-                <button disabled className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 bg-gray-50 font-medium">
-                  ถัดไป
-                </button>
-              </div>
+
+            {/* Table Footer */}
+            <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500 bg-white">
+              <span>แสดง {filteredRequests.length} จาก {requests.length} รายการ</span>
             </div>
           </div>
 
-          {/* ----- Right Sidebar (Details) ----- */}
+          {/* ----- Right Sidebar (Details & Action Panel) ----- */}
           {selectedRequestId && selectedRequest && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-lg flex flex-col min-h-0 w-full xl:w-[400px] shrink-0 animate-in slide-in-from-right-4 fade-in">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-xl flex flex-col min-h-0 w-full xl:w-[420px] shrink-0 animate-in slide-in-from-right-4 fade-in">
+              
               {/* Header */}
               <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
-                <h2 className="text-[16px] font-black text-gray-900">รายละเอียดคำขอ</h2>
+                <h2 className="text-sm font-black text-gray-900">รายละเอียดคำขอ & การอนุมัติ</h2>
                 <button onClick={() => setSelectedRequestId(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors">
                   <X size={18} />
                 </button>
               </div>
 
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-6 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <div className="flex-1 overflow-y-auto p-5 space-y-5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 
-                {/* ID & Status */}
-                <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isCrossFacultyRequest ? 'bg-purple-100 text-purple-700' : 'bg-[#f0eaff] text-[#311171]'}`}>
-                    <FileText size={24} />
+                {/* ID & Type Banner */}
+                <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    selectedRequest.isIncomingBorrow ? 'bg-purple-100 text-purple-700' :
+                    selectedRequest.isOutgoingBorrow ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    <FileText size={20} />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-[15px] font-black text-gray-900">{selectedRequest.id}</h3>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        isCrossFacultyRequest ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                        selectedRequest.status === 'pending' ? 'bg-yellow-50 text-yellow-700' : 'bg-blue-50 text-blue-700'
-                      }`}>
-                        {isCrossFacultyRequest ? 'ยืมข้ามคณะ' :
-                         selectedRequest.status === 'pending' ? 'รอพิจารณา' : 'รอข้อมูลเพิ่ม'}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className="text-sm font-black text-slate-900">{selectedRequest.id}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700">
+                        {selectedRequest.isIncomingBorrow ? 'ยืมรถเรา' : selectedRequest.isOutgoingBorrow ? 'เราไปยืมเขา' : 'ภายในคณะ'}
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-500">
-                      {selectedRequest.time} (โดย {selectedRequest.requester})
+                    <p className="text-[11px] text-slate-500">
+                      ยื่นเมื่อ {selectedRequest.time}
                     </p>
                   </div>
                 </div>
 
-                {/* Trip Data */}
+                {/* Outgoing Live Progress Stepper (สำหรับกรณีเราไปขอยืมคณะอื่น ให้ดูผลได้ชัดเจน) */}
+                {selectedRequest.isOutgoingBorrow && (
+                  <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200/80 space-y-3">
+                    <div className="flex items-center gap-2 text-blue-950 font-black text-xs">
+                      <ArrowUpRight size={16} className="text-blue-600" />
+                      <span>ติดตามผลการอนุมัติ (เราขอยืม {selectedRequest.targetFaculty})</span>
+                    </div>
+                    
+                    {/* Stepper */}
+                    <div className="space-y-2 text-xs pt-1">
+                      <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                        <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        <span>1. ส่งคำขอยืมรถไปยังคณะปลายทางแล้ว</span>
+                      </div>
+                      <div className={`flex items-center gap-2 font-bold ${
+                        selectedRequest.status === 'approved' ? 'text-emerald-700' :
+                        selectedRequest.status === 'rejected' ? 'text-red-700' : 'text-blue-700 animate-pulse'
+                      }`}>
+                        {selectedRequest.status === 'approved' ? (
+                          <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        ) : selectedRequest.status === 'rejected' ? (
+                          <XCircle size={15} className="text-red-600 shrink-0" />
+                        ) : (
+                          <Clock size={15} className="text-blue-600 shrink-0" />
+                        )}
+                        <span>2. {selectedRequest.status === 'approved' ? 'คณะปลายทางอนุมัติให้ยืมแล้ว' : selectedRequest.status === 'rejected' ? 'คณะปลายทางปฏิเสธคำขอ' : 'รอคณะปลายทางพิจารณาอนุมัติ'}</span>
+                      </div>
+                    </div>
+
+                    {selectedRequest.status === 'rejected' && (
+                      <div className="p-2.5 rounded-xl bg-red-100/80 border border-red-200 text-red-800 text-xs font-medium">
+                        <strong>เหตุผล:</strong> {selectedRequest.rejectReason || "รถไม่ว่างในวันเวลาดังกล่าว"}
+                      </div>
+                    )}
+
+                    {selectedRequest.status === 'approved' && (
+                      <div className="p-2.5 rounded-xl bg-emerald-100/80 border border-emerald-200 text-emerald-900 text-xs font-medium">
+                        <strong>รถที่จัดสรร:</strong> {selectedRequest.assignedVanPlate || "รถตู้ประจำคณะ"} | <strong>คนขับ:</strong> {selectedRequest.assignedDriverName || "พนักงานขับรถ"}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Incoming Notice for Owner Faculty */}
+                {selectedRequest.isIncomingBorrow && (
+                  <div className="p-3.5 rounded-2xl bg-purple-50/80 border border-purple-200 space-y-1.5">
+                    <div className="flex items-center gap-2 text-purple-900 font-bold text-xs">
+                      <ArrowDownLeft size={16} className="text-purple-600" />
+                      <span>{selectedRequest.department} ขอยืมรถตู้คณะเรา</span>
+                    </div>
+                    <p className="text-[11px] text-purple-700 font-medium leading-relaxed">
+                      คุณในฐานะแอดมินคณะเจ้าของรถ สามารถกด <strong>"อนุมัติให้ยืม"</strong> หรือ <strong>"ปฏิเสธ"</strong> ได้ทันทีที่ปุ่มด้านล่าง
+                    </p>
+                  </div>
+                )}
+
+                {/* Trip Details */}
                 <div>
-                  <h4 className="text-[13px] font-black text-[#311171] mb-3">ข้อมูลการเดินทาง</h4>
-                  <div className="space-y-2.5">
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">ประเภทการเดินทาง</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.tripType}</span>
+                  <h4 className="text-xs font-black text-[#311171] mb-2.5 uppercase tracking-wide">ข้อมูลการเดินทาง</h4>
+                  <div className="space-y-2 text-xs bg-slate-50/60 p-3.5 rounded-2xl border border-slate-100">
+                    <div className="grid grid-cols-[100px_1fr] gap-2">
+                      <span className="text-gray-500 font-bold">ผู้ขอใช้รถ:</span>
+                      <span className="font-bold text-gray-900">{selectedRequest.requester} ({selectedRequest.department})</span>
                     </div>
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">จุดออกเดินทาง</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.departureLocation}</span>
+                    <div className="grid grid-cols-[100px_1fr] gap-2">
+                      <span className="text-gray-500 font-bold">สถานที่ไป:</span>
+                      <span className="font-bold text-emerald-800">{selectedRequest.destination}</span>
                     </div>
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">ปลายทาง</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.destination}</span>
+                    <div className="grid grid-cols-[100px_1fr] gap-2">
+                      <span className="text-gray-500 font-bold">วันเดินทาง:</span>
+                      <span className="font-medium text-gray-800">{selectedRequest.date} ({selectedRequest.timeRange})</span>
                     </div>
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">วันที่ออกเดินทาง</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.date} เวลา {selectedRequest.timeRange.split(' - ')[0]} น.</span>
+                    <div className="grid grid-cols-[100px_1fr] gap-2">
+                      <span className="text-gray-500 font-bold">ผู้โดยสาร:</span>
+                      <span className="font-medium text-gray-800">{selectedRequest.passengers} ท่าน</span>
                     </div>
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">วันที่กลับ</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.returnDateStr || selectedRequest.date} เวลา {selectedRequest.timeRange.split(' - ')[1]} น.</span>
+                    <div className="grid grid-cols-[100px_1fr] gap-2">
+                      <span className="text-gray-500 font-bold">วัตถุประสงค์:</span>
+                      <span className="font-medium text-gray-800">{selectedRequest.reason}</span>
                     </div>
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">จำนวนผู้โดยสาร</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.passengers} คน</span>
-                    </div>
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">วัตถุประสงค์</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.reason}</span>
-                    </div>
-                    <div className="flex gap-2 text-[12px]">
-                      <span className="w-24 shrink-0 text-gray-500">งบประมาณ</span>
-                      <span className="text-gray-900 font-medium">{selectedRequest.budget}</span>
+                    <div className="grid grid-cols-[100px_1fr] gap-2">
+                      <span className="text-gray-500 font-bold">เบอร์ติดต่อ:</span>
+                      <span className="font-bold text-gray-900">{selectedRequest.phone || selectedRequest.coordinator.phone}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Coordinator */}
-                <div>
-                  <h4 className="text-[13px] font-black text-[#311171] mb-3">ผู้ประสานงาน</h4>
-                  <div className="flex gap-3 items-start">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
-                      <User size={20} />
-                    </div>
-                    <div>
-                      <p className="text-[13px] font-bold text-gray-900">{selectedRequest.coordinator.name}</p>
-                      <p className="text-[11px] text-gray-500">{selectedRequest.coordinator.role}</p>
-                      <p className="text-[11px] text-gray-500 mb-1">{selectedRequest.coordinator.dept}</p>
-                      <p className="text-[11px] text-gray-600 font-medium">โทร: {selectedRequest.coordinator.phone}</p>
-                      <p className="text-[11px] text-gray-600 font-medium">{selectedRequest.coordinator.email}</p>
+                {/* Allocation Info (For owner faculty) */}
+                {selectedRequest.isOwnerOfVan && (
+                  <div>
+                    <h4 className="text-xs font-black text-[#311171] mb-2.5 uppercase tracking-wide">การจัดสรรรถและคนขับ</h4>
+                    <div className="space-y-2 text-xs">
+                      <div className="p-3 bg-purple-50 border border-purple-200 text-[#311171] font-bold rounded-xl flex items-center justify-between">
+                        <span>ทะเบียนรถ: {selectedRequest.assignedVanPlate || "1นช3009 กรุงเทพมหานคร"}</span>
+                        <span className="text-[10px] bg-purple-200 text-purple-900 px-2 py-0.5 rounded-full font-bold">พร้อมใช้งาน</span>
+                      </div>
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold rounded-xl flex items-center justify-between">
+                        <span>คนขับ: {selectedRequest.assignedDriverName || "นาย (คนขับประจำคณะ)"}</span>
+                        <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">พร้อมปฏิบัติงาน</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Attachments */}
-                <div>
-                  <h4 className="text-[13px] font-black text-[#311171] mb-3">เอกสารแนบ</h4>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-100 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer group">
-                    <div className="flex items-center gap-3">
-                      <FileText size={20} className="text-red-500" />
-                      <div>
-                        <p className="text-[12px] font-bold text-gray-900">โครงการและกำหนดการ.pdf</p>
-                        <p className="text-[10px] text-gray-500">1.2 MB</p>
-                      </div>
-                    </div>
-                    <Download size={16} className="text-gray-400 group-hover:text-gray-700 transition-colors" />
-                  </div>
-                </div>
-
-                {/* Allocation Selection / Cross Faculty Notice */}
-                <div>
-                  {isCrossFacultyRequest ? (
-                    <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-4 space-y-2">
-                      <div className="flex items-center gap-2 text-purple-900 font-bold text-xs">
-                        <Users size={16} className="text-purple-600" />
-                        <span>คำขอยืมรถข้ามคณะ</span>
-                      </div>
-                      <p className="text-[11px] text-purple-700 leading-relaxed font-medium">
-                        คำขอนี้ส่งไปยังคณะเจ้าของรถเพื่อขอยืมรถตู้ โดยทางคณะเจ้าของรถจะเป็นผู้พิจารณาอนุมัติและจัดสรรคนขับและรถตู้
-                      </p>
-                      <div className="text-[11px] text-gray-600 pt-1 space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">สถานะคำขอ:</span>
-                          <span className="font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full text-[10px]">
-                            รอคณะปลายทางพิจารณาอนุมัติ
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <h4 className="text-[13px] font-black text-[#311171] mb-3">การจัดสรร (โดยแอดมิน)</h4>
-                      <div className="space-y-4">
-                        {/* Van Display */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-500 mb-1.5">รถประจำคณะ</label>
-                          <div className="w-full bg-purple-50 border border-purple-200 text-[#311171] text-[12px] font-bold rounded-xl px-3 py-2.5 flex items-center justify-between">
-                            <span>{selectedRequest.assignedVanPlate || "1นช3009 กรุงเทพมหานคร (ICT)"}</span>
-                            <span className="text-[10px] text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">พร้อมใช้งาน</span>
-                          </div>
-                        </div>
-
-                        {/* Driver Display */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-500 mb-1.5">คนขับประจำคณะ</label>
-                          <div className="relative w-full bg-emerald-50 border border-emerald-200 text-emerald-950 text-[12px] font-bold rounded-xl px-3 py-2.5 flex items-center justify-between">
-                            <span>{selectedRequest.assignedDriverName || "นาย (คนขับประจำคณะ ICT)"}</span>
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> พร้อมปฏิบัติงาน
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                )}
 
               </div>
 
-              {/* Sidebar Actions */}
-              {isCrossFacultyRequest ? (
-                /* Cross-faculty action buttons: Only Edit & Delete */
-                <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => handleOpenEditModal(selectedRequest)}
-                    className="py-3 px-3 bg-white hover:bg-orange-50 border border-orange-200 text-orange-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-xs hover:border-orange-300"
-                  >
-                    <Edit size={16} /> แก้ไขข้อมูล
-                  </button>
-                  <button 
-                    onClick={() => setDeleteConfirmBooking(selectedRequest)}
-                    className="py-3 px-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-xs hover:border-red-300"
-                  >
-                    <Trash2 size={16} /> ลบคำขอ
-                  </button>
-                </div>
-              ) : (
-                /* Regular internal booking action buttons: All 5 actions */
-                <div className="p-4 border-t border-gray-100 bg-white shrink-0 grid grid-cols-5 gap-2">
-                  <button 
-                    onClick={() => handleOpenEditModal(selectedRequest)}
-                    className="py-2.5 px-2 bg-white hover:bg-orange-50 border border-orange-200 text-orange-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Edit size={14} /> แก้ไข
-                  </button>
-                  <a
-                    href={`/faculty-admin/approvals/${selectedRequest.id}/print`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="py-2.5 px-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <FileText size={14} /> พิมพ์ใบขอ
-                  </a>
-                  <button 
-                    onClick={() => confirmAction(selectedRequest.id, "ปฏิเสธ")}
-                    className="py-2.5 px-2 bg-white hover:bg-red-50 border border-red-200 text-red-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <XCircle size={14} /> ปฏิเสธ
-                  </button>
-                  <button 
-                    onClick={() => confirmAction(selectedRequest.id, "ข้อมูลเพิ่ม")}
-                    className="py-2.5 px-2 bg-white hover:bg-blue-50 border border-blue-200 text-blue-600 text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Info size={14} /> ข้อมูลเพิ่ม
-                  </button>
-                  <button 
-                    onClick={() => confirmAction(selectedRequest.id, "อนุมัติ")}
-                    className="py-2.5 px-2 bg-[#2a8b5c] hover:bg-[#206a46] text-white text-[12px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                  >
-                    <CheckCircle2 size={14} /> อนุมัติ
-                  </button>
-                </div>
-              )}
+              {/* Action Buttons Panel */}
+              <div className="p-4 border-t border-gray-100 bg-white shrink-0 space-y-2">
+                {selectedRequest.isOwnerOfVan ? (
+                  /* เจ้าของรถ: มีปุ่มอนุมัติให้ยืม, ปฏิเสธ, แก้ไข, ลบ */
+                  <div>
+                    {selectedRequest.status === 'pending' && (
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <button
+                          onClick={() => confirmAction(selectedRequest.id, selectedRequest.isIncomingBorrow ? 'อนุญาตให้ยืม' : 'อนุมัติ')}
+                          className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs"
+                        >
+                          <CheckCircle2 size={16} /> {selectedRequest.isIncomingBorrow ? 'อนุมัติให้ยืม' : 'อนุมัติคำขอ'}
+                        </button>
+                        <button
+                          onClick={() => confirmAction(selectedRequest.id, 'ปฏิเสธ')}
+                          className="py-2.5 px-3 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs"
+                        >
+                          <XCircle size={16} /> ปฏิเสธคำขอ
+                        </button>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => handleOpenEditModal(selectedRequest)}
+                        className="py-2 px-2 bg-white hover:bg-orange-50 border border-orange-200 text-orange-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1"
+                      >
+                        <Edit size={14} /> แก้ไข
+                      </button>
+                      <a
+                        href={`/faculty-admin/approvals/${selectedRequest.id}/print`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2 px-2 bg-white hover:bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1"
+                      >
+                        <Printer size={14} /> พิมพ์
+                      </a>
+                      <button
+                        onClick={() => setDeleteConfirmBooking(selectedRequest)}
+                        className="py-2 px-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1"
+                      >
+                        <Trash2 size={14} /> ลบ
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ผู้ส่งคำขอไปขอยืม: มีปุ่มแก้ไขและยกเลิกคำขอ */
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => handleOpenEditModal(selectedRequest)}
+                      className="py-2.5 px-3 bg-white hover:bg-orange-50 border border-orange-200 text-orange-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs"
+                    >
+                      <Edit size={16} /> แก้ไขคำขอ
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirmBooking(selectedRequest)}
+                      className="py-2.5 px-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs"
+                    >
+                      <Trash2 size={16} /> ยกเลิกคำขอยืม
+                    </button>
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
+
         </div>
-      </div>
 
-      {/* Edit Booking Modal */}
-      {editingBooking && (
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in"
-          onClick={() => setEditingBooking(null)}
-        >
-          <div 
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-black text-gray-900">แก้ไขข้อมูลคำขอ</h3>
-                <p className="text-xs text-purple-700 font-bold mt-0.5">เลขที่คำขอ: {editingBooking.id}</p>
-              </div>
-              <button 
-                onClick={() => setEditingBooking(null)}
-                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditBooking} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              
-              {/* Destination */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">สถานที่ไป / ปลายทาง <span className="text-red-500">*</span></label>
-                <input 
-                  type="text" 
-                  required
-                  value={editFormData.destination}
-                  onChange={(e) => setEditFormData({...editFormData, destination: e.target.value})}
-                  className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                  placeholder="เช่น โรงพยาบาลพะเยา, มหาวิทยาลัยเชียงใหม่"
+        {/* Confirmation Modal */}
+        {pendingAction && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+              <h3 className="text-base font-black text-gray-900">
+                ยืนยันการ{pendingAction.type}
+              </h3>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                คุณแน่ใจหรือไม่ว่าต้องการ <strong>{pendingAction.type}</strong> คำขอเลขที่ <strong>{pendingAction.id}</strong>?
+              </p>
+              {pendingAction.type === 'ปฏิเสธ' && (
+                <textarea
+                  placeholder="ระบุเหตุผลการปฏิเสธ (ถ้ามี)..."
+                  value={infoReason}
+                  onChange={(e) => setInfoReason(e.target.value)}
+                  className="w-full p-3 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                  rows={3}
                 />
-              </div>
-
-              {/* Purpose */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">วัตถุประสงค์ <span className="text-red-500">*</span></label>
-                <textarea 
-                  required
-                  rows={2}
-                  value={editFormData.reason}
-                  onChange={(e) => setEditFormData({...editFormData, reason: e.target.value})}
-                  className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171] resize-none"
-                  placeholder="ระบุวัตถุประสงค์การเดินทาง"
-                />
-              </div>
-
-              {/* Dates and Times */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">วันที่ออกเดินทาง</label>
-                  <input 
-                    type="date" 
-                    required
-                    value={editFormData.startDate}
-                    onChange={(e) => setEditFormData({...editFormData, startDate: e.target.value})}
-                    className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">เวลาออกเดินทาง</label>
-                  <input 
-                    type="time" 
-                    required
-                    value={editFormData.startTime}
-                    onChange={(e) => setEditFormData({...editFormData, startTime: e.target.value})}
-                    className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">วันที่เดินทางกลับ</label>
-                  <input 
-                    type="date" 
-                    required
-                    value={editFormData.returnDate}
-                    onChange={(e) => setEditFormData({...editFormData, returnDate: e.target.value})}
-                    className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">เวลาเดินทางกลับ</label>
-                  <input 
-                    type="time" 
-                    required
-                    value={editFormData.endTime}
-                    onChange={(e) => setEditFormData({...editFormData, endTime: e.target.value})}
-                    className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                  />
-                </div>
-              </div>
-
-              {/* Passengers & Trip Type */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">จำนวนผู้โดยสาร (คน)</label>
-                  <input 
-                    type="number" 
-                    min={1}
-                    max={15}
-                    required
-                    value={editFormData.passengers}
-                    onChange={(e) => setEditFormData({...editFormData, passengers: Number(e.target.value)})}
-                    className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">ประเภทการเดินทาง</label>
-                  <select 
-                    value={editFormData.tripType}
-                    onChange={(e) => setEditFormData({...editFormData, tripType: e.target.value})}
-                    className="w-full p-3 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171] bg-white"
-                  >
-                    <option value="ในจังหวัดพะเยา">ในจังหวัดพะเยา</option>
-                    <option value="ต่างจังหวัด">ต่างจังหวัด</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Phone & Budget */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">เบอร์ติดต่อ (10 หลัก)</label>
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      maxLength={10}
-                      value={editFormData.phone}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                        setEditFormData({...editFormData, phone: val});
-                        if (val && val.length !== 10) {
-                          setPhoneError('เบอร์โทรศัพท์ต้องครบ 10 หลัก');
-                        } else {
-                          setPhoneError(null);
-                        }
-                      }}
-                      className="w-full p-3 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                      placeholder="08XXXXXXXX"
-                    />
-                  </div>
-                  {phoneError && <p className="text-[10px] text-red-500 mt-1 font-bold">{phoneError}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">แหล่งงบประมาณ</label>
-                  <input 
-                    type="text" 
-                    value={editFormData.budget}
-                    onChange={(e) => setEditFormData({...editFormData, budget: e.target.value})}
-                    className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-[#311171]"
-                    placeholder="งบประมาณคณะ"
-                  />
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-3 border-t border-gray-100">
+              )}
+              <div className="flex gap-2 justify-end pt-2">
                 <button
-                  type="button"
-                  onClick={() => setEditingBooking(null)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 rounded-xl font-bold text-xs text-gray-700 transition-colors"
+                  onClick={() => setPendingAction(null)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
-                  type="submit"
-                  className="flex-1 bg-[#311171] hover:bg-purple-900 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-colors"
+                  onClick={executeAction}
+                  className={`px-4 py-2 text-white font-bold text-xs rounded-xl transition-colors ${
+                    pendingAction.type === 'ปฏิเสธ' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
                 >
-                  บันทึกการแก้ไข
+                  ยืนยัน
                 </button>
               </div>
-
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmBooking && (
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in"
-          onClick={() => setDeleteConfirmBooking(null)}
-        >
-          <div 
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 p-6 text-center space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-2 shadow-inner">
-              <Trash2 size={30} />
             </div>
-            <div>
-              <h3 className="text-lg font-black text-gray-900">ยืนยันการลบคำขอ?</h3>
-              <p className="text-xs text-gray-500 font-medium mt-1.5 leading-relaxed">
-                คุณแน่ใจหรือไม่ว่าต้องการลบคำขอเลขที่ <strong className="text-gray-900">{deleteConfirmBooking.id}</strong>?
-                {deleteConfirmBooking.isCrossFaculty && <span className="block mt-1 text-purple-700 font-bold">(คำขอยืมรถข้ามคณะ)</span>}
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirmBooking && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+              <div className="flex items-center gap-2 text-red-600 font-black text-sm">
+                <Trash2 size={20} />
+                <span>ยืนยันการลบคำขอ</span>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                คุณต้องการลบคำขอเลขที่ <strong>{deleteConfirmBooking.id}</strong> ({deleteConfirmBooking.destination}) ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้
               </p>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button 
-                onClick={() => setDeleteConfirmBooking(null)}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold text-xs transition-colors"
-              >
-                ยกเลิก
-              </button>
-              <button 
-                onClick={handleDeleteBooking}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-bold text-xs shadow-md transition-colors"
-              >
-                ลบคำขอ
-              </button>
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  onClick={() => setDeleteConfirmBooking(null)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={handleDeleteBooking}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-colors"
+                >
+                  ลบคำขอทันที
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Pending Action Confirmation Modal */}
-      {pendingAction && (
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in"
-          onClick={() => setPendingAction(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-5">
-              <div className="flex justify-between items-start mb-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-inner ${
-                  pendingAction.type === 'ปฏิเสธ' ? 'bg-red-100 text-red-600' :
-                  pendingAction.type === 'ข้อมูลเพิ่ม' ? 'bg-blue-100 text-blue-600' :
-                  'bg-green-100 text-green-600'
-                }`}>
-                  {pendingAction.type === 'ปฏิเสธ' ? <XCircle size={24} strokeWidth={2.5} /> :
-                   pendingAction.type === 'ข้อมูลเพิ่ม' ? <Info size={24} strokeWidth={2.5} /> :
-                   <CheckCircle2 size={24} strokeWidth={2.5} />}
+        {/* Edit Modal */}
+        {editingBooking && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+            <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 my-8">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                  <Edit size={18} className="text-orange-500" />
+                  แก้ไขคำขอ {editingBooking.id}
+                </h3>
+                <button onClick={() => setEditingBooking(null)} className="text-gray-400 hover:text-gray-700">✕</button>
+              </div>
+
+              <form onSubmit={handleSaveEditBooking} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">สถานที่ปลายทาง</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.destination}
+                    onChange={(e) => setEditFormData({ ...editFormData, destination: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171]"
+                  />
                 </div>
-                <button 
-                  onClick={() => setPendingAction(null)}
-                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1.5 rounded-xl transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <h3 className="text-lg font-black text-gray-900 mb-1">
-                {pendingAction.type === 'ปฏิเสธ' ? 'ยืนยันการปฏิเสธ' :
-                 pendingAction.type === 'ข้อมูลเพิ่ม' ? 'ขอข้อมูลเพิ่มเติม' :
-                 'ยืนยันการอนุมัติ'}
-              </h3>
-              <p className="text-sm font-medium text-gray-600 leading-relaxed mb-4">
-                {pendingAction.type === 'ข้อมูลเพิ่ม' 
-                  ? `ระบุข้อมูลที่คุณต้องการเพิ่มเติมสำหรับคำขอ ${pendingAction.id}`
-                  : `คุณต้องการ${pendingAction.type}คำขอ ${pendingAction.id} ใช่หรือไม่?`}
-              </p>
 
-              {pendingAction.type === 'ข้อมูลเพิ่ม' && (
-                <textarea
-                  className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none h-24"
-                  placeholder="พิมพ์ข้อความที่นี่..."
-                  value={infoReason}
-                  onChange={(e) => setInfoReason(e.target.value)}
-                />
-              )}
-            </div>
-            <div className="bg-gray-50 px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
-              <button
-                onClick={() => setPendingAction(null)}
-                className="bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-sm font-bold py-2 px-4 rounded-xl transition-colors"
-              >
-                ยกเลิก
-              </button>
-              <button
-                onClick={executeAction}
-                className={`text-white text-sm font-bold py-2 px-6 rounded-xl transition-colors shadow-sm ${
-                  pendingAction.type === 'ปฏิเสธ' ? 'bg-red-600 hover:bg-red-700' :
-                  pendingAction.type === 'ข้อมูลเพิ่ม' ? 'bg-blue-600 hover:bg-blue-700' :
-                  'bg-[#2a8b5c] hover:bg-[#206a46]'
-                }`}
-              >
-                {pendingAction.type === 'ข้อมูลเพิ่ม' ? 'ส่งข้อความ' : 'ยืนยัน'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Alert Modal */}
-      {alertMessage && (
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in"
-          onClick={() => setAlertMessage(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-5">
-              <div className="flex justify-between items-start mb-3">
-                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 shrink-0 shadow-inner">
-                  <CheckCircle2 size={24} strokeWidth={2.5} />
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">วัตถุประสงค์การเดินทาง</label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={editFormData.reason}
+                    onChange={(e) => setEditFormData({ ...editFormData, reason: e.target.value })}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171]"
+                  />
                 </div>
-                <button 
-                  onClick={() => setAlertMessage(null)}
-                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1.5 rounded-xl transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <h3 className="text-lg font-black text-gray-900 mb-1">สำเร็จ!</h3>
-              <p className="text-sm font-medium text-gray-600 leading-relaxed">
-                {alertMessage}
-              </p>
-            </div>
-            <div className="bg-gray-50 px-5 py-4 border-t border-gray-100 flex justify-end">
-              <button
-                onClick={() => setAlertMessage(null)}
-                className="bg-[#311171] hover:bg-[#250d55] text-white text-sm font-bold py-2 px-6 rounded-xl transition-colors shadow-sm"
-              >
-                ตกลง
-              </button>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">วันออกเดินทาง</label>
+                    <input
+                      type="date"
+                      required
+                      value={editFormData.startDate}
+                      onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">เวลาออกเดินทาง</label>
+                    <input
+                      type="time"
+                      required
+                      value={editFormData.startTime}
+                      onChange={(e) => setEditFormData({ ...editFormData, startTime: e.target.value })}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">วันเดินทางกลับ</label>
+                    <input
+                      type="date"
+                      required
+                      value={editFormData.returnDate}
+                      onChange={(e) => setEditFormData({ ...editFormData, returnDate: e.target.value })}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">เวลาเดินทางกลับ</label>
+                    <input
+                      type="time"
+                      required
+                      value={editFormData.endTime}
+                      onChange={(e) => setEditFormData({ ...editFormData, endTime: e.target.value })}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">จำนวนผู้โดยสาร</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={15}
+                      required
+                      value={editFormData.passengers}
+                      onChange={(e) => setEditFormData({ ...editFormData, passengers: Number(e.target.value) })}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">เบอร์โทรติดต่อ (10 หลัก)</label>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={editFormData.phone}
+                      onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value.replace(/\D/g, '') })}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl"
+                    />
+                    {phoneError && <span className="text-[10px] text-red-500 font-bold">{phoneError}</span>}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 justify-end pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingBooking(null)}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#311171] hover:bg-[#250d57] text-white font-bold rounded-xl shadow-xs"
+                  >
+                    บันทึกการแก้ไข
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+      </div>
     </AppShell>
   );
 }
