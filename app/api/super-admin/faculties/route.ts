@@ -40,7 +40,24 @@ interface RawFacultyRow {
   mainDrivers: number | string;
 }
 
-let cachedFaculties: { data: any[]; timestamp: number } | null = null;
+interface CachedFacultyItem {
+  id: number;
+  name: string;
+  code?: string;
+  adminName?: string;
+  adminPhone?: string;
+  adminTitle?: string;
+  adminEmail?: string;
+  executiveName?: string;
+  executiveTitle?: string;
+  executivePhone?: string;
+  executiveEmail?: string;
+  status?: string;
+  vanCount?: number;
+  driverCount?: number;
+  [key: string]: unknown;
+}
+let cachedFaculties: { data: CachedFacultyItem[]; timestamp: number } | null = null;
 
 export function invalidateFacultiesCache() {
   cachedFaculties = null;

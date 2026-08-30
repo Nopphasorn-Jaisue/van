@@ -42,7 +42,8 @@ export default function SuperAdminFaculties() {
   const [deleteConfirmFaculty, setDeleteConfirmFaculty] = useState<FacultyItem | null>(null);
 
   
-  const [allUsersList, setAllUsersList] = useState<any[]>([]);
+  interface SuperAdminUserItem { id: number; name: string; email: string; role: string; facultyId?: number | null; }
+  const [allUsersList, setAllUsersList] = useState<SuperAdminUserItem[]>([]);
   const [faculties, setFaculties] = useState<FacultyItem[]>([]);
 
   const loadData = async () => {

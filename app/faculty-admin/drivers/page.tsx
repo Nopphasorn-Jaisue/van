@@ -92,7 +92,7 @@ export default function DriversPage() {
           name: d.name || d.user?.name || 'ไม่มีชื่อ',
           email: d.email || d.user?.email || 'ไม่มีอีเมล',
           phone: d.phone,
-          vanAssigned: d.vanAssigned || (d.assignedVan as any)?.plate || (d as any).vanPlate || ((d as any).facultyId === 1 || (d as any).dbId === 5 ? '1นช3009 กรุงเทพมหานคร' : 'ยังไม่ผูกทะเบียน'),
+          vanAssigned: d.vanAssigned || (d.assignedVan as { plate?: string } | undefined)?.plate || (d as { vanPlate?: string }).vanPlate || ((d as { facultyId?: number }).facultyId === 1 || (d as { dbId?: number }).dbId === 5 ? '1นช3009 กรุงเทพมหานคร' : 'ยังไม่ผูกทะเบียน'),
           assignedVanId: d.assignedVanId ? d.assignedVanId.toString() : (d.assignedVan?.id ? d.assignedVan.id.toString() : ""),
           facultyId: d.facultyId ? d.facultyId.toString() : "",
           contractStart: d.contractStart || '2024-01-01',

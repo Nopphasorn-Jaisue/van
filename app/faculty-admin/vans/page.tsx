@@ -109,7 +109,32 @@ export default function VansPage() {
         const text = await res.text();
         const data = JSON.parse(text);
         if (data && data.vans && Array.isArray(data.vans)) {
-          const normalized = data.vans.map((v: any) => ({
+          interface RawVanApiRecord { 
+  id: string | number; 
+  vanName?: string; 
+  name?: string; 
+  brand?: string; 
+  model?: string; 
+  plateNumber?: string; 
+  plate?: string; 
+  seats?: number; 
+  capacity?: number; 
+  status?: string; 
+  mileage?: number; 
+  fuelType?: string; 
+  assignedDriver?: string; 
+  driverName?: string; 
+  insuranceExpiry?: string; 
+  insExp?: string; 
+  taxExpiry?: string; 
+  taxExp?: string; 
+  nextCheckMileage?: number;
+  isShared?: boolean;
+  image?: string;
+  imageUrl?: string;
+  [key: string]: unknown;
+}
+        const normalized = data.vans.map((v: RawVanApiRecord) => ({
             id: String(v.id || ''),
             vanName: v.vanName || v.brand || v.name || "Toyota Commuter",
             plate: v.plate || "",
@@ -272,7 +297,7 @@ export default function VansPage() {
   };
 
   const filteredVans = (vans || []).filter(v => {
-    const name = (v?.vanName || (v as any)?.brand || '').toLowerCase();
+    const name = (v?.vanName || (v as { brand?: string })?.brand || '').toLowerCase();
     const plate = (v?.plate || '').toLowerCase();
     const q = (searchQuery || '').toLowerCase();
     return name.includes(q) || plate.includes(q);

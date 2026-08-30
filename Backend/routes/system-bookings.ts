@@ -31,7 +31,31 @@ export async function handleListBookings(request: Request) {
   }
 
   try {
-        const rawRows = await prisma.$queryRaw<any[]>`
+        interface RawDbBookingRow {
+      id: string;
+      destination: string;
+      purpose: string;
+      passengers: number;
+      startAt: Date;
+      endAt: Date;
+      submittedAt: Date;
+      budgetSource: string;
+      tripType: string;
+      status: string;
+      rejectReason: string | null;
+      phone: string | null;
+      requesterId: number;
+      targetFacultyId: number;
+      requester: string | null;
+      requesterEmail: string | null;
+      requesterFaculty: string | null;
+      requesterFacultyId: number | null;
+      targetFaculty: string | null;
+      assignedDriverName: string | null;
+      vanPlate: string | null;
+      vanName: string | null;
+    }
+    const rawRows = await prisma.$queryRaw<RawDbBookingRow[]>`
       SELECT 
         b.id,
         b.destination,

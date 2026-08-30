@@ -94,7 +94,7 @@ export default function FacultyAdminDashboard() {
         };
         
         const rawBookings = Array.isArray(reqData.bookings) ? reqData.bookings : [];
-        const pendingBookings = rawBookings.filter((b: any) => b.status === 'WAITING_ADMIN' || b.status === 'WAITING_EXEC');
+        const pendingBookings = rawBookings.filter((b: { status?: string }) => b.status === 'WAITING_ADMIN' || b.status === 'WAITING_EXEC');
         
         const mapped = pendingBookings.map((b: Booking) => ({
           id: b.id,
@@ -109,13 +109,13 @@ export default function FacultyAdminDashboard() {
 
         const vans = Array.isArray(vanData.vans) ? vanData.vans : [];
         const vCount = vans.length;
-        const vReady = vans.filter((v: Van) => v.status === 'ready' || (v as any).isActive).length;
+        const vReady = vans.filter((v: Van & { isActive?: boolean }) => v.status === 'ready' || Boolean(v.isActive)).length;
         setVansCount(vCount);
         setReadyVansCount(vReady);
 
         const drivers = Array.isArray(drvData.drivers) ? drvData.drivers : [];
         const dCount = drivers.length;
-        const dActive = drivers.filter((d: Driver) => !d.isLocked && (d as any).isActive !== false).length;
+        const dActive = drivers.filter((d: Driver & { isActive?: boolean }) => !d.isLocked && d.isActive !== false).length;
         setDriversCount(dCount);
         setActiveDriversCount(dActive);
 

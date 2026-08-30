@@ -41,7 +41,7 @@ export async function generateVanBundle(passengers: number, userFacultyId: numbe
   };
 }
 
-export function calculateRiskScore(selectedVans: any[], userFacultyId: number) {
+export function calculateRiskScore(selectedVans: { id: string | number; facultyId?: number; [key: string]: unknown }[], userFacultyId: number) {
   if (selectedVans.length === 0) return { risk: 0, level: 'low', message: '' };
 
   let totalRisk = 0;

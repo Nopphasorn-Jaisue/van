@@ -70,14 +70,42 @@ export default function SuperAdminVans() {
 
       if (resVans.ok) {
         const vansJson = await resVans.json();
-        const rawVans: any[] = Array.isArray(vansJson) ? vansJson : (vansJson.vans || []);
+        interface RawSuperAdminVanRecord { 
+  id: string | number; 
+  brand?: string; 
+  model?: string; 
+  name?: string; 
+  plateNumber?: string; 
+  plate?: string; 
+  seats?: number; 
+  capacity?: number; 
+  status?: string; 
+  facultyId?: number; 
+  faculty?: { nameTh?: string; name?: string }; 
+  facultyName?: string; 
+  mileage?: number; 
+  fuelType?: string; 
+  assignedDriver?: string;
+  brandModel?: string;
+  isActive?: boolean;
+  driver?: string;
+  driverAvatar?: string;
+  nextMaintenance?: string;
+  nextInspection?: string;
+  nextService?: string;
+  image?: string;
+  taxExp?: string;
+  insExp?: string;
+  [key: string]: unknown;
+}
+        const rawVans: RawSuperAdminVanRecord[] = Array.isArray(vansJson) ? vansJson : (vansJson.vans || []);
         const formatted: VanItem[] = rawVans.map(v => ({
-          id: v.id,
-          plate: v.plate || v.plateNumber,
+          id: Number(v.id || 0),
+          plate: v.plate || v.plateNumber || 'ยังไม่ระบุทะเบียน',
           brandModel: v.name || v.brandModel || 'Toyota Commuter',
           seats: v.capacity || 10,
-          faculty: v.faculty?.nameTh || v.faculty || 'ส่วนกลาง',
-          status: v.isActive === false ? 'MAINTENANCE' : (v.status || 'READY'),
+          faculty: (typeof v.faculty === 'object' ? (v.faculty?.nameTh || v.faculty?.name) : v.faculty) || 'ส่วนกลาง',
+          status: (v.isActive === false ? 'MAINTENANCE' : (v.status === 'MAINTENANCE' || v.status === 'DISABLED' ? v.status : 'READY')) as 'READY' | 'MAINTENANCE' | 'DISABLED',
           driver: v.driver || 'ไม่มีคนขับประจำ',
           driverAvatar: v.driverAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
           nextInspection: v.nextMaintenance || 'ไม่ระบุ',
@@ -93,7 +121,7 @@ export default function SuperAdminVans() {
       if (resFacs.ok) {
         const facsJson = await resFacs.json();
         if (facsJson.success && Array.isArray(facsJson.data)) {
-          const facList = facsJson.data.map((f: any) => ({ id: f.id, name: f.name }));
+          const facList = facsJson.data.map((f: { id: number; name: string }) => ({ id: f.id, name: f.name }));
           setFacultiesList(facList);
           try { sessionStorage.setItem('cached_superadmin_faculties_list', JSON.stringify(facList)); } catch {}
         }

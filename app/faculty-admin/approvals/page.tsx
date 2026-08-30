@@ -8,6 +8,29 @@ import {
   X, Edit, Trash2, Printer, ArrowUpRight, ArrowDownLeft, History, Check, ShieldAlert
 } from 'lucide-react';
 
+interface ApiRawBookingItem {
+  id: string;
+  requester?: string;
+  requesterEmail?: string;
+  phone?: string;
+  requesterFaculty?: string;
+  requesterFacultyId?: number;
+  targetFaculty?: string;
+  targetFacultyId?: number;
+  destination?: string;
+  purpose?: string;
+  passengers?: number;
+  startAt?: string;
+  endAt?: string;
+  submittedAt?: string;
+  budgetSource?: string;
+  tripType?: string;
+  status?: string;
+  rejectReason?: string | null;
+  assignedDriverName?: string;
+  assignedVanPlate?: string;
+}
+
 interface MappedRequest {
   id: string;
   time: string;
@@ -117,7 +140,7 @@ export default function ApprovalsPage() {
                  ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
         };
         
-        const mapped: MappedRequest[] = (data.bookings || []).map((b: any) => {
+        const mapped: MappedRequest[] = (data.bookings || []).map((b: ApiRawBookingItem) => {
           const reqFacId = Number(b.requesterFacultyId || 1);
           const tgtFacId = Number(b.targetFacultyId || 1);
 
@@ -134,12 +157,12 @@ export default function ApprovalsPage() {
             statusLabel = 'pending';
           }
           
-          const startDate = new Date(b.startAt);
-          const endDate = new Date(b.endAt);
+          const startDate = new Date(b.startAt || Date.now());
+          const endDate = new Date(b.endAt || Date.now());
           
           return {
             id: b.id,
-            time: formatThaiDateTime(b.submittedAt),
+            time: formatThaiDateTime(b.submittedAt || new Date().toISOString()),
             requester: b.requester,
             requesterEmail: b.requesterEmail || "-",
             department: b.requesterFaculty,

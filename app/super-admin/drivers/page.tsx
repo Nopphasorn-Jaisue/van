@@ -53,7 +53,32 @@ export default function SuperAdminDrivers() {
       if (resDrivers.ok) {
         const driversJson = await resDrivers.json();
         const rawDrivers = Array.isArray(driversJson) ? driversJson : (driversJson.drivers || []);
-        const formatted: DriverItem[] = rawDrivers.map((d: any) => ({
+        interface RawSuperAdminDriver { 
+  id: string | number; 
+  name: string; 
+  phone?: string; 
+  age?: number; 
+  facultyId?: number; 
+  faculty?: { nameTh?: string; name?: string }; 
+  facultyName?: string; 
+  isActive?: boolean; 
+  isLocked?: boolean; 
+  assignedVan?: { plate?: string; brand?: string; model?: string }; 
+  totalDistanceKm?: number; 
+  tripCount?: number;
+  avatar?: string;
+  user?: { email?: string; name?: string };
+  employeeId?: string;
+  type?: string;
+  assignedVanInfo?: { plate?: string; brand?: string; model?: string };
+  vanModel?: string;
+  email?: string;
+  status?: string;
+  recentTrips?: unknown[];
+  availabilities?: unknown[];
+  [key: string]: unknown;
+}
+        const formatted: DriverItem[] = rawDrivers.map((d: RawSuperAdminDriver) => ({
           id: d.id,
           avatar: d.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
           name: d.name || d.user?.name || 'ไม่ระบุชื่อ',
@@ -75,8 +100,8 @@ export default function SuperAdminDrivers() {
       if (resFacs.ok) {
         const facsJson = await resFacs.json();
         if (facsJson.success && Array.isArray(facsJson.data)) {
-          const uniqueFaculties = facsJson.data.filter((v: any, i: number, a: any[]) => a.findIndex(t => t.name === v.name) === i);
-          const facList = uniqueFaculties.map((f: any) => ({ id: f.id, name: f.name }));
+          const uniqueFaculties = facsJson.data.filter((v: { id: number; name: string }, i: number, a: { id: number; name: string }[]) => a.findIndex(t => t.name === v.name) === i);
+          const facList = uniqueFaculties.map((f: { id: number; name: string }) => ({ id: f.id, name: f.name }));
           setFacultiesList(facList);
           try { sessionStorage.setItem('cached_superadmin_faculties_list', JSON.stringify(facList)); } catch {}
         }

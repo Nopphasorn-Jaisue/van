@@ -133,7 +133,7 @@ export async function listBookings(status?: SystemBookingStatus, facultyId?: num
     orderBy: { createdAt: "desc" },
   });
 
-  return Promise.all(rows.map((row) => toBookingDto(row as any)));
+  return Promise.all(rows.map((row) => toBookingDto(row as unknown as Parameters<typeof toBookingDto>[0])));
 }
 
 export async function getBookingById(id: string) {
