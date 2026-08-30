@@ -34,7 +34,7 @@ export function invalidateVansCache() {
   cachedVans = {};
 }
 
-export async function handleListVans(request?: Request) {
+export async function handleListVans(_request?: Request) {
   const user = await getAuthUser();
   const facultyId = user?.facultyId;
   const facultyName = user?.faculty?.nameTh;
@@ -153,7 +153,7 @@ export async function handleUpdateVan(request: Request, id: string) {
   }
 }
 
-export async function handleDeleteVan(request: Request, id: string) {
+export async function handleDeleteVan(_request: Request, id: string) {
   try {
     const numericId = parseInt(id.replace('van-', ''));
     if (!isNaN(numericId)) {

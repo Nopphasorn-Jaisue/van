@@ -10,7 +10,7 @@ export function invalidateDriversCache() {
   cachedDrivers = {};
 }
 
-export async function handleListDrivers(request?: Request) {
+export async function handleListDrivers(_request?: Request) {
   const user = await getAuthUser();
   const facultyId = user?.facultyId;
   const facultyName = user?.faculty?.nameTh;
@@ -102,7 +102,7 @@ export async function handleCreateDriver(request: Request) {
   }
 }
 
-export async function handleGetDriverDashboard(request: Request, id: string) {
+export async function handleGetDriverDashboard(_request: Request, id: string) {
   try {
     const numericId = parseInt(id.replace('drv-', ''));
     const driver = await prisma.driver.findFirst({
@@ -156,7 +156,7 @@ export async function handleUpdateDriver(request: Request, id: string) {
   }
 }
 
-export async function handleDeleteDriver(request: Request, id: string) {
+export async function handleDeleteDriver(_request: Request, id: string) {
   try {
     const numericId = parseInt(id.replace('drv-', ''));
     if (!isNaN(numericId)) {
