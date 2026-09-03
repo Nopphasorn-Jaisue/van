@@ -1694,42 +1694,54 @@ function CalendarContent() {
                     <div className="flex flex-wrap items-center gap-2 pt-1.5">
 
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const availableBorrowed = vansList.filter(v => v.facultyName !== eventFormData.bookingFaculty);
-                          const alreadySelectedVanIds = new Set(eventFormData.selectedVans.map(v => v.vanId));
-                          const unselectedBorrow = availableBorrowed.find(v => !alreadySelectedVanIds.has(v.id));
+                      {(() => {
+                        const availableBorrowed = vansList.filter(v => v.facultyName !== eventFormData.bookingFaculty);
+                        const alreadySelectedCount = eventFormData.selectedVans.filter(v => v.isBorrow).length;
+                        const isMaxedOut = alreadySelectedCount >= availableBorrowed.length;
 
-                          if (!unselectedBorrow) {
-                            Swal.fire({
-                              title: 'จัดสรรรถครบแล้ว',
-                              text: 'คุณได้เลือกขอยืมรถครบทุกคณะที่มีอยู่ในระบบแล้ว',
-                              icon: 'info',
-                              confirmButtonText: 'รับทราบ',
-                              confirmButtonColor: '#311171'
-                            });
-                            return;
-                          }
+                        return (
+                          <button
+                            type="button"
+                            disabled={isMaxedOut}
+                            onClick={() => {
+                              const alreadySelectedVanIds = new Set(eventFormData.selectedVans.map(v => v.vanId));
+                              const unselectedBorrow = availableBorrowed.find(v => !alreadySelectedVanIds.has(v.id));
 
-                          const newBorrowItem: SelectedVanItem = {
-                            id: `van-${Date.now()}-${eventFormData.selectedVans.length + 1}`,
-                            vanId: unselectedBorrow.id,
-                            facultyName: unselectedBorrow.facultyName,
-                            isBorrow: true,
-                            plate: unselectedBorrow.plate,
-                            driverName: unselectedBorrow.driverName,
-                            phone: unselectedBorrow.driverPhone
-                          };
-                          setEventFormData({
-                            ...eventFormData,
-                            selectedVans: [...eventFormData.selectedVans, newBorrowItem]
-                          });
-                        }}
-                        className="px-3 py-1.5 bg-purple-50 border border-purple-200 hover:bg-purple-100 text-[#311171] rounded-xl text-[11px] font-black transition-all flex items-center gap-1 shadow-2xs"
-                      >
-                        <span>+ ขอยืมรถคณะอื่นเพิ่ม</span>
-                      </button>
+                              if (!unselectedBorrow) {
+                                Swal.fire({
+                                  title: 'ไม่มีรถตู้ให้ยืมเพิ่ม',
+                                  text: `ในระบบมีรถตู้ของคณะอื่นที่เปิดให้ยืมอยู่ทั้งหมด ${availableBorrowed.length} คัน ซึ่งท่านได้จัดสรรครบทุกคันแล้ว ไม่สามารถเพิ่มซ้ำได้ครับ`,
+                                  icon: 'warning',
+                                  confirmButtonText: 'เข้าใจแล้ว',
+                                  confirmButtonColor: '#311171'
+                                });
+                                return;
+                              }
+
+                              const newBorrowItem: SelectedVanItem = {
+                                id: `van-${Date.now()}-${eventFormData.selectedVans.length + 1}`,
+                                vanId: unselectedBorrow.id,
+                                facultyName: unselectedBorrow.facultyName,
+                                isBorrow: true,
+                                plate: unselectedBorrow.plate,
+                                driverName: unselectedBorrow.driverName,
+                                phone: unselectedBorrow.driverPhone
+                              };
+                              setEventFormData({
+                                ...eventFormData,
+                                selectedVans: [...eventFormData.selectedVans, newBorrowItem]
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-black transition-all flex items-center gap-1 shadow-2xs ${
+                              isMaxedOut 
+                                ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'bg-purple-50 border border-purple-200 hover:bg-purple-100 text-[#311171]'
+                            }`}
+                          >
+                            <span>{isMaxedOut ? `✓ ยืมครบทุกคันในระบบแล้ว (${availableBorrowed.length}/${availableBorrowed.length} คัน)` : '+ ขอยืมรถคณะอื่นเพิ่ม'}</span>
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
