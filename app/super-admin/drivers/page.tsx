@@ -509,7 +509,25 @@ export default function SuperAdminDrivers() {
                 <span>แก้ไขข้อมูล</span>
               </button>
               <button 
-                onClick={() => { setSelectedDriverId(null); showToast("ลบพนักงานขับรถเรียบร้อยแล้ว"); }}
+                onClick={async () => {
+    if (!selectedDriver) return;
+    if (!confirm(`คุณต้องการลบข้อมูลพนักงานขับรถ ${selectedDriver.name} ใช่หรือไม่?`)) return;
+    try {
+      const res = await fetch(`/api/drivers/${selectedDriver.id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        showToast("ลบพนักงานขับรถเรียบร้อยแล้ว");
+        setSelectedDriverId(null);
+        loadData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || "เกิดข้อผิดพลาดในการลบพนักงานขับรถ");
+      }
+    } catch {
+      showToast("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
+    }
+  }}
                 className="flex-1 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
               >
                 <Trash2 size={14} />
@@ -561,7 +579,30 @@ export default function SuperAdminDrivers() {
             </div>
             <div className="flex gap-2 pt-2">
               <button onClick={() => setEditingDriver(null)} className="flex-1 bg-gray-100 py-2 rounded-xl text-xs font-bold">ยกเลิก</button>
-              <button onClick={() => { setEditingDriver(null); showToast("บันทึกการแก้ไขข้อมูลเรียบร้อยแล้ว"); }} className="flex-1 bg-[#311171] text-white py-2 rounded-xl text-xs font-bold">บันทึกข้อมูล</button>
+              <button onClick={async () => {
+    if (!editingDriver) return;
+    try {
+      const res = await fetch(`/api/drivers/${editingDriver.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingDriver.name,
+          phone: editingDriver.phone,
+          status: editingDriver.status
+        })
+      });
+      if (res.ok) {
+        showToast("บันทึกการแก้ไขข้อมูลพนักงานขับรถเรียบร้อยแล้ว");
+        loadData();
+      } else {
+        showToast("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+      }
+    } catch {
+      showToast("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
+    } finally {
+      setEditingDriver(null);
+    }
+  }} className="flex-1 bg-[#311171] text-white py-2 rounded-xl text-xs font-bold">บันทึกข้อมูล</button>
             </div>
           </div>
         </div>
