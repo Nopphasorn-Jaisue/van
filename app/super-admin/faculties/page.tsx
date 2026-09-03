@@ -346,7 +346,7 @@ export default function SuperAdminFaculties() {
             className="lg:col-span-4 flex flex-col space-y-4 h-full min-h-0 overflow-y-auto pr-1 animate-in fade-in slide-in-from-right-8 duration-300"
             onClick={(e) => e.stopPropagation()}
           >
-          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs space-y-5">
+          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs space-y-4">
             
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -362,25 +362,6 @@ export default function SuperAdminFaculties() {
               <div>
                 <h4 className="font-black text-base text-gray-900">{selectedFaculty.name}</h4>
                 <span className="font-mono text-xs font-bold text-purple-700">{selectedFaculty.code}</span>
-              </div>
-            </div>
-
-            {/* ข้อมูลติดต่อ */}
-            <div className="space-y-2 text-xs">
-              <h5 className="font-bold text-gray-900 text-xs">ข้อมูลติดต่อ</h5>
-              <div className="space-y-1.5 text-gray-600 font-medium">
-                <div className="flex items-center gap-2">
-                  <Phone size={14} className="text-purple-600 shrink-0" />
-                  <span>{selectedFaculty.phone}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Mail size={14} className="text-purple-600 shrink-0" />
-                  <span>{selectedFaculty.email}</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <MapPin size={14} className="text-purple-600 shrink-0 mt-0.5" />
-                  <span className="text-[11px] leading-relaxed">{selectedFaculty.address}</span>
-                </div>
               </div>
             </div>
 
@@ -430,41 +411,6 @@ export default function SuperAdminFaculties() {
                   </p>
                 </div>
               </div>
-            </div>
-
-            {/* รถตู้ประจำคณะ */}
-            <div className="space-y-2.5 text-xs bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
-              <div className="flex items-center justify-between">
-                <h5 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
-                  <Bus size={14} className="text-[#311171]" />
-                  <span>รถตู้ประจำคณะ ({selectedFaculty.vansList?.length || selectedFaculty.totalVans || 0} คัน)</span>
-                </h5>
-              </div>
-
-              {selectedFaculty.vansList && selectedFaculty.vansList.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedFaculty.vansList.map((vn, vnIdx) => (
-                    <div key={`fac-van-${vn.id || vnIdx}`} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-gray-200/70 shadow-2xs">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                          <Bus size={16} />
-                        </div>
-                        <div>
-                          <p className="font-bold text-gray-900 text-xs">{vn.plate}</p>
-                          <p className="text-[10px] text-gray-500">{vn.name} • {vn.capacity} ที่นั่ง</p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full shrink-0">
-                        {vn.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-3 bg-white rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px]">
-                  ไม่มีรถตู้ประจำสังกัดคณะนี้
-                </div>
-              )}
             </div>
 
             {/* พนักงานขับรถประจำคณะ */}
