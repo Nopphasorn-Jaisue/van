@@ -463,16 +463,8 @@ export default function SuperAdminFaculties() {
             {/* Action Buttons */}
             <div className="space-y-2 pt-2">
               <button 
-                onClick={() => setEditingFaculty(selectedFaculty)}
-                className="w-full py-2.5 bg-[#311171] hover:bg-[#230b54] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all"
-              >
-                <Edit size={14} />
-                <span>แก้ไขข้อมูล</span>
-              </button>
-
-              <button 
                 onClick={() => setChangeAdminFaculty(selectedFaculty)}
-                className="w-full py-2.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all"
+                className="w-full py-2.5 bg-[#311171] hover:bg-[#230b54] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all"
               >
                 <UserCog size={14} />
                 <span>เปลี่ยนผู้ดูแล</span>
