@@ -12,7 +12,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { Role } from '@prisma/client';
 
-import { getAuthUser, clearSession } from '@/app/actions/auth';
+import { clearSession } from '@/app/actions/auth';
 
 const getInitialRole = (path: string) => {
   if (!path) return 'FACULTY_ADMIN';
@@ -57,26 +57,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     const fetchUser = async () => {
       try {
-        const user = await getAuthUser();
-        if (user) {
-          setUserRole(user.role);
-          setDisplayName(user.name || 'ผู้ใช้งานระบบ');
-          const fName = user.faculty?.nameTh || (
-            user.role === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
-            user.role === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
-            user.role === 'DRIVER' ? 'ทีมพนักงานขับรถประจำคณะ' :
-            'คณะเทคโนโลยีสารสนเทศและการสื่อสาร'
-          );
-          setFacultyName(fName);
-          try {
-            sessionStorage.setItem('cached_auth_user', JSON.stringify({
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-              facultyName: fName
-            }));
-          } catch {}
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const user = await res.json();
+          if (user && user.authenticated !== false) {
+            setUserRole(user.role);
+            setDisplayName(user.name || user.fullName || 'ผู้ใช้งานระบบ');
+            const fName = user.faculty || user.facultyName || (
+              user.role === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
+              user.role === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
+              user.role === 'DRIVER' ? 'ทีมพนักงานขับรถประจำคณะ' :
+              'คณะเทคโนโลยีสารสนเทศและการสื่อสาร'
+            );
+            setFacultyName(fName);
+            try {
+              sessionStorage.setItem('cached_auth_user', JSON.stringify({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                facultyName: fName
+              }));
+            } catch {}
+          }
         }
       } catch (err) {
         console.error(err);
@@ -110,10 +113,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const data = await getNotifications(userRole as Role);
-        setNotifications(data);
+        if (!userRole) return;
+        const data = await getNotifications(userRole as Role).catch(() => []);
+        if (Array.isArray(data)) {
+          setNotifications(data);
+        }
       } catch (err) {
-        console.error(err);
+        // Silently handle any background polling interruption
       }
     };
     fetchNotifications();

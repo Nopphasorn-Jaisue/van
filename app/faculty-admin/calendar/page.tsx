@@ -10,7 +10,7 @@ import {
 , ArrowLeftRight } from "lucide-react";
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
-import { getAuthUser } from '@/app/actions/auth';
+
 
 type RawCalendarEventItem = {
   id?: string | number;
@@ -253,14 +253,16 @@ function CalendarContent() {
 
     const fetchUser = async () => {
       try {
-        const u = await getAuthUser();
-        if (u && u.name) {
-          const userFaculty = u.faculty?.nameTh || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
-          setCurrentUser({
-            name: u.name,
-            faculty: userFaculty
-          });
-          // Removed setSelectedFacultyFilter(userFaculty) to fix the initial load bug
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const u = await res.json();
+          if (u && (u.name || u.fullName)) {
+            const userFaculty = u.faculty || u.facultyName || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+            setCurrentUser({
+              name: u.name || u.fullName,
+              faculty: userFaculty
+            });
+          }
         }
       } catch (err) {
         console.error(err);
