@@ -15,6 +15,7 @@ interface UserItem {
   faculty: string;
   role: "SUPER_ADMIN" | "FACULTY_ADMIN" | "EXECUTIVE" | "DRIVER" | "USER";
   email: string;
+  phone?: string | null;
   status: "ACTIVE" | "SUSPENDED" | "PENDING";
   lastLogin?: string;
 }
@@ -460,6 +461,17 @@ export default function SuperAdminUsers() {
               </div>
 
               <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">เบอร์โทรศัพท์:</label>
+                <input 
+                  type="tel"
+                  placeholder="เช่น 081-234-5678"
+                  value={newUser.phone || ""}
+                  onChange={(e) => setNewUser({...newUser, phone: e.target.value})}
+                  className="w-full p-3 bg-white border border-gray-200 rounded-2xl text-xs focus:ring-2 focus:ring-[#311171]/20 outline-none font-mono"
+                />
+              </div>
+
+              <div>
                 <label className="text-xs font-bold text-gray-700 block mb-1">สิทธิ์การใช้งาน (Role):</label>
                 <select
                   value={newUser.role}
@@ -665,6 +677,17 @@ export default function SuperAdminUsers() {
                   value={editingUser.email}
                   onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
                   className="w-full p-3 bg-white border border-gray-200 rounded-2xl text-xs focus:ring-2 focus:ring-[#311171]/20 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">เบอร์โทรศัพท์:</label>
+                <input 
+                  type="tel"
+                  placeholder="เช่น 081-234-5678"
+                  value={editingUser.phone || ""}
+                  onChange={(e) => setEditingUser({...editingUser, phone: e.target.value})}
+                  className="w-full p-3 bg-white border border-gray-200 rounded-2xl text-xs focus:ring-2 focus:ring-[#311171]/20 outline-none font-mono"
                 />
               </div>
 
