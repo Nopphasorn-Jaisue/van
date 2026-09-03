@@ -206,7 +206,7 @@ export async function GET() {
         id: d.id,
         name: d.user?.name || 'พนักงานขับรถ',
         email: d.user?.email || '-',
-        phone: d.phone || '-',
+        phone: d.phone || d.user?.phone || '-',
         type: (d.type === 'PRIMARY' ? 'คนขับหลัก' : 'คนขับเสริม') as string,
         status: d.isActive ? 'พร้อมปฏิบัติงาน' : 'ไม่พร้อม',
         assignedVanPlate: d.assignedVan?.plate || 'ไม่มีรถประจำ',
@@ -222,25 +222,30 @@ export async function GET() {
         image: v.image || null
       }));
 
+      // Real contact phone: prefer admin's real phone, or exec's real phone, or '-'
+      const realPhone = (adminUser?.phone && adminUser.phone.trim() !== '') 
+        ? adminUser.phone 
+        : ((execUser?.phone && execUser.phone.trim() !== '') ? execUser.phone : '-');
+
       return {
         id: f.id,
         name: f.nameTh,
         code: info.code,
         adminName: adminUser?.name || "",
         adminTitle: adminUser ? "ผู้ดูแลระบบคณะ (Faculty Admin)" : "",
-        adminPhone: adminUser ? info.phone : "",
+        adminPhone: adminUser?.phone || "-",
         adminEmail: adminUser?.email || "",
         hasAdmin: Boolean(adminUser),
         executiveName: execUser?.name || "",
         executiveTitle: execUser ? info.executiveTitle : "",
-        executivePhone: execUser ? info.phone : "",
+        executivePhone: execUser?.phone || "-",
         executiveEmail: execUser?.email || "",
         hasExecutive: Boolean(execUser),
         totalVans: f.vans.length,
         mainDrivers: f.drivers.filter(d => d.type === 'PRIMARY').length,
         subDrivers: f.drivers.filter(d => d.type !== 'PRIMARY').length,
-        phone: info.phone,
-        email: info.email,
+        phone: realPhone,
+        email: adminUser?.email || execUser?.email || info.email,
         address: info.address,
         driversList,
         vansList,

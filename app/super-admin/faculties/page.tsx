@@ -335,7 +335,7 @@ export default function SuperAdminFaculties() {
                   <div>
                     <p className="font-bold text-gray-900">{selectedFaculty.executiveName}</p>
                     <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.executiveTitle || "คณบดี / รองคณบดีฝ่ายบริหาร"}</p>
-                    {selectedFaculty.executivePhone && (
+                    {selectedFaculty.executivePhone && selectedFaculty.executivePhone !== "-" && (
                       <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
                         <Phone size={11} className="text-gray-400" />
                         <span>{selectedFaculty.executivePhone}</span>
@@ -369,7 +369,7 @@ export default function SuperAdminFaculties() {
                   <div>
                     <p className="font-bold text-gray-900">{selectedFaculty.adminName}</p>
                     <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.adminTitle || "ผู้ดูแลระบบคณะ (Faculty Admin)"}</p>
-                    {selectedFaculty.adminPhone && (
+                    {selectedFaculty.adminPhone && selectedFaculty.adminPhone !== "-" && (
                       <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
                         <Phone size={11} className="text-gray-400" />
                         <span>{selectedFaculty.adminPhone}</span>
