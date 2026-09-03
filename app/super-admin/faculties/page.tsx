@@ -9,6 +9,26 @@ import {
   CheckCircle2, Trash2
 } from "lucide-react";
 
+interface FacultyDriverItem {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  type: string;
+  status: string;
+  assignedVanPlate: string;
+  avatar?: string;
+}
+
+interface FacultyVanItem {
+  id: number;
+  plate: string;
+  name: string;
+  capacity: number;
+  status: string;
+  image?: string | null;
+}
+
 interface FacultyItem {
   id: number;
   name: string;
@@ -27,6 +47,8 @@ interface FacultyItem {
   phone: string;
   email: string;
   address: string;
+  driversList?: FacultyDriverItem[];
+  vansList?: FacultyVanItem[];
   status: "ACTIVE" | "INACTIVE";
 }
 
@@ -408,6 +430,88 @@ export default function SuperAdminFaculties() {
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* รถตู้ประจำคณะ */}
+            <div className="space-y-2.5 text-xs bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
+              <div className="flex items-center justify-between">
+                <h5 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
+                  <Bus size={14} className="text-[#311171]" />
+                  <span>รถตู้ประจำคณะ ({selectedFaculty.vansList?.length || selectedFaculty.totalVans || 0} คัน)</span>
+                </h5>
+              </div>
+
+              {selectedFaculty.vansList && selectedFaculty.vansList.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedFaculty.vansList.map((vn, vnIdx) => (
+                    <div key={`fac-van-${vn.id || vnIdx}`} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-gray-200/70 shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                          <Bus size={16} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900 text-xs">{vn.plate}</p>
+                          <p className="text-[10px] text-gray-500">{vn.name} • {vn.capacity} ที่นั่ง</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full shrink-0">
+                        {vn.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 bg-white rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px]">
+                  ไม่มีรถตู้ประจำสังกัดคณะนี้
+                </div>
+              )}
+            </div>
+
+            {/* พนักงานขับรถประจำคณะ */}
+            <div className="space-y-2.5 text-xs bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
+              <div className="flex items-center justify-between">
+                <h5 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
+                  <Users size={14} className="text-[#311171]" />
+                  <span>พนักงานขับรถประจำคณะ ({selectedFaculty.driversList?.length || selectedFaculty.mainDrivers || 0} คน)</span>
+                </h5>
+              </div>
+
+              {selectedFaculty.driversList && selectedFaculty.driversList.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedFaculty.driversList.map((drv, drvIdx) => (
+                    <div key={`fac-drv-${drv.id || drvIdx}`} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-gray-200/70 shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <img 
+                          src={drv.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150"} 
+                          alt={drv.name}
+                          className="w-9 h-9 rounded-full object-cover border border-purple-100 shrink-0" 
+                        />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-bold text-gray-900 text-xs">{drv.name}</p>
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 bg-purple-50 text-purple-700 rounded-full border border-purple-200">
+                              {drv.type}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 font-mono flex items-center gap-1 mt-0.5">
+                            <Phone size={10} className="text-gray-400" />
+                            <span>{drv.phone}</span>
+                            <span className="text-gray-300">•</span>
+                            <span className="text-purple-700 font-bold">{drv.assignedVanPlate}</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full shrink-0">
+                        {drv.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 bg-white rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px]">
+                  ไม่มีพนักงานขับรถประจำสังกัดคณะนี้
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}

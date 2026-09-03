@@ -213,6 +213,15 @@ export async function GET() {
         avatar: d.user?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'
       }));
 
+      const vansList = f.vans.map(v => ({
+        id: v.id,
+        plate: v.plate,
+        name: v.name || 'Toyota Commuter',
+        capacity: v.capacity || 12,
+        status: v.isActive ? 'พร้อมใช้งาน' : 'ซ่อมบำรุง',
+        image: v.image || null
+      }));
+
       return {
         id: f.id,
         name: f.nameTh,
@@ -232,6 +241,7 @@ export async function GET() {
         email: info.email,
         address: info.address,
         driversList,
+        vansList,
         status: "ACTIVE" as const
       };
     });
