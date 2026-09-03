@@ -1712,7 +1712,6 @@ function CalendarContent() {
                         }}
                         className="px-3 py-1.5 bg-purple-50 border border-purple-200 hover:bg-purple-100 text-[#311171] rounded-xl text-[11px] font-black transition-all flex items-center gap-1 shadow-2xs"
                       >
-                        <ArrowLeftRight size={12} className="text-[#311171]" strokeWidth={2.5} />
                         <span>+ ขอยืมรถคณะอื่นเพิ่ม</span>
                       </button>
                     </div>
