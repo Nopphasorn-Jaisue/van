@@ -1,3 +1,4 @@
+import { invalidateFacultiesCache } from '@/app/api/super-admin/faculties/route';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -115,6 +116,7 @@ export async function POST(request: Request) {
       }
     }
 
+    invalidateFacultiesCache();
     return NextResponse.json({ success: true, user: createdUser });
   } catch (error: unknown) {
     console.error('Failed to create user:', error);
@@ -201,6 +203,7 @@ export async function PUT(request: Request) {
       }
     }
 
+    invalidateFacultiesCache();
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error: unknown) {
     console.error('Failed to update user:', error);
@@ -251,6 +254,7 @@ export async function DELETE(request: Request) {
       }
     }
 
+    invalidateFacultiesCache();
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     console.error('Failed to delete user:', error);
