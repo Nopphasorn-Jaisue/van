@@ -6,7 +6,7 @@ import {
   Search, RotateCcw, Plus,
   MapPin, Calendar, Clock, User, Phone, FileText, 
   CalendarDays, X, Edit, Trash2, Compass, Globe, Sparkles, Check, AlertTriangle, Users
-} from 'lucide-react';
+, ArrowLeftRight } from "lucide-react";
 import { facultiesList } from '@/Frontend/data/faculties';
 import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
 import { getAuthUser } from '@/app/actions/auth';
@@ -1186,6 +1186,11 @@ function CalendarContent() {
                         return (a.time || '').localeCompare(b.time || '');
                       });
                     const isTodayCell = isSameDate(todayDate, cell.dateObj);
+                    const borrowedCount = dayBookings.filter(b => {
+                      const vanOwner = vansMap[b.vanId];
+                      const ownerFaculty = vanOwner ? vanOwner.facultyName : b.bookingFaculty;
+                      return b.status === 'pending_cross_faculty' || (ownerFaculty && ownerFaculty !== b.bookingFaculty);
+                    }).length;
                     
                     return (
                       <div 
@@ -1219,6 +1224,15 @@ function CalendarContent() {
                           )}
                           
                           <div className="flex items-center gap-1">
+                            {borrowedCount > 0 && (
+                              <div 
+                                className="inline-flex items-center gap-0.5 rounded-full bg-purple-100/90 text-[#311171] px-1.5 py-[2px] text-[8px] font-black border border-purple-200 shadow-2xs transition-all hover:scale-105"
+                                title={`มีการยืมรถตู้ข้ามคณะ ${borrowedCount} คันในวันนี้`}
+                              >
+                                <ArrowLeftRight size={8} className="text-[#311171]" strokeWidth={2.5} />
+                                <span>+{borrowedCount}</span>
+                              </div>
+                            )}
                             {dayBookings.length > 2 && (
                               <button 
                                 type="button" 
@@ -1287,9 +1301,10 @@ function CalendarContent() {
                                       </span>
                                     </div>
                                     {isBorrowed && (
-                                      <div className="flex items-center gap-1 shrink-0">
+                                      <div className="flex items-center gap-0.5 shrink-0 px-1 py-[1px] rounded bg-purple-50/80 border border-purple-200/60" title={`ยืมรถตู้จาก ${ownerFaculty}`}>
+                                        <ArrowLeftRight size={7} className="text-[#311171]" strokeWidth={2.5} />
                                         <span className={`h-1.5 w-1.5 rounded-full ${ownerStyle.dotColor || 'bg-sky-500'}`} />
-                                        <span className={`text-[8px] font-bold ${ownerStyle.textColor || 'text-slate-500'}`}>
+                                        <span className={`text-[8px] font-bold ${ownerStyle.textColor || 'text-slate-600'}`}>
                                           {ownerStyle.shortName}
                                         </span>
                                       </div>
