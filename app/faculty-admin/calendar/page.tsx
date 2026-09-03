@@ -1739,13 +1739,14 @@ function CalendarContent() {
                                     <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="block font-bold text-gray-800 text-xs">
-                        🚗 จัดสรรรถตู้และคนขับ ({eventFormData.selectedVans.length} คัน | รองรับ ~{eventFormData.selectedVans.length * 12} ที่นั่ง)
+                        จัดสรรรถตู้และคนขับ ({eventFormData.selectedVans.length} คัน | รองรับ ~{eventFormData.selectedVans.length * 12} ที่นั่ง)
                       </label>
                     </div>
 
                     <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
-                      {eventFormData.selectedVans.map((sv, idx) => {
+                                            {eventFormData.selectedVans.map((sv, idx) => {
                         const targetVan = vansList.find(v => v.id === sv.vanId) || vansList.find(v => v.facultyName === sv.facultyName) || vansList[0];
+                        const targetFacStyle = getFacultyStyle(targetVan?.facultyName || sv.facultyName);
 
                         return (
                           <div 
@@ -1754,8 +1755,8 @@ function CalendarContent() {
                           >
                             <div className="flex items-center justify-between">
                               <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-gray-800">
-                                <span className={`w-2 h-2 rounded-full ${sv.isBorrow ? 'bg-purple-500' : 'bg-emerald-500'}`} />
-                                คันที่ {idx + 1}: {sv.isBorrow ? `ยืมข้ามคณะ ➔ ${sv.facultyName || 'เลือกคณะ'}` : `รถประจำคณะ (${sv.facultyName})`}
+                                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${targetFacStyle.dotColor || 'bg-purple-500'}`} />
+                                คันที่ {idx + 1}: {sv.isBorrow ? `ยืมข้ามคณะ ➔ ${targetVan?.facultyName || sv.facultyName || 'เลือกคณะ'}` : `รถประจำคณะ (${targetVan?.facultyName || sv.facultyName})`}
                               </span>
                               {eventFormData.selectedVans.length > 1 && (
                                 <button
@@ -1794,16 +1795,19 @@ function CalendarContent() {
                                       });
                                       setEventFormData({ ...eventFormData, selectedVans: updated });
                                     }}
-                                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-[#311171] font-medium"
+                                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-[#311171] font-bold"
                                   >
                                     <option value="" disabled>-- เลือกรถคณะที่ต้องการยืม --</option>
                                     {vansList
                                       .filter(v => v.facultyName !== eventFormData.bookingFaculty)
-                                      .map(v => (
-                                        <option key={v.id} value={v.id}>
-                                          {v.facultyName} - {v.vanName} ({v.plate})
-                                        </option>
-                                      ))}
+                                      .map(v => {
+                                        const isChosenInOtherCard = eventFormData.selectedVans.some(other => other.id !== sv.id && other.vanId === v.id);
+                                        return (
+                                          <option key={v.id} value={v.id} disabled={isChosenInOtherCard}>
+                                            {v.facultyName} - {v.vanName} ({v.plate}) {isChosenInOtherCard ? '(เลือกไปแล้ว)' : ''}
+                                          </option>
+                                        );
+                                      })}
                                   </select>
                                 </div>
                                 <div>
@@ -1841,15 +1845,18 @@ function CalendarContent() {
                         type="button"
                         onClick={() => {
                           const availableBorrowed = vansList.filter(v => v.facultyName !== eventFormData.bookingFaculty);
-                          const firstBorrow = availableBorrowed[0] || vansList[0];
+                          const alreadySelectedVanIds = new Set(eventFormData.selectedVans.map(v => v.vanId));
+                          const unselectedBorrow = availableBorrowed.find(v => !alreadySelectedVanIds.has(v.id));
+                          const nextBorrow = unselectedBorrow || availableBorrowed[0] || vansList[0];
+
                           const newBorrowItem: SelectedVanItem = {
                             id: `van-${Date.now()}-${eventFormData.selectedVans.length + 1}`,
-                            vanId: firstBorrow ? firstBorrow.id : '',
-                            facultyName: firstBorrow ? firstBorrow.facultyName : '',
+                            vanId: nextBorrow ? nextBorrow.id : '',
+                            facultyName: nextBorrow ? nextBorrow.facultyName : '',
                             isBorrow: true,
-                            plate: firstBorrow ? firstBorrow.plate : '',
-                            driverName: firstBorrow ? firstBorrow.driverName : '',
-                            phone: firstBorrow ? firstBorrow.driverPhone : ''
+                            plate: nextBorrow ? nextBorrow.plate : '',
+                            driverName: nextBorrow ? nextBorrow.driverName : '',
+                            phone: nextBorrow ? nextBorrow.driverPhone : ''
                           };
                           setEventFormData({
                             ...eventFormData,
