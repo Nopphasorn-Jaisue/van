@@ -764,7 +764,7 @@ export async function POST(request: Request) {
           phone: body.phone || null,
           budgetSource: "งบประมาณคณะ",
           tripType: body.tripType || "ในจังหวัดพะเยา",
-          status: initialStatus === 'approved' ? 'APPROVED' : 'WAITING_EXEC',
+      status: initialStatus === 'approved' ? 'APPROVED' : 'WAITING_EXEC',
         }
       });
     } catch (dbErr) {

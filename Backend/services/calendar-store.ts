@@ -26,6 +26,15 @@ export type CalendarEventRecord = {
   statusText: string;
   statusTime: string;
   tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
+  assignedVans?: Array<{
+    id: string;
+    vanId: string;
+    facultyName: string;
+    plate?: string;
+    driverName?: string;
+    phone?: string;
+    isBorrow: boolean;
+  }>;
   createdAt: string;
 };
 

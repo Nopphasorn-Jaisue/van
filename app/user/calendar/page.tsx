@@ -54,6 +54,7 @@ type CalendarBookingEvent = {
   statusText?: string;
   statusTime?: string;
   tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
+  assignedVans?: SelectedVanItem[];
 };
 
 function CalendarContent() {
@@ -116,6 +117,17 @@ function CalendarContent() {
     vanId: 'v-ict',
     vanType: 'OWN' as 'OWN' | 'BORROW',
     tripType: 'ในจังหวัดพะเยา' as 'ในจังหวัดพะเยา' | 'ต่างจังหวัด',
+    selectedVans: [
+      {
+        id: 'van-1',
+        vanId: 'v-ict',
+        facultyName: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+        isBorrow: false,
+        plate: '1นช3009 กรุงเทพมหานคร',
+        driverName: 'นายสมชาย ใจดี',
+        phone: '081-234-5678'
+      }
+    ] as SelectedVanItem[],
   });
 
   const [bookingsData, setBookingsData] = useState<CalendarBookingEvent[]>([]);
@@ -389,27 +401,35 @@ function CalendarContent() {
 
   const handleOpenAddModal = (dateStr?: string) => {
     setEditingEventId(null);
-    let defaultDate = dateStr;
-    if (!defaultDate) {
-      const d = new Date();
-      defaultDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }
+    const targetDate = dateStr || baseDate.toISOString().slice(0, 10);
     const userFac = currentUser?.faculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
-    const defaultVan = vansList.find(v => v.facultyName === userFac) || vansList[0];
+    const ownVan = vansList.find(v => v.facultyName === userFac) || vansList[0];
+    
     setEventFormData({
       destination: '',
       purpose: '',
-      date: defaultDate,
-      returnDate: defaultDate,
+      date: targetDate,
+      returnDate: targetDate,
       departTime: '08:30',
       returnTime: '16:30',
-      requester: '',
-      phone: '',
+      requester: currentUser?.name || '',
+      phone: (currentUser as any)?.phone || '',
       bookingFaculty: userFac,
       passengers: 1,
-      vanId: defaultVan ? defaultVan.id : '1',
+      vanId: ownVan ? ownVan.id : '1',
       vanType: 'OWN',
       tripType: 'ในจังหวัดพะเยา',
+      selectedVans: [
+        {
+          id: `van-${Date.now()}-1`,
+          vanId: ownVan ? ownVan.id : '1',
+          facultyName: ownVan ? ownVan.facultyName : userFac,
+          isBorrow: false,
+          plate: ownVan ? ownVan.plate : '',
+          driverName: ownVan ? ownVan.driverName : '',
+          phone: ownVan ? ownVan.driverPhone : ''
+        }
+      ]
     });
     setIsModalOpen(true);
   };
@@ -448,6 +468,17 @@ function CalendarContent() {
       vanId: event.vanId || 'v-ict',
       vanType: event.status === 'pending_cross_faculty' ? 'BORROW' : 'OWN',
       tripType: (event.tripType as 'ในจังหวัดพะเยา' | 'ต่างจังหวัด') || 'ในจังหวัดพะเยา',
+      selectedVans: event.assignedVans && event.assignedVans.length > 0 ? event.assignedVans : [
+        {
+          id: `van-${Date.now()}-1`,
+          vanId: event.vanId || 'v-ict',
+          facultyName: event.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+          isBorrow: event.status === 'pending_cross_faculty',
+          plate: '',
+          driverName: '',
+          phone: ''
+        }
+      ]
     });
     setIsModalOpen(true);
   };
@@ -552,6 +583,15 @@ function CalendarContent() {
       startAt: startAt,
       endAt: endAt,
       tripType: eventFormData.tripType,
+      assignedVans: eventFormData.selectedVans.map(v => ({
+        id: v.id,
+        vanId: v.vanId,
+        facultyName: v.facultyName,
+        isBorrow: v.isBorrow,
+        plate: v.plate,
+        driverName: v.driverName,
+        phone: v.phone
+      })),
       budgetSource: "งบส่วนตัว/อื่นๆ"
     };
 
@@ -1140,7 +1180,7 @@ function CalendarContent() {
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${(b.status === 'APPROVED' || b.status === 'approved' || b.status === 'COMPLETED' || b.status === 'completed') ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                                       <span className={`font-bold truncate text-[9px] 2xl:text-[10px] leading-[10px] ${displayStyle.textColor || 'text-amber-700'}`}>
-                                        {displayStyle.shortName}
+                                        {displayStyle.shortName} {b.assignedVans && b.assignedVans.length > 1 ? `(${b.assignedVans.length} คัน)` : ''}
                                       </span>
                                     </div>
                                     {isBorrowed && (
@@ -1226,6 +1266,40 @@ function CalendarContent() {
                       หน่วยงานที่จอง: <span className="text-[#311171]">{selectedEvent.bookingFaculty || selectedEvent.department}</span>
                     </p>
                     {(() => {
+                      const fleetList = selectedEvent.assignedVans && selectedEvent.assignedVans.length > 0 ? selectedEvent.assignedVans : null;
+                      if (fleetList && fleetList.length > 1) {
+                        return (
+                          <div className="space-y-1.5 mt-1">
+                            <p className="text-[11px] font-black text-gray-800">ขบวนรถตู้และคนขับ ({fleetList.length} คัน):</p>
+                            {fleetList.map((fv: SelectedVanItem, fIdx: number) => {
+                              const fVan = vansMap[fv.vanId] || vansList.find(vl => vl.facultyName === fv.facultyName);
+                              const fPlate = fv.plate || fVan?.plate || '-';
+                              const fDriver = fv.driverName || fVan?.driverName || 'พนักงานขับรถ';
+                              const fPhone = fv.phone || fVan?.driverPhone || '-';
+
+                              return (
+                                <div key={fv.id || fIdx} className="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between gap-2 shadow-2xs">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${fv.isBorrow ? 'bg-purple-500' : 'bg-emerald-500'}`} />
+                                    <div className="truncate">
+                                      <p className="text-[11px] font-bold text-gray-900 truncate">
+                                        {fv.isBorrow ? `[ยืม] ${fv.facultyName}` : fv.facultyName} ({fPlate})
+                                      </p>
+                                      <p className="text-[9px] text-gray-500 truncate">คนขับ: {fDriver}</p>
+                                    </div>
+                                  </div>
+                                  {fPhone !== '-' && (
+                                    <span className="text-[9px] font-bold text-purple-700 shrink-0 bg-purple-50 px-1.5 py-0.5 rounded">
+                                      {fPhone}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+
                       const currentVan = vansMap[selectedEvent.vanId] || vansList.find(v => v.facultyName === selectedEvent.bookingFaculty) || vansList[0];
                       const dAvatar = currentVan?.driverImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150';
                       const dName = currentVan?.driverName || 'ยังไม่ระบุคนขับ';
@@ -1469,42 +1543,155 @@ function CalendarContent() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">
-                      {eventFormData.vanType === 'BORROW' ? 'เลือกยืมรถตู้ของคณะใด' : 'มอบหมายรถตู้ประจำคณะ & คนขับ'}
-                    </label>
-                    {eventFormData.vanType === 'OWN' ? (
-                      <div className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 text-gray-700 font-bold cursor-not-allowed">
-                        {(() => {
-                          const ownVan = vansList.find(v => v.facultyName === (currentUser?.faculty || eventFormData.bookingFaculty)) || vansList[0];
-                          return ownVan ? `${ownVan.vanName} (${ownVan.plate})` : 'รถตู้ประจำคณะ';
-                        })()}
-                      </div>
-                    ) : (
-                      <select 
-                        value={eventFormData.vanId}
-                        onChange={e => setEventFormData({ ...eventFormData, vanId: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#311171]"
+                                    <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block font-bold text-gray-800 text-xs">
+                        🚗 จัดสรรรถตู้และคนขับ ({eventFormData.selectedVans.length} คัน | รองรับ ~{eventFormData.selectedVans.length * 12} ที่นั่ง)
+                      </label>
+                    </div>
+
+                    <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                      {eventFormData.selectedVans.map((sv, idx) => {
+                        const targetVan = vansList.find(v => v.id === sv.vanId) || vansList.find(v => v.facultyName === sv.facultyName) || vansList[0];
+
+                        return (
+                          <div 
+                            key={sv.id} 
+                            className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/70 space-y-2 relative transition-all hover:border-violet-300 shadow-2xs"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-gray-800">
+                                <span className={`w-2 h-2 rounded-full ${sv.isBorrow ? 'bg-purple-500' : 'bg-emerald-500'}`} />
+                                คันที่ {idx + 1}: {sv.isBorrow ? `ยืมข้ามคณะ ➔ ${sv.facultyName || 'เลือกคณะ'}` : `รถประจำคณะ (${sv.facultyName})`}
+                              </span>
+                              {eventFormData.selectedVans.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = eventFormData.selectedVans.filter(v => v.id !== sv.id);
+                                    setEventFormData({ ...eventFormData, selectedVans: updated });
+                                  }}
+                                  className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors"
+                                >
+                                  ลบคันนี้
+                                </button>
+                              )}
+                            </div>
+
+                            {sv.isBorrow ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] font-bold text-gray-600 block mb-0.5">เลือกคณะและรถตู้</label>
+                                  <select
+                                    value={sv.vanId}
+                                    onChange={(e) => {
+                                      const picked = vansList.find(v => v.id === e.target.value);
+                                      const updated = eventFormData.selectedVans.map(v => {
+                                        if (v.id === sv.id && picked) {
+                                          return {
+                                            ...v,
+                                            vanId: picked.id,
+                                            facultyName: picked.facultyName,
+                                            plate: picked.plate,
+                                            driverName: picked.driverName,
+                                            phone: picked.driverPhone
+                                          };
+                                        }
+                                        return v;
+                                      });
+                                      setEventFormData({ ...eventFormData, selectedVans: updated });
+                                    }}
+                                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-[#311171] font-medium"
+                                  >
+                                    <option value="" disabled>-- เลือกรถคณะที่ต้องการยืม --</option>
+                                    {vansList
+                                      .filter(v => v.facultyName !== eventFormData.bookingFaculty)
+                                      .map(v => (
+                                        <option key={v.id} value={v.id}>
+                                          {v.facultyName} - {v.vanName} ({v.plate})
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-gray-600 block mb-0.5">พนักงานขับรถ</label>
+                                  <div className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white text-gray-700 font-bold truncate">
+                                    {targetVan?.driverName || 'พนักงานขับรถประจำคัน'} {targetVan?.driverPhone ? `(${targetVan.driverPhone})` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] font-bold text-gray-600 block mb-0.5">รถตู้ประจำคณะ</label>
+                                  <div className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white text-gray-700 font-bold truncate">
+                                    {targetVan ? `${targetVan.vanName} (${targetVan.plate})` : 'รถตู้ประจำคณะ'}
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-gray-600 block mb-0.5">พนักงานขับรถ</label>
+                                  <div className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white text-gray-700 font-bold truncate">
+                                    {targetVan?.driverName || 'พนักงานขับรถประจำคณะ'} {targetVan?.driverPhone ? `(${targetVan.driverPhone})` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const userFac = currentUser?.faculty || eventFormData.bookingFaculty;
+                          const ownVan = vansList.find(v => v.facultyName === userFac) || vansList[0];
+                          const newVanItem: SelectedVanItem = {
+                            id: `van-${Date.now()}-${eventFormData.selectedVans.length + 1}`,
+                            vanId: ownVan ? ownVan.id : '1',
+                            facultyName: userFac,
+                            isBorrow: false,
+                            plate: ownVan ? ownVan.plate : '',
+                            driverName: ownVan ? ownVan.driverName : '',
+                            phone: ownVan ? ownVan.driverPhone : ''
+                          };
+                          setEventFormData({
+                            ...eventFormData,
+                            selectedVans: [...eventFormData.selectedVans, newVanItem]
+                          });
+                        }}
+                        className="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1 shadow-2xs"
                       >
-                        <option value="" disabled>-- เลือกรถตู้ต่างคณะ --</option>
-                        {vansList
-                          .filter(v => {
-                            if (v.facultyName === eventFormData.bookingFaculty) return false;
-                            const isBooked = bookingsData.some(b => 
-                              b.vanId === v.id && 
-                              isSameDate(b.date, eventFormData.date) &&
-                              b.status !== 'rejected' &&
-                              b.status !== 'cancelled'
-                            );
-                            return !isBooked;
-                          })
-                          .map(v => (
-                          <option key={v.id} value={v.id} className="text-green-600 font-bold">
-                            {v.vanName} ({v.plate}) - {v.facultyName} (ว่าง)
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                        <Plus size={13} className="text-[#311171]" />
+                        <span>+ เพิ่มรถประจำคณะตนเอง</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const availableBorrowed = vansList.filter(v => v.facultyName !== eventFormData.bookingFaculty);
+                          const firstBorrow = availableBorrowed[0] || vansList[0];
+                          const newBorrowItem: SelectedVanItem = {
+                            id: `van-${Date.now()}-${eventFormData.selectedVans.length + 1}`,
+                            vanId: firstBorrow ? firstBorrow.id : '',
+                            facultyName: firstBorrow ? firstBorrow.facultyName : '',
+                            isBorrow: true,
+                            plate: firstBorrow ? firstBorrow.plate : '',
+                            driverName: firstBorrow ? firstBorrow.driverName : '',
+                            phone: firstBorrow ? firstBorrow.driverPhone : ''
+                          };
+                          setEventFormData({
+                            ...eventFormData,
+                            selectedVans: [...eventFormData.selectedVans, newBorrowItem]
+                          });
+                        }}
+                        className="px-3 py-1.5 bg-purple-50 border border-purple-200 hover:bg-purple-100 text-[#311171] rounded-xl text-[11px] font-black transition-all flex items-center gap-1 shadow-2xs"
+                      >
+                        <ArrowLeftRight size={12} className="text-[#311171]" strokeWidth={2.5} />
+                        <span>+ ขอยืมรถคณะอื่นเพิ่ม</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1906,6 +2093,16 @@ function CalendarContent() {
 
     </div>
   );
+}
+
+export interface SelectedVanItem {
+  id: string;
+  vanId: string;
+  facultyName: string;
+  isBorrow: boolean;
+  plate?: string;
+  driverName?: string;
+  phone?: string;
 }
 
 export default function UserCalendarPage() {
