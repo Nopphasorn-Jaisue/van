@@ -358,11 +358,11 @@ export default function SuperAdminVans() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs font-medium">
-                  {paginatedVans.map((v) => {
+                  {paginatedVans.map((v, idx) => {
                     const isSelected = v.id === selectedVanId;
                     return (
                       <tr 
-                        key={v.id}
+                        key={v.id ? `van-row-${v.id}-${v.plate}` : `van-row-idx-${idx}-${v.plate}`}
                         onClick={() => setSelectedVanId(isSelected ? null : v.id)}
                         className={`cursor-pointer transition-all ${
                           isSelected 
@@ -429,7 +429,7 @@ export default function SuperAdminVans() {
                   </button>
                   {Array.from({ length: totalPages }).map((_, i) => (
                     <button 
-                      key={i}
+                      key={`van-page-${i + 1}`}
                       onClick={() => setCurrentPage(i + 1)}
                       className={`px-2.5 py-0.5 rounded-lg font-bold ${
                         currentPage === i + 1 
@@ -568,8 +568,8 @@ export default function SuperAdminVans() {
                   className="w-full p-3 border rounded-xl bg-white outline-none font-bold"
                 >
                   <option value="">-- เลือกคณะ --</option>
-                  {facultiesList.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
+                  {facultiesList.map((f, fIdx) => (
+                    <option key={`add-fac-${f.id || fIdx}-${f.name}`} value={f.id}>{f.name}</option>
                   ))}
                 </select>
               </div>
@@ -659,8 +659,8 @@ export default function SuperAdminVans() {
                   className="w-full p-3 border rounded-xl bg-white outline-none font-bold"
                 >
                   <option value="">-- เลือกคณะ --</option>
-                  {facultiesList.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
+                  {facultiesList.map((f, fIdx) => (
+                    <option key={`edit-fac-${f.id || fIdx}-${f.name}`} value={f.id}>{f.name}</option>
                   ))}
                 </select>
               </div>
