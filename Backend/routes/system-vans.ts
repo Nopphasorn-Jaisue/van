@@ -69,7 +69,8 @@ export async function handleListVans() {
       capacity: v.capacity || 12,
       fuelType: v.engine || "ดีเซล",
       driverName: v.facultyId === 1 ? "นาย" : "พนักงานขับรถ",
-      facultyName: v.faculty?.nameTh || "กองอาคารสถานที่",
+      faculty: v.faculty?.nameTh || "ไม่ระบุคณะ",
+      facultyName: v.faculty?.nameTh || "ไม่ระบุคณะ",
       facultyId: v.facultyId,
       status: v.isActive ? "ready" : "maintenance",
       image: formatVanImage(v.image),
@@ -138,6 +139,9 @@ export async function handleUpdateVan(request: Request, id: string) {
     if (!isNaN(numericId)) {
       const updateData: Prisma.VanUpdateInput = {};
       if (body.plate !== undefined) updateData.plate = body.plate;
+      if (body.facultyId !== undefined && body.facultyId !== "" && !isNaN(Number(body.facultyId))) {
+        updateData.faculty = { connect: { id: Number(body.facultyId) } };
+      }
       if (body.vanName !== undefined || body.brand !== undefined) updateData.name = body.vanName || body.brand;
       if (body.capacity !== undefined || body.seats !== undefined) updateData.capacity = Number(body.capacity || body.seats);
       if (body.isShared !== undefined) updateData.isShared = Boolean(body.isShared);

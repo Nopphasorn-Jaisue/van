@@ -99,21 +99,25 @@ export default function SuperAdminVans() {
   [key: string]: unknown;
 }
         const rawVans: RawSuperAdminVanRecord[] = Array.isArray(vansJson) ? vansJson : (vansJson.vans || []);
-        const formatted: VanItem[] = rawVans.map(v => ({
-          id: Number(v.id || 0),
-          plate: v.plate || v.plateNumber || 'ยังไม่ระบุทะเบียน',
-          brandModel: v.name || v.brandModel || 'Toyota Commuter',
-          seats: v.capacity || 10,
-          faculty: (typeof v.faculty === 'object' ? (v.faculty?.nameTh || v.faculty?.name) : v.faculty) || 'ส่วนกลาง',
-          status: (v.isActive === false ? 'MAINTENANCE' : (v.status === 'MAINTENANCE' || v.status === 'DISABLED' ? v.status : 'READY')) as 'READY' | 'MAINTENANCE' | 'DISABLED',
-          driver: v.driver || 'ไม่มีคนขับประจำ',
-          driverAvatar: v.driverAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
-          nextInspection: v.nextMaintenance || 'ไม่ระบุ',
-          nextService: '-',
-          image: v.image,
-          taxExp: v.taxExp,
-          insExp: v.insExp
-        }));
+        const formatted: VanItem[] = rawVans.map(v => {
+          const numId = Number(v.dbId || String(v.id || '').replace(/\D/g, '') || 0);
+          const fac = String(v.facultyName || (typeof v.faculty === 'object' ? (v.faculty?.nameTh || v.faculty?.name) : v.faculty) || 'ไม่ระบุคณะ');
+          return {
+            id: numId,
+            plate: String(v.plate || v.plateNumber || 'ยังไม่ระบุทะเบียน'),
+            brandModel: String(v.name || v.vanName || v.brandModel || 'Toyota Commuter'),
+            seats: Number(v.capacity || v.seats || 12),
+            faculty: fac,
+            status: (v.isActive === false ? 'MAINTENANCE' : (v.status === 'MAINTENANCE' || v.status === 'DISABLED' ? v.status : 'READY')) as 'READY' | 'MAINTENANCE' | 'DISABLED',
+            driver: String(v.driver || v.driverName || 'ไม่มีคนขับประจำ'),
+            driverAvatar: String(v.driverAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'),
+            nextInspection: String(v.nextMaintenance || v.nextInspection || 'ไม่ระบุ'),
+            nextService: '-',
+            image: typeof v.image === 'string' ? v.image : (typeof v.imageUrl === 'string' ? v.imageUrl : null),
+            taxExp: typeof v.taxExp === 'string' ? v.taxExp : (typeof v.taxExpiry === 'string' ? v.taxExpiry : null),
+            insExp: typeof v.insExp === 'string' ? v.insExp : (typeof v.insuranceExpiry === 'string' ? v.insuranceExpiry : null)
+          };
+        });
         setVans(formatted);
         try { sessionStorage.setItem('cached_superadmin_vans', JSON.stringify(formatted)); } catch {}
       }
