@@ -858,13 +858,19 @@ function CalendarContent() {
     };
   };
 
-  const getStatusBadgeColor = (status: string | undefined) => {
+  const getStatusBadgeColor = (status: string | undefined, statusText?: string) => {
+    if (statusText === 'รอการยืนยันจากคณะเจ้าของรถ' || statusText?.includes('รอการยืนยัน')) {
+      return "bg-yellow-100 text-yellow-800 border-yellow-300";
+    }
     switch (status) {
       case "approved": return "bg-emerald-50 text-emerald-700 border-emerald-200";
-      case "pending": return "bg-amber-50 text-amber-700 border-amber-200";
+      case "pending": return "bg-yellow-100 text-yellow-800 border-yellow-300";
+      case "pending_cross_faculty": return "bg-yellow-100 text-yellow-800 border-yellow-300";
       case "ongoing": return "bg-blue-50 text-blue-700 border-blue-200";
       case "completed": return "bg-[#efeaff] text-[#311171] border-[#311171]/20";
-      default: return "bg-gray-50 text-gray-700 border-gray-200";
+      case "rejected": return "bg-rose-50 text-rose-700 border-rose-200";
+      case "cancelled": return "bg-gray-100 text-gray-600 border-gray-200";
+      default: return "bg-yellow-100 text-yellow-800 border-yellow-300";
     }
   };
 
@@ -1387,7 +1393,7 @@ function CalendarContent() {
                   <span className="text-[11px] font-bold text-gray-500">ID: {selectedEvent.id}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full border ${getStatusBadgeColor(selectedEvent.status)}`}>
+                  <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full border ${getStatusBadgeColor(selectedEvent.status, selectedEvent.statusText)}`}>
                     {selectedEvent.statusText || 'อนุมัติแล้ว'}
                   </span>
                   <button 
