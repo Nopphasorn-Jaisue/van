@@ -500,9 +500,19 @@ export default function SuperAdminFaculties() {
               <div>
                 <label className="font-bold text-gray-700 block mb-1">เลือกผู้ดูแลท่านใหม่:</label>
                 <select className="w-full p-3 border border-gray-200 rounded-xl outline-none font-bold">
-                  <option>นายกฤษฎา วงศ์ไชย (krisada.w@up.ac.th)</option>
-                  <option>นางสาวจิราภรณ์ แซ่ตั้ง (jiraporn.t@up.ac.th)</option>
-                  <option>นายสมชาย ใจดี (somchai.j@up.ac.th)</option>
+                  {allUsersList.length > 0 ? (
+                    allUsersList.map((user) => (
+                      <option key={user.id} value={user.name}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option>นายกฤษฎา วงศ์ไชย (krisada.w@up.ac.th)</option>
+                      <option>นางสาวจิราภรณ์ แซ่ตั้ง (jiraporn.t@up.ac.th)</option>
+                      <option>นายสมชาย ใจดี (somchai.j@up.ac.th)</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>

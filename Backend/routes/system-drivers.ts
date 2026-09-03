@@ -67,8 +67,11 @@ export async function handleListDrivers() {
 
 export async function handleCreateDriver(request: Request) {
   try {
-    const body = await request.json();
     const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
+      return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์เพิ่มพนักงานขับรถ" }, { status: 403 });
+    }
+    const body = await request.json();
     let facultyId = body.facultyId;
     if (!facultyId && user?.facultyId) facultyId = user.facultyId;
     if (!facultyId) {
@@ -137,6 +140,10 @@ export async function handleCreateDriverLog(request: Request, id: string) {
 
 export async function handleUpdateDriver(request: Request, id: string) {
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
+      return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์แก้ไขข้อมูลพนักงานขับรถ" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const numericId = parseInt(id.replace('drv-', ''));
     if (!isNaN(numericId)) {
@@ -160,6 +167,10 @@ export async function handleUpdateDriver(request: Request, id: string) {
 export async function handleDeleteDriver(_request: Request, id: string) {
   void _request;
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
+      return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์ลบพนักงานขับรถ" }, { status: 403 });
+    }
     const numericId = parseInt(id.replace('drv-', ''));
     if (!isNaN(numericId)) {
       await prisma.driver.delete({ where: { id: numericId } });

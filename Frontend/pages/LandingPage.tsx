@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 import { FacultyGlyph } from '@/Frontend/components/FacultyGlyph';
-import { AnimatePresence } from 'framer-motion';
 import { facultiesList } from '@/Frontend/data/faculties';
 import {
   buildFallbackNetworkEvents,

@@ -193,6 +193,18 @@ export async function handleGetBookingDetail(request: Request, id: string) {
 
 export async function handleUpdateSystemBooking(request: Request, id: string) {
   try {
+    const user = await getAuthUser();
+    const existing = await prisma.booking.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "ไม่พบข้อมูลคำขอใช้รถ" }, { status: 404 });
+    }
+
+    const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'FACULTY_ADMIN';
+    const isOwner = user && existing.requesterId === user.id;
+    if (!isAdmin && !isOwner) {
+      return NextResponse.json({ success: false, error: "คุณไม่มีสิทธิ์แก้ไขคำขอนี้" }, { status: 403 });
+    }
+
     const body = await request.json();
     const updateData: Prisma.BookingUpdateInput = {
       destination: body.destination,
@@ -221,8 +233,21 @@ export async function handleUpdateSystemBooking(request: Request, id: string) {
   }
 }
 
-export async function handleDeleteSystemBooking(request: Request, id: string) {
+export async function handleDeleteSystemBooking(_request: Request, id: string) {
+  void _request;
   try {
+    const user = await getAuthUser();
+    const existing = await prisma.booking.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "ไม่พบข้อมูลคำขอใช้รถ" }, { status: 404 });
+    }
+
+    const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'FACULTY_ADMIN';
+    const isOwner = user && existing.requesterId === user.id;
+    if (!isAdmin && !isOwner) {
+      return NextResponse.json({ success: false, error: "คุณไม่มีสิทธิ์ลบคำขอนี้" }, { status: 403 });
+    }
+
     await prisma.booking.delete({
       where: { id }
     });
@@ -237,6 +262,21 @@ export async function handleDeleteSystemBooking(request: Request, id: string) {
 
 export async function handleBookingStatusUpdate(request: Request, id: string) {
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN' && user.role !== 'EXECUTIVE')) {
+      return NextResponse.json({ success: false, error: "Unauthorized: คุณไม่มีสิทธิ์อนุมัติหรือปฏิเสธคำขอ" }, { status: 403 });
+    }
+
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking) {
+      return NextResponse.json({ success: false, error: "ไม่พบคำขอที่ต้องการเปลี่ยนสถานะ" }, { status: 404 });
+    }
+
+    // Faculty admin can only approve requests for their own faculty's vans
+    if (user.role === 'FACULTY_ADMIN' && booking.targetFacultyId !== user.facultyId) {
+      return NextResponse.json({ success: false, error: "คุณสามารถอนุมัติได้เฉพาะคำขอใช้รถของคณะตนเองเท่านั้น" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { status, rejectReason } = body;
     const updateData: Prisma.BookingUpdateInput = { status: status as BookingStatus };
@@ -280,6 +320,11 @@ export async function handleBookingStatusUpdate(request: Request, id: string) {
 
 export async function handleAssignDriverToBooking(request: Request, id: string) {
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
+      return NextResponse.json({ success: false, error: "Unauthorized: คุณไม่มีสิทธิ์จัดสรรคนขับ" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { driverId } = body;
     const updated = await prisma.booking.update({

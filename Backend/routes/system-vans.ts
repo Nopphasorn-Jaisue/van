@@ -96,8 +96,11 @@ export async function handleListVans() {
 
 export async function handleCreateVan(request: Request) {
   try {
-    const body = await request.json();
     const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
+      return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์เพิ่มรถตู้" }, { status: 403 });
+    }
+    const body = await request.json();
     let facultyId = body.facultyId;
     if (!facultyId && user?.facultyId) facultyId = user.facultyId;
     if (!facultyId) {
@@ -126,6 +129,10 @@ export async function handleCreateVan(request: Request) {
 
 export async function handleUpdateVan(request: Request, id: string) {
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
+      return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์แก้ไขข้อมูลรถตู้" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const numericId = parseInt(id.replace('van-', ''));
     if (!isNaN(numericId)) {
@@ -156,6 +163,10 @@ export async function handleUpdateVan(request: Request, id: string) {
 export async function handleDeleteVan(_request: Request, id: string) {
   void _request;
   try {
+    const user = await getAuthUser();
+    if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
+      return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์ลบรถตู้" }, { status: 403 });
+    }
     const numericId = parseInt(id.replace('van-', ''));
     if (!isNaN(numericId)) {
       await prisma.van.delete({ where: { id: numericId } });
