@@ -3,32 +3,140 @@ import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/app/actions/auth';
 import { createAuditLog } from '@/app/actions/audit';
 
-const FACULTY_CODE_MAP: Record<string, string> = {
-  "คณะเทคโนโลยีสารสนเทศและการสื่อสาร": "ICT",
-  "คณะวิทยาศาสตร์": "SCI",
-  "คณะเภสัชฯ": "PHARM",
-  "คณะเภสัชศาสตร์": "PHARM",
-  "คณะแพทยศาสตร์": "MED",
-  "คณะพยาบาลศาสตร์": "NUR",
-  "คณะวิศวกรรมศาสตร์": "ENGR",
-  "คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ": "AGRI",
-  "คณะนิติศาสตร์": "LAW",
-  "คณะรัฐศาสตร์และสังคมศาสตร์": "POL",
-  "คณะวิทยาการจัดการและสารสนเทศศาสตร์": "BCA",
-  "คณะศิลปศาสตร์": "LIB",
-  "คณะสถาปัตยกรรมศาสตร์และศิลปสร้างสรรค์": "ARCH",
-  "คณะสาธารณสุขศาสตร์": "PH",
-  "คณะทันตแพทยศาสตร์": "DENT",
-  "วิทยาลัยการศึกษา": "EDU",
-  "วิทยาลัยการจัดการ": "UPCM"
+const FACULTY_INFO_MAP: Record<string, { code: string; phone: string; email: string; address: string; executiveTitle: string }> = {
+  "คณะเทคโนโลยีสารสนเทศและการสื่อสาร": {
+    code: "ICT",
+    phone: "054-466-666 ต่อ 2261, 2300",
+    email: "ict@up.ac.th",
+    address: "อาคารเทคโนโลยีสารสนเทศและการสื่อสาร มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะ ICT"
+  },
+  "คณะวิทยาศาสตร์": {
+    code: "SCI",
+    phone: "054-466-666 ต่อ 1700",
+    email: "science@up.ac.th",
+    address: "อาคารปฏิบัติการวิทยาศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะวิทยาศาสตร์"
+  },
+  "คณะเภสัชฯ": {
+    code: "PHARM",
+    phone: "054-466-666 ต่อ 3188",
+    email: "pharmacy@up.ac.th",
+    address: "อาคารคณะเภสัชศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะเภสัชศาสตร์"
+  },
+  "คณะเภสัชศาสตร์": {
+    code: "PHARM",
+    phone: "054-466-666 ต่อ 3188",
+    email: "pharmacy@up.ac.th",
+    address: "อาคารคณะเภสัชศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะเภสัชศาสตร์"
+  },
+  "คณะแพทยศาสตร์": {
+    code: "MED",
+    phone: "054-466-666 ต่อ 3300",
+    email: "medicine@up.ac.th",
+    address: "อาคารคณะแพทยศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะแพทยศาสตร์"
+  },
+  "คณะพยาบาลศาสตร์": {
+    code: "NUR",
+    phone: "054-466-666 ต่อ 3200",
+    email: "nurse@up.ac.th",
+    address: "อาคารคณะพยาบาลศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะพยาบาลศาสตร์"
+  },
+  "คณะวิศวกรรมศาสตร์": {
+    code: "ENGR",
+    phone: "054-466-666 ต่อ 2100",
+    email: "engineering@up.ac.th",
+    address: "อาคารคณะวิศวกรรมศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะวิศวกรรมศาสตร์"
+  },
+  "คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ": {
+    code: "AGRI",
+    phone: "054-466-666 ต่อ 3100",
+    email: "agri@up.ac.th",
+    address: "อาคารคณะเกษตรศาสตร์ฯ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะเกษตรศาสตร์ฯ"
+  },
+  "คณะนิติศาสตร์": {
+    code: "LAW",
+    phone: "054-466-666 ต่อ 1500",
+    email: "law@up.ac.th",
+    address: "อาคารคณะนิติศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะนิติศาสตร์"
+  },
+  "คณะรัฐศาสตร์และสังคมศาสตร์": {
+    code: "POL",
+    phone: "054-466-666 ต่อ 1600",
+    email: "politics@up.ac.th",
+    address: "อาคารคณะรัฐศาสตร์ฯ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะรัฐศาสตร์ฯ"
+  },
+  "คณะวิทยาการจัดการและสารสนเทศศาสตร์": {
+    code: "BCA",
+    phone: "054-466-666 ต่อ 1800",
+    email: "bca@up.ac.th",
+    address: "อาคารคณะวิทยาการจัดการฯ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะวิทยาการจัดการฯ"
+  },
+  "คณะศิลปศาสตร์": {
+    code: "LIB",
+    phone: "054-466-666 ต่อ 1900",
+    email: "liberalarts@up.ac.th",
+    address: "อาคารคณะศิลปศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะศิลปศาสตร์"
+  },
+  "คณะสถาปัตยกรรมศาสตร์และศิลปสร้างสรรค์": {
+    code: "ARCH",
+    phone: "054-466-666 ต่อ 3400",
+    email: "architecture@up.ac.th",
+    address: "อาคารคณะสถาปัตยกรรมศาสตร์ฯ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะสถาปัตยกรรมศาสตร์ฯ"
+  },
+  "คณะสาธารณสุขศาสตร์": {
+    code: "PH",
+    phone: "054-466-666 ต่อ 3500",
+    email: "publichealth@up.ac.th",
+    address: "อาคารคณะสาธารณสุขศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะสาธารณสุขศาสตร์"
+  },
+  "คณะทันตแพทยศาสตร์": {
+    code: "DENT",
+    phone: "054-466-666 ต่อ 3600",
+    email: "dentistry@up.ac.th",
+    address: "อาคารคณะทันตแพทยศาสตร์ มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร คณะทันตแพทยศาสตร์"
+  },
+  "วิทยาลัยการศึกษา": {
+    code: "EDU",
+    phone: "054-466-666 ต่อ 3700",
+    email: "education@up.ac.th",
+    address: "อาคารวิทยาลัยการศึกษา มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองผู้อำนวยการวิทยาลัยการศึกษา"
+  },
+  "วิทยาลัยการจัดการ": {
+    code: "UPCM",
+    phone: "02-655-3700",
+    email: "upcm@up.ac.th",
+    address: "วิทยาลัยการจัดการ กรุงเทพมหานคร",
+    executiveTitle: "รองผู้อำนวยการวิทยาลัยการจัดการ"
+  }
 };
 
-function getFacultyCode(name: string): string {
-  if (FACULTY_CODE_MAP[name]) return FACULTY_CODE_MAP[name];
-  for (const [k, v] of Object.entries(FACULTY_CODE_MAP)) {
+function getFacultyInfo(name: string) {
+  if (FACULTY_INFO_MAP[name]) return FACULTY_INFO_MAP[name];
+  for (const [k, v] of Object.entries(FACULTY_INFO_MAP)) {
     if (name.includes(k) || k.includes(name)) return v;
   }
-  return name.replace(/^คณะ/, '').substring(0, 4).toUpperCase();
+  return {
+    code: name.replace(/^คณะ/, '').substring(0, 4).toUpperCase(),
+    phone: "054-466-666",
+    email: "info@up.ac.th",
+    address: "มหาวิทยาลัยพะเยา 19 ม.2 ต.แม่กา อ.เมือง จ.พะเยา 56000",
+    executiveTitle: "รองคณบดีฝ่ายบริหาร"
+  };
 }
 
 interface RawFacultyRow {
@@ -36,6 +144,8 @@ interface RawFacultyRow {
   name: string;
   adminName: string | null;
   adminEmail: string | null;
+  execName: string | null;
+  execEmail: string | null;
   totalVans: number | string;
   mainDrivers: number | string;
 }
@@ -55,6 +165,9 @@ interface CachedFacultyItem {
   status?: string;
   vanCount?: number;
   driverCount?: number;
+  phone?: string;
+  email?: string;
+  address?: string;
   [key: string]: unknown;
 }
 let cachedFaculties: { data: CachedFacultyItem[]; timestamp: number } | null = null;
@@ -75,34 +188,40 @@ export async function GET() {
         f.name_th AS name,
         u.name AS "adminName",
         u.email AS "adminEmail",
+        exec_u.name AS "execName",
+        exec_u.email AS "execEmail",
         (SELECT COUNT(*) FROM vans v WHERE v.faculty_id = f.id) AS "totalVans",
         (SELECT COUNT(*) FROM drivers d WHERE d.faculty_id = f.id) AS "mainDrivers"
       FROM faculties f
       LEFT JOIN users u ON u.faculty_id = f.id AND u.role = 'FACULTY_ADMIN'
+      LEFT JOIN users exec_u ON exec_u.faculty_id = f.id AND exec_u.role = 'EXECUTIVE'
       WHERE f.name_th != 'ศูนย์จัดการระบบส่วนกลาง'
       ORDER BY f.id ASC;
     `;
 
-    const mapped = rawRows.map(f => ({
-      id: Number(f.id),
-      name: f.name,
-      code: getFacultyCode(f.name),
-      adminName: f.adminName || "ไม่มีข้อมูล",
-      adminPhone: "-",
-      adminTitle: "ผู้ดูแลระบบคณะ",
-      adminEmail: f.adminEmail || "-",
-      executiveName: "-",
-      executiveTitle: "-",
-      executivePhone: "-",
-      executiveEmail: "-",
-      totalVans: Number(f.totalVans || 0),
-      mainDrivers: Number(f.mainDrivers || 0),
-      subDrivers: 0,
-      phone: "-",
-      email: "-",
-      address: "-",
-      status: "ACTIVE" as const
-    }));
+    const mapped = rawRows.map(f => {
+      const info = getFacultyInfo(f.name);
+      return {
+        id: Number(f.id),
+        name: f.name,
+        code: info.code,
+        adminName: f.adminName || "ยังไม่ระบุผู้ดูแล",
+        adminPhone: info.phone,
+        adminTitle: "ผู้ดูแลระบบคณะ (Faculty Admin)",
+        adminEmail: f.adminEmail || info.email,
+        executiveName: f.execName || "รองคณบดีฝ่ายบริหาร",
+        executiveTitle: info.executiveTitle,
+        executivePhone: info.phone,
+        executiveEmail: f.execEmail || info.email,
+        totalVans: Number(f.totalVans || 0),
+        mainDrivers: Number(f.mainDrivers || 0),
+        subDrivers: 0,
+        phone: info.phone,
+        email: info.email,
+        address: info.address,
+        status: "ACTIVE" as const
+      };
+    });
 
     cachedFaculties = { data: mapped, timestamp: Date.now() };
     return NextResponse.json({ success: true, data: mapped });
@@ -149,6 +268,43 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("POST /api/super-admin/faculties error:", error);
     return NextResponse.json({ success: false, error: "เกิดข้อผิดพลาดในการเพิ่มคณะ" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const user = await getAuthUser();
+    if (!user || user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ success: false, error: "Unauthorized: คุณไม่มีสิทธิ์จัดการข้อมูลคณะ" }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { id, adminUserId } = body;
+
+    if (id && adminUserId) {
+      const facultyId = Number(id);
+      const targetUserId = Number(adminUserId);
+
+      // Demote old admin
+      await prisma.user.updateMany({
+        where: { facultyId, role: 'FACULTY_ADMIN' },
+        data: { role: 'USER' }
+      });
+
+      // Promote new admin
+      await prisma.user.update({
+        where: { id: targetUserId },
+        data: { role: 'FACULTY_ADMIN', facultyId }
+      });
+
+      cachedFaculties = null;
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("PUT /api/super-admin/faculties error:", error);
+    return NextResponse.json({ success: false, error: "เกิดข้อผิดพลาดในการอัปเดตคณะ" }, { status: 500 });
   }
 }
 

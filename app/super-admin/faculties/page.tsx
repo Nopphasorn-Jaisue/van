@@ -38,6 +38,7 @@ export default function SuperAdminFaculties() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingFaculty, setEditingFaculty] = useState<FacultyItem | null>(null);
   const [changeAdminFaculty, setChangeAdminFaculty] = useState<FacultyItem | null>(null);
+  const [selectedNewAdminId, setSelectedNewAdminId] = useState<string>("");
   const [historyFaculty, setHistoryFaculty] = useState<FacultyItem | null>(null);
   const [deleteConfirmFaculty, setDeleteConfirmFaculty] = useState<FacultyItem | null>(null);
 
@@ -328,7 +329,7 @@ export default function SuperAdminFaculties() {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="font-bold text-sm text-gray-900">รายละเอียดคณะ</h3>
-              <button className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"><X size={16} /></button>
+              <button onClick={() => setSelectedFacultyId(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"><X size={16} /></button>
             </div>
 
             {/* Faculty Title Badge */}
