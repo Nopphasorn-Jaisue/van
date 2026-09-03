@@ -57,20 +57,40 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(tokenData.error_description || tokenData.error || "Token exchange failed")}`);
     }
 
-    // 2. Fetch user profile from Microsoft Graph
+    const accessToken = tokenData.access_token;
+
+    // 2. Fetch user profile from Microsoft Graph (/me)
     const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const graphData = await graphResponse.json();
     const email = (graphData.mail || graphData.userPrincipalName || "").toLowerCase().trim();
     const name = graphData.displayName || graphData.givenName || email.split("@")[0];
+    const phone = graphData.mobilePhone || (graphData.businessPhones && graphData.businessPhones[0]) || null;
 
     if (!email) {
       return NextResponse.redirect(`${origin}/login?error=Cannot+retrieve+email+from+Microsoft+account`);
     }
 
-    // 3. Find or create user in database
+    // 3. Fetch user profile photo from Microsoft Graph (/me/photo/$value)
+    let avatarUrl: string | null = null;
+    try {
+      const photoResponse = await fetch("https://graph.microsoft.com/v1.0/me/photo/$value", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (photoResponse.ok) {
+        const photoBuffer = await photoResponse.arrayBuffer();
+        const base64Photo = Buffer.from(photoBuffer).toString("base64");
+        const contentType = photoResponse.headers.get("content-type") || "image/jpeg";
+        avatarUrl = `data:${contentType};base64,${base64Photo}`;
+      }
+    } catch (photoErr) {
+      console.warn("Could not fetch user photo from MS Graph:", photoErr);
+    }
+
+    // 4. Find or create/update user in database
     let dbUser = await prisma.user.findUnique({
       where: { email },
       include: { faculty: true },
@@ -85,24 +105,41 @@ export async function GET(request: NextRequest) {
         data: {
           email,
           name,
+          avatar: avatarUrl,
+          phone: phone,
           role: "USER",
           facultyId: fallbackFaculty.id,
         },
         include: { faculty: true },
       });
+    } else {
+      // Update name, avatar, and phone if available from Microsoft 365
+      const updateData: { name?: string; avatar?: string; phone?: string } = {};
+      if (name && dbUser.name !== name) updateData.name = name;
+      if (avatarUrl && dbUser.avatar !== avatarUrl) updateData.avatar = avatarUrl;
+      if (phone && !dbUser.phone) updateData.phone = phone;
+
+      if (Object.keys(updateData).length > 0) {
+        dbUser = await prisma.user.update({
+          where: { id: dbUser.id },
+          data: updateData,
+          include: { faculty: true },
+        });
+      }
     }
 
-    // 4. Generate JWT session token
+    // 5. Generate JWT session token
     const token = await signToken({
       id: dbUser.id,
       email: dbUser.email,
       name: dbUser.name,
+      avatar: dbUser.avatar,
       role: dbUser.role,
       facultyId: dbUser.facultyId,
       faculty: dbUser.faculty,
     });
 
-    // 5. Set session cookie
+    // 6. Set session cookie
     const cookieStore = await cookies();
     cookieStore.set("auth_token", token, {
       httpOnly: true,
@@ -115,7 +152,7 @@ export async function GET(request: NextRequest) {
     cookieStore.set("mock_role", dbUser.role, { path: "/", maxAge: 60 * 60 * 24 });
     cookieStore.set("mock_email", dbUser.email, { path: "/", maxAge: 60 * 60 * 24 });
 
-    // 6. Redirect to dashboard based on role
+    // 7. Redirect to dashboard based on role
     if (dbUser.role === "SUPER_ADMIN") {
       return NextResponse.redirect(`${origin}/super-admin/dashboard`);
     } else if (dbUser.role === "FACULTY_ADMIN") {
