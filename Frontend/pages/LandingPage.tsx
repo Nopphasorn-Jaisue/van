@@ -878,9 +878,10 @@ function CalendarMonthCell({
               </span>
             </div>
             {ownerFaculty && ownerFaculty.id !== faculty?.id && (
-              <div className="flex items-center gap-0.5 shrink-0">
-                <span className={`h-1 w-1 rounded-full`} style={{ backgroundColor: ownerFaculty.palette.accentRgb || '#94a3b8' }} />
-                <span className="text-[8px] font-semibold text-slate-500">
+              <div className="flex items-center gap-1 shrink-0 bg-transparent pl-0.5" title={`ยืมรถตู้จาก ${ownerFaculty.name}`}>
+                <span className="text-[8px] 2xl:text-[9px] font-bold text-gray-500">ยืม</span>
+                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: ownerFaculty.palette.accentRgb || '#94a3b8' }} />
+                <span className="text-[8px] 2xl:text-[9px] font-bold text-slate-600">
                   {ownerFaculty.shortName}
                 </span>
               </div>
