@@ -1498,10 +1498,27 @@ function CalendarContent() {
                     <label className="block font-bold text-gray-700 mb-1">ประเภทการใช้รถตู้</label>
                     <div className="grid grid-cols-2 gap-2">
                       <button
+                        type="button"
                         onClick={() => {
                           const userFac = currentUser?.faculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
-                          const defaultVan = vansList.find(v => v.facultyName === userFac) || vansList[0];
-                          setEventFormData({ ...eventFormData, vanType: 'OWN', vanId: defaultVan ? defaultVan.id : '1', bookingFaculty: userFac });
+                          const ownVan = vansList.find(v => v.facultyName === userFac) || vansList[0];
+                          setEventFormData({ 
+                            ...eventFormData, 
+                            vanType: 'OWN', 
+                            vanId: ownVan ? ownVan.id : '1', 
+                            bookingFaculty: userFac,
+                            selectedVans: [
+                              {
+                                id: `van-${Date.now()}-1`,
+                                vanId: ownVan ? ownVan.id : '1',
+                                facultyName: ownVan ? ownVan.facultyName : userFac,
+                                isBorrow: false,
+                                plate: ownVan ? ownVan.plate : '',
+                                driverName: ownVan ? ownVan.driverName : '',
+                                phone: ownVan ? ownVan.driverPhone : ''
+                              }
+                            ]
+                          });
                         }}
                         className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                           eventFormData.vanType === 'OWN'
@@ -1513,7 +1530,37 @@ function CalendarContent() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEventFormData({ ...eventFormData, vanType: 'BORROW', vanId: '' })}
+                        onClick={() => {
+                          const userFac = currentUser?.faculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+                          const availableOtherVans = vansList.filter(v => {
+                            if (v.facultyName === userFac) return false;
+                            const isBooked = bookingsData.some(b => 
+                              b.vanId === v.id && 
+                              isSameDate(b.date, eventFormData.date) &&
+                              b.status !== 'rejected' &&
+                              b.status !== 'cancelled'
+                            );
+                            return !isBooked;
+                          });
+                          const firstBorrow = availableOtherVans[0] || vansList.find(v => v.facultyName !== userFac) || vansList[0];
+
+                          setEventFormData({ 
+                            ...eventFormData, 
+                            vanType: 'BORROW', 
+                            vanId: firstBorrow ? firstBorrow.id : '',
+                            selectedVans: [
+                              {
+                                id: `van-${Date.now()}-1`,
+                                vanId: firstBorrow ? firstBorrow.id : '',
+                                facultyName: firstBorrow ? firstBorrow.facultyName : '',
+                                isBorrow: true,
+                                plate: firstBorrow ? firstBorrow.plate : '',
+                                driverName: firstBorrow ? firstBorrow.driverName : '',
+                                phone: firstBorrow ? firstBorrow.driverPhone : ''
+                              }
+                            ]
+                          });
+                        }}
                         className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                           eventFormData.vanType === 'BORROW'
                             ? 'bg-[#311171] text-white border-[#311171] shadow-xs'
@@ -1525,11 +1572,11 @@ function CalendarContent() {
                     </div>
 
                     {eventFormData.vanType === 'BORROW' && (
-                      <div className="p-2.5 mt-2 bg-red-50/80 rounded-xl border border-red-200 text-[10px] text-red-600 font-bold leading-relaxed">
+                      <div className="p-2.5 mt-2 bg-purple-50/90 rounded-xl border border-purple-200 text-[10px] text-purple-900 font-bold leading-relaxed space-y-1">
                         <div className="flex items-start gap-1.5">
-                          <AlertTriangle size={13} className="text-red-500 shrink-0 mt-0.5" />
+                          <AlertTriangle size={13} className="text-[#311171] shrink-0 mt-0.5" />
                           <span>
-                            หน่วยงานอื่นไม่อนุญาตให้จองใช้รถตู้เกิน 3 วันเดินทาง จองล่วงหน้าได้ไม่เกิน 10 วัน และไม่อนุมัติข้ามเดือน
+                            (โหมดขอยืมรถต่างคณะ) รถประจำคณะของท่านจะไม่ถูกนำมาใช้ ระบบจะแสดงเฉพาะรถตู้ว่างของคณะอื่นที่เปิดให้ยืม
                           </span>
                         </div>
                       </div>
