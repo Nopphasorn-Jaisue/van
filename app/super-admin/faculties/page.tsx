@@ -304,7 +304,7 @@ export default function SuperAdminFaculties() {
             className="lg:col-span-4 flex flex-col space-y-4 h-full min-h-0 overflow-y-auto pr-1 animate-in fade-in slide-in-from-right-8 duration-300"
             onClick={(e) => e.stopPropagation()}
           >
-          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs space-y-4">
+          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs space-y-5">
             
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -323,14 +323,14 @@ export default function SuperAdminFaculties() {
             </div>
 
             {/* ผู้อนุมัติผู้บริหาร */}
-            <div className="space-y-2 text-xs bg-transparent p-3.5 rounded-2xl border border-gray-200/80">
+            <div className="space-y-2 text-xs py-1 border-b border-gray-100/70 pb-4">
               <h5 className="font-bold text-gray-900 text-xs">ผู้อนุมัติผู้บริหาร</h5>
               {selectedFaculty.executiveName && selectedFaculty.executiveName !== "-" ? (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 pt-1">
                   <img 
                     src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150" 
                     alt={selectedFaculty.executiveName}
-                    className="w-10 h-10 rounded-full object-cover border border-purple-200" 
+                    className="w-10 h-10 rounded-full object-cover border border-purple-100" 
                   />
                   <div>
                     <p className="font-bold text-gray-900">{selectedFaculty.executiveName}</p>
@@ -350,21 +350,21 @@ export default function SuperAdminFaculties() {
                   </div>
                 </div>
               ) : (
-                <div className="p-3 bg-transparent rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px] font-medium">
+                <div className="py-2.5 text-center text-gray-400 text-[11px] font-medium">
                   ยังไม่มีคณบดี
                 </div>
               )}
             </div>
 
             {/* ผู้ดูแลคณะ (ปัจจุบัน) */}
-            <div className="space-y-2 text-xs bg-transparent p-3.5 rounded-2xl border border-gray-200/80">
+            <div className="space-y-2 text-xs py-1 border-b border-gray-100/70 pb-4">
               <h5 className="font-bold text-gray-900 text-xs">ผู้ดูแลคณะ (ปัจจุบัน)</h5>
               {selectedFaculty.adminName && selectedFaculty.adminName !== "-" ? (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 pt-1">
                   <img 
                     src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
                     alt={selectedFaculty.adminName}
-                    className="w-10 h-10 rounded-full object-cover border border-purple-200" 
+                    className="w-10 h-10 rounded-full object-cover border border-purple-100" 
                   />
                   <div>
                     <p className="font-bold text-gray-900">{selectedFaculty.adminName}</p>
@@ -384,14 +384,14 @@ export default function SuperAdminFaculties() {
                   </div>
                 </div>
               ) : (
-                <div className="p-3 bg-transparent rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px] font-medium">
+                <div className="py-2.5 text-center text-gray-400 text-[11px] font-medium">
                   ยังไม่มีผู้ดูแลคณะ
                 </div>
               )}
             </div>
 
             {/* พนักงานขับรถประจำคณะ */}
-            <div className="space-y-2.5 text-xs bg-transparent p-3.5 rounded-2xl border border-gray-200/80">
+            <div className="space-y-2.5 text-xs py-1">
               <div className="flex items-center justify-between">
                 <h5 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
                   <Users size={14} className="text-[#311171]" />
@@ -400,9 +400,9 @@ export default function SuperAdminFaculties() {
               </div>
 
               {selectedFaculty.driversList && selectedFaculty.driversList.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-2 pt-1">
                   {selectedFaculty.driversList.map((drv, drvIdx) => (
-                    <div key={`fac-drv-${drv.id || drvIdx}`} className="flex items-center justify-between p-2.5 bg-transparent rounded-xl border border-gray-200/80 shadow-2xs">
+                    <div key={`fac-drv-${drv.id || drvIdx}`} className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50/80 transition-colors">
                       <div className="flex items-center gap-2.5">
                         <img 
                           src={drv.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150"} 
@@ -431,14 +431,14 @@ export default function SuperAdminFaculties() {
                   ))}
                 </div>
               ) : (
-                <div className="p-3 bg-transparent rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px] font-medium">
+                <div className="py-2.5 text-center text-gray-400 text-[11px] font-medium">
                   ยังไม่มีคนขับ
                 </div>
               )}
             </div>
 
             {/* Action Buttons */}
-            <div className="space-y-2 pt-2">
+            <div className="space-y-2 pt-2 border-t border-gray-100">
               <button 
                 onClick={() => setHistoryFaculty(selectedFaculty)}
                 className="w-full py-2.5 bg-[#311171] hover:bg-[#230b54] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all"
