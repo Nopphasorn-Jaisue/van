@@ -1145,12 +1145,12 @@ function CalendarContent() {
                                     </div>
                                     {isBorrowed && (
                                       <div 
-                                        className="flex items-center gap-1 shrink-0 px-1.5 py-[2px] rounded-md bg-purple-50/90 text-[#311171] border border-purple-200 shadow-2xs" 
+                                        className="flex items-center gap-1 shrink-0 bg-transparent pl-0.5" 
                                         title={`ยืมรถตู้จาก ${ownerFaculty}`}
                                       >
-                                        <ArrowLeftRight size={8} className="text-[#311171] shrink-0" strokeWidth={2.5} />
+                                        <span className="text-[8px] 2xl:text-[9px] font-bold text-gray-500">ยืม</span>
                                         <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${ownerStyle.dotColor || 'bg-sky-500'}`} />
-                                        <span className={`text-[8px] 2xl:text-[9px] font-bold ${ownerStyle.textColor || 'text-[#311171]'}`}>
+                                        <span className={`text-[8px] 2xl:text-[9px] font-bold ${ownerStyle.textColor || 'text-slate-600'}`}>
                                           {ownerStyle.shortName}
                                         </span>
                                       </div>
