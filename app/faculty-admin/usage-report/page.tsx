@@ -173,7 +173,7 @@ export default function FacultyUsageReportPage() {
 
   return (
     <AppShell>
-      <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-12">
+      <div className="w-full flex-1 flex flex-col space-y-4 animate-in fade-in">
         
         {/* 🌟 Section Header: ประวัติการเดินทาง & Export Button */}
         <div className="flex justify-between items-center pt-2">
@@ -233,7 +233,7 @@ export default function FacultyUsageReportPage() {
         </div>
 
         {/* 🌟 Table Card (Scrollable Table with Headers matching attached mockup) */}
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex-1 flex flex-col justify-between min-h-[360px]">
           <div className="overflow-x-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full">
             <table className="w-full min-w-[900px] border-collapse text-left text-xs">
               <thead>
@@ -349,7 +349,7 @@ export default function FacultyUsageReportPage() {
         </div>
 
         {/* 🌟 Signature Section Below Table (Matching Mockup Image 3, 4, 5) */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-100 shadow-sm mt-6">
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-100 shadow-sm mt-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 items-end text-center">
             {/* Left Signature: Driver */}
             <div className="space-y-2 flex flex-col items-center">
