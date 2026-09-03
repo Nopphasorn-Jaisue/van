@@ -1,27 +1,25 @@
-import { invalidateFacultiesCache } from '@/app/api/super-admin/faculties/route';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-
-
-interface DbUserItem {
-  id: number;
-  name: string;
-  email: string;
-  avatar?: string | null;
-  role: string;
-  faculty?: {
-    nameTh: string;
-  } | null;
-}
+import { invalidateFacultiesCache } from '@/app/api/super-admin/faculties/route';
 
 export async function GET() {
   try {
-    let dbUsers: DbUserItem[] = [];
+    let dbUsers: Array<{
+      id: number;
+      name: string;
+      email: string;
+      phone?: string | null;
+      avatar: string | null;
+      role: "SUPER_ADMIN" | "FACULTY_ADMIN" | "EXECUTIVE" | "DRIVER" | "USER";
+      faculty?: { nameTh: string } | null;
+      driverProfile?: { phone: string } | null;
+    }> = [];
+
     try {
       dbUsers = await prisma.user.findMany({
         include: {
-          faculty: true
+          faculty: true,
+          driverProfile: true
         },
         orderBy: {
           id: 'desc'
@@ -39,6 +37,7 @@ export async function GET() {
         faculty: u.faculty?.nameTh || "ศูนย์จัดการระบบส่วนกลาง",
         role: u.role,
         email: u.email,
+        phone: u.phone || (u.role === 'DRIVER' ? u.driverProfile?.phone : null) || "-",
         status: "ACTIVE",
         lastLogin: "เข้าใช้งานแล้ว"
       }));
@@ -56,7 +55,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, role, faculty } = body;
+    const { name, email, phone, role, faculty } = body;
     if (!name || !email) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
@@ -94,6 +93,7 @@ export async function POST(request: Request) {
       data: {
         name,
         email,
+        phone: phone || null,
         role: role || 'USER',
         facultyId
       }
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
           data: {
             userId: createdUser.id,
             facultyId: facultyId,
-            phone: "-",
+            phone: phone || "-",
             age: 35,
             type: "PRIMARY",
             isActive: true
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, name, email, role, faculty } = body;
+    const { id, name, email, phone, role, faculty } = body;
     if (!id || !name || !email) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
@@ -151,6 +151,7 @@ export async function PUT(request: Request) {
     const existingUser = await prisma.user.findUnique({ where: { id: targetUserId } });
     const targetName = name || existingUser?.name || 'ผู้ใช้งาน';
     const targetEmail = email || existingUser?.email || '';
+    const targetPhone = phone !== undefined ? phone : existingUser?.phone;
     const targetRole = role || existingUser?.role || 'USER';
     const targetFacultyId = facultyId || existingUser?.facultyId || 1;
 
@@ -173,6 +174,7 @@ export async function PUT(request: Request) {
       data: {
         name: targetName,
         email: targetEmail,
+        phone: targetPhone || null,
         role: targetRole,
         facultyId: targetFacultyId
       }
@@ -186,7 +188,7 @@ export async function PUT(request: Request) {
             data: {
               userId: updatedUser.id,
               facultyId: facultyId,
-              phone: "-",
+              phone: targetPhone || "-",
               age: 35,
               type: "PRIMARY",
               isActive: true
@@ -195,7 +197,10 @@ export async function PUT(request: Request) {
         } else {
           await prisma.driver.update({
             where: { id: existingDriver.id },
-            data: { facultyId: facultyId }
+            data: { 
+              facultyId: facultyId,
+              phone: targetPhone || existingDriver.phone || "-"
+            }
           });
         }
       } catch (dErr) {

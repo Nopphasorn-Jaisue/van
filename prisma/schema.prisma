@@ -80,6 +80,7 @@ model User {
 
   name      String
   email     String   @unique // รองรับระบบ Microsoft 365 SSO ของมหาวิทยาลัย
+  phone     String?  @map("phone")
   avatar    String?  @db.Text
   role      Role     @default(USER)
   createdAt DateTime @default(now()) @map("created_at")

@@ -70,6 +70,7 @@ export default function SuperAdminUsers() {
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
+    phone: "",
     role: "FACULTY_ADMIN" as UserItem["role"],
     faculty: "คณะเภสัชฯ"
   });
@@ -92,7 +93,7 @@ export default function SuperAdminUsers() {
       
       if (res.ok) {
         setIsAddUserOpen(false);
-        setNewUser({ name: "", email: "", role: "FACULTY_ADMIN", faculty: "คณะเภสัชฯ" });
+        setNewUser({ name: "", email: "", phone: "", role: "FACULTY_ADMIN", faculty: "คณะเภสัชฯ" });
         showToast(`เพิ่มผู้ใช้งาน ${newUser.name} เรียบร้อยแล้ว`);
         fetchUsers();
       } else {
