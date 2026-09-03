@@ -1,13 +1,13 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, User, BarChart3, Clock, LayoutDashboard, Wrench,
   X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FileSpreadsheet, Menu
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
-import { getNotifications, markNotificationAsRead } from '@/app/actions/notifications';
+import { getNotifications, markNotificationAsRead, type AppNotification } from '@/app/actions/notifications';
 import { formatDistanceToNow } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { Role } from '@prisma/client';
@@ -33,6 +33,7 @@ const getInitialFaculty = (path: string) => {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [userRole, setUserRole] = useState<string>(() => getInitialRole(pathname));
   const [displayName, setDisplayName] = useState<string>('ผู้ใช้งานระบบ');
   const [facultyName, setFacultyName] = useState<string>(() => getInitialFaculty(pathname));
@@ -89,21 +90,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [showDutiesModal, setShowDutiesModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  type NotificationItem = {
-    id: number;
-    message: string;
-    type: string;
-    isRead: boolean;
-    createdAt: Date;
-  };
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
-      // Fetch based on current role (since user isn't logged in proper yet)
-      const data = await getNotifications(userRole as Role);
-      setNotifications(data);
+      try {
+        const data = await getNotifications(userRole as Role);
+        setNotifications(data);
+      } catch (err) {
+        console.error(err);
+      }
     };
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 15000);
@@ -112,9 +123,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const handleMarkAsRead = async (id: number) => {
+  const handleMarkAsRead = async (id: string | number) => {
     await markNotificationAsRead(id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  };
+
+  const handleMarkAllAsRead = async () => {
+    for (const n of notifications) {
+      if (!n.isRead) await markNotificationAsRead(n.id);
+    }
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 
   return (
@@ -178,31 +196,75 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50">
-                  <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                    <span className="font-bold text-gray-800">การแจ้งเตือน</span>
-                    <span className="text-xs text-purple-600 cursor-pointer hover:underline">อ่านทั้งหมด</span>
+                <div className="absolute right-0 mt-2 w-84 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="p-3.5 px-4 border-b border-gray-100 bg-slate-50/80 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-gray-900 text-sm">การแจ้งเตือน</span>
+                      {unreadCount > 0 && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full">
+                          {unreadCount} ใหม่
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkAllAsRead();
+                        }}
+                        className="text-xs text-purple-700 font-bold hover:text-purple-900 cursor-pointer"
+                      >
+                        อ่านทั้งหมด
+                      </button>
+                    )}
                   </div>
-                  <ul className="divide-y divide-gray-50 max-h-[300px] overflow-y-auto">
+                  <ul className="divide-y divide-gray-100 max-h-[380px] overflow-y-auto">
                     {notifications.length > 0 ? notifications.map((note) => (
                       <li 
                         key={note.id} 
                         onClick={() => {
-                          if (note.type === 'duties') {
-                            setShowDutiesModal(true);
-                            setShowNotifications(false);
-                          }
                           if (!note.isRead) handleMarkAsRead(note.id);
+                          setShowNotifications(false);
+                          if (note.link) {
+                            router.push(note.link);
+                          }
                         }}
-                        className={`p-4 hover:bg-purple-50/50 cursor-pointer transition-colors ${note.isRead ? 'bg-white opacity-60' : 'bg-[#f4effc]'}`}
+                        className={`p-3.5 hover:bg-purple-50/60 cursor-pointer transition-colors ${note.isRead ? 'bg-white opacity-70' : 'bg-purple-50/30'}`}
                       >
-                        <p className="text-sm font-bold text-gray-800 leading-snug">{note.message}</p>
-                        <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
-                          <Clock size={12} /> {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true, locale: th })}
-                        </p>
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <span className="text-xs font-black text-slate-900 line-clamp-1">
+                            {note.title || 'แจ้งเตือน'}
+                          </span>
+                          {note.badgeText && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border ${
+                              note.type === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              note.type === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' :
+                              note.type === 'borrow' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                              note.type === 'driver' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              'bg-yellow-50 text-yellow-800 border-yellow-200'
+                            }`}>
+                              {note.badgeText}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-700 leading-relaxed line-clamp-2">{note.message}</p>
+                        <div className="flex items-center justify-between mt-2 pt-1">
+                          <span className="text-[10px] text-gray-400 flex items-center gap-1 font-medium">
+                            <Clock size={11} /> {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true, locale: th })}
+                          </span>
+                          <span className="text-[10px] text-purple-700 font-bold hover:underline flex items-center gap-0.5">
+                            ดูรายละเอียด &rarr;
+                          </span>
+                        </div>
                       </li>
                     )) : (
-                      <li className="p-6 text-center text-sm text-gray-400">ไม่มีการแจ้งเตือนใหม่</li>
+                      <li className="p-8 text-center text-sm text-gray-400">
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <Bell size={24} className="text-gray-300 mb-1" />
+                          <p className="font-bold text-gray-600">ไม่มีการแจ้งเตือนใหม่</p>
+                          <p className="text-xs text-gray-400">เมื่อมีคำขอหรืออัปเดตใหม่ จะแจ้งเตือนที่นี่</p>
+                        </div>
+                      </li>
                     )}
                   </ul>
                 </div>
