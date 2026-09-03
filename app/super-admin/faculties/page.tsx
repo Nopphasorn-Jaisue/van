@@ -323,66 +323,86 @@ export default function SuperAdminFaculties() {
             </div>
 
             {/* ผู้อนุมัติผู้บริหาร */}
-            <div className="space-y-2 text-xs bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
+            <div className="space-y-2 text-xs bg-transparent p-3.5 rounded-2xl border border-gray-200/80">
               <h5 className="font-bold text-gray-900 text-xs">ผู้อนุมัติผู้บริหาร</h5>
-              <div className="flex items-center gap-3">
-                <img 
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150" 
-                  alt={selectedFaculty.executiveName}
-                  className="w-10 h-10 rounded-full object-cover border border-purple-200" 
-                />
-                <div>
-                  <p className="font-bold text-gray-900">{selectedFaculty.executiveName}</p>
-                  <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.executiveTitle}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
-                    <Phone size={11} className="text-gray-400" />
-                    <span>{selectedFaculty.executivePhone}</span>
-                  </p>
-                  <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
-                    <Mail size={11} className="text-gray-400" />
-                    <span>{selectedFaculty.executiveEmail}</span>
-                  </p>
+              {selectedFaculty.executiveName && selectedFaculty.executiveName !== "-" ? (
+                <div className="flex items-center gap-3">
+                  <img 
+                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150" 
+                    alt={selectedFaculty.executiveName}
+                    className="w-10 h-10 rounded-full object-cover border border-purple-200" 
+                  />
+                  <div>
+                    <p className="font-bold text-gray-900">{selectedFaculty.executiveName}</p>
+                    <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.executiveTitle || "คณบดี / รองคณบดีฝ่ายบริหาร"}</p>
+                    {selectedFaculty.executivePhone && (
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
+                        <Phone size={11} className="text-gray-400" />
+                        <span>{selectedFaculty.executivePhone}</span>
+                      </p>
+                    )}
+                    {selectedFaculty.executiveEmail && (
+                      <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
+                        <Mail size={11} className="text-gray-400" />
+                        <span>{selectedFaculty.executiveEmail}</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3 bg-transparent rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px] font-medium">
+                  ยังไม่มีคณบดี
+                </div>
+              )}
             </div>
 
             {/* ผู้ดูแลคณะ (ปัจจุบัน) */}
-            <div className="space-y-2 text-xs bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
+            <div className="space-y-2 text-xs bg-transparent p-3.5 rounded-2xl border border-gray-200/80">
               <h5 className="font-bold text-gray-900 text-xs">ผู้ดูแลคณะ (ปัจจุบัน)</h5>
-              <div className="flex items-center gap-3">
-                <img 
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
-                  alt={selectedFaculty.adminName}
-                  className="w-10 h-10 rounded-full object-cover border border-purple-200" 
-                />
-                <div>
-                  <p className="font-bold text-gray-900">{selectedFaculty.adminName}</p>
-                  <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.adminTitle}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
-                    <Phone size={11} className="text-gray-400" />
-                    <span>{selectedFaculty.adminPhone}</span>
-                  </p>
-                  <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
-                    <Mail size={11} className="text-gray-400" />
-                    <span>{selectedFaculty.adminEmail}</span>
-                  </p>
+              {selectedFaculty.adminName && selectedFaculty.adminName !== "-" ? (
+                <div className="flex items-center gap-3">
+                  <img 
+                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
+                    alt={selectedFaculty.adminName}
+                    className="w-10 h-10 rounded-full object-cover border border-purple-200" 
+                  />
+                  <div>
+                    <p className="font-bold text-gray-900">{selectedFaculty.adminName}</p>
+                    <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.adminTitle || "ผู้ดูแลระบบคณะ (Faculty Admin)"}</p>
+                    {selectedFaculty.adminPhone && (
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
+                        <Phone size={11} className="text-gray-400" />
+                        <span>{selectedFaculty.adminPhone}</span>
+                      </p>
+                    )}
+                    {selectedFaculty.adminEmail && (
+                      <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
+                        <Mail size={11} className="text-gray-400" />
+                        <span>{selectedFaculty.adminEmail}</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3 bg-transparent rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px] font-medium">
+                  ยังไม่มีผู้ดูแลคณะ
+                </div>
+              )}
             </div>
 
             {/* พนักงานขับรถประจำคณะ */}
-            <div className="space-y-2.5 text-xs bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
+            <div className="space-y-2.5 text-xs bg-transparent p-3.5 rounded-2xl border border-gray-200/80">
               <div className="flex items-center justify-between">
                 <h5 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
                   <Users size={14} className="text-[#311171]" />
-                  <span>พนักงานขับรถประจำคณะ ({selectedFaculty.driversList?.length || selectedFaculty.mainDrivers || 0} คน)</span>
+                  <span>พนักงานขับรถประจำคณะ ({selectedFaculty.driversList?.length || 0} คน)</span>
                 </h5>
               </div>
 
               {selectedFaculty.driversList && selectedFaculty.driversList.length > 0 ? (
                 <div className="space-y-2">
                   {selectedFaculty.driversList.map((drv, drvIdx) => (
-                    <div key={`fac-drv-${drv.id || drvIdx}`} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-gray-200/70 shadow-2xs">
+                    <div key={`fac-drv-${drv.id || drvIdx}`} className="flex items-center justify-between p-2.5 bg-transparent rounded-xl border border-gray-200/80 shadow-2xs">
                       <div className="flex items-center gap-2.5">
                         <img 
                           src={drv.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150"} 
@@ -411,8 +431,8 @@ export default function SuperAdminFaculties() {
                   ))}
                 </div>
               ) : (
-                <div className="p-3 bg-white rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px]">
-                  ไม่มีพนักงานขับรถประจำสังกัดคณะนี้
+                <div className="p-3 bg-transparent rounded-xl border border-dashed border-gray-200 text-center text-gray-400 text-[11px] font-medium">
+                  ยังไม่มีคนขับ
                 </div>
               )}
             </div>
