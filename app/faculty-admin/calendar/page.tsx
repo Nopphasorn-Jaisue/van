@@ -1003,7 +1003,7 @@ function CalendarContent() {
             >
               <option value="all">ทุกคณะรวมกัน</option>
               {facultiesList.map(faculty => (
-                <option key={faculty.id} value={faculty.name}>
+                <option key={`fac-opt-${faculty.id}`} value={faculty.name}>
                   {faculty.name} {currentUser?.faculty === faculty.name ? '(คณะของคุณ)' : ''}
                 </option>
               ))}
@@ -1419,7 +1419,7 @@ function CalendarContent() {
                               const fPhone = fv.phone || fVan?.driverPhone || '-';
 
                               return (
-                                <div key={fv.id || fIdx} className="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between gap-2 shadow-2xs">
+                                <div key={`fleet-item-${fv.id || fIdx}-${fIdx}`} className="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between gap-2 shadow-2xs">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <span className={`w-2 h-2 rounded-full shrink-0 ${fv.isBorrow ? 'bg-purple-500' : 'bg-emerald-500'}`} />
                                     <div className="truncate">
@@ -1751,7 +1751,7 @@ function CalendarContent() {
 
                         return (
                           <div 
-                            key={sv.id} 
+                            key={`sv-card-${sv.id}`} 
                             className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/70 space-y-2 relative transition-all hover:border-violet-300 shadow-2xs"
                           >
                             <div className="flex items-center justify-between">
@@ -1804,7 +1804,7 @@ function CalendarContent() {
                                       .map(v => {
                                         const isChosenInOtherCard = eventFormData.selectedVans.some(other => other.id !== sv.id && other.vanId === v.id);
                                         return (
-                                          <option key={v.id} value={v.id} disabled={isChosenInOtherCard}>
+                                          <option key={`borrow-opt-${sv.id}-${v.id}`} value={v.id} disabled={isChosenInOtherCard}>
                                             {v.facultyName} - {v.vanName} ({v.plate}) {isChosenInOtherCard ? '(เลือกไปแล้ว)' : ''}
                                           </option>
                                         );
@@ -2064,7 +2064,7 @@ function CalendarContent() {
                                 const isSelected = eventFormData.vanType === 'BORROW' && eventFormData.vanId === rv.id;
                                 return (
                                   <div 
-                                    key={rv.id}
+                                    key={`rec-van-${rv.id}`}
                                     onClick={() => {
                                       setEventFormData(prev => ({
                                         ...prev,
