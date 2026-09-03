@@ -182,43 +182,56 @@ export async function GET() {
   }
 
   try {
-    const rawRows = await prisma.$queryRaw<RawFacultyRow[]>`
-      SELECT 
-        f.id,
-        f.name_th AS name,
-        u.name AS "adminName",
-        u.email AS "adminEmail",
-        exec_u.name AS "execName",
-        exec_u.email AS "execEmail",
-        (SELECT COUNT(*) FROM vans v WHERE v.faculty_id = f.id) AS "totalVans",
-        (SELECT COUNT(*) FROM drivers d WHERE d.faculty_id = f.id) AS "mainDrivers"
-      FROM faculties f
-      LEFT JOIN users u ON u.faculty_id = f.id AND u.role = 'FACULTY_ADMIN'
-      LEFT JOIN users exec_u ON exec_u.faculty_id = f.id AND exec_u.role = 'EXECUTIVE'
-      WHERE f.name_th != 'ศูนย์จัดการระบบส่วนกลาง'
-      ORDER BY f.id ASC;
-    `;
+    const dbFaculties = await prisma.faculty.findMany({
+      where: { nameTh: { not: 'ศูนย์จัดการระบบส่วนกลาง' } },
+      include: {
+        users: true,
+        vans: true,
+        drivers: {
+          include: {
+            user: true,
+            assignedVan: true
+          }
+        }
+      },
+      orderBy: { id: 'asc' }
+    });
 
-    const mapped = rawRows.map(f => {
-      const info = getFacultyInfo(f.name);
+    const mapped = dbFaculties.map(f => {
+      const info = getFacultyInfo(f.nameTh);
+      const adminUser = f.users.find(u => u.role === 'FACULTY_ADMIN');
+      const execUser = f.users.find(u => u.role === 'EXECUTIVE');
+      
+      const driversList = f.drivers.map(d => ({
+        id: d.id,
+        name: d.user?.name || 'พนักงานขับรถ',
+        email: d.user?.email || '-',
+        phone: d.phone || '-',
+        type: (d.type === 'PRIMARY' ? 'คนขับหลัก' : 'คนขับเสริม') as string,
+        status: d.isActive ? 'พร้อมปฏิบัติงาน' : 'ไม่พร้อม',
+        assignedVanPlate: d.assignedVan?.plate || 'ไม่มีรถประจำ',
+        avatar: d.user?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'
+      }));
+
       return {
-        id: Number(f.id),
-        name: f.name,
+        id: f.id,
+        name: f.nameTh,
         code: info.code,
-        adminName: f.adminName || "ยังไม่ระบุผู้ดูแล",
+        adminName: adminUser?.name || "ยังไม่ระบุผู้ดูแล",
         adminPhone: info.phone,
         adminTitle: "ผู้ดูแลระบบคณะ (Faculty Admin)",
-        adminEmail: f.adminEmail || info.email,
-        executiveName: f.execName || "รองคณบดีฝ่ายบริหาร",
+        adminEmail: adminUser?.email || info.email,
+        executiveName: execUser?.name || "รองคณบดีฝ่ายบริหาร",
         executiveTitle: info.executiveTitle,
         executivePhone: info.phone,
-        executiveEmail: f.execEmail || info.email,
-        totalVans: Number(f.totalVans || 0),
-        mainDrivers: Number(f.mainDrivers || 0),
-        subDrivers: 0,
+        executiveEmail: execUser?.email || info.email,
+        totalVans: f.vans.length,
+        mainDrivers: f.drivers.filter(d => d.type === 'PRIMARY').length,
+        subDrivers: f.drivers.filter(d => d.type !== 'PRIMARY').length,
         phone: info.phone,
         email: info.email,
         address: info.address,
+        driversList,
         status: "ACTIVE" as const
       };
     });
