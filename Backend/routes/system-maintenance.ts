@@ -46,19 +46,21 @@ export async function handleListMaintenance() {
         detail: r.detail,
       }));
 
-    const maintenanceHistory = records
+        const maintenanceHistory = records
       .filter(r => r.type === 'MAINTENANCE')
       .map(r => {
       const typeStr = "ตรวจสภาพ";
       const typeColor = "bg-blue-50 text-blue-600 border-blue-100";
+      const p = r.van.plate.trim().split(/\s+/);
+      const province = p.length > 1 ? p.slice(1).join(' ') : 'พะเยา';
 
       return {
         id: `M-${r.id.toString().padStart(3, '0')}`,
         date: r.date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) + " " + r.date.toLocaleTimeString('th-TH', { hour: '2-digit', minute:'2-digit' }),
         van: r.van.plate,
-        province: "พะเยา", // Mock for now
+        province: province,
         type: typeStr,
-        typeColor,
+        typeColor: typeColor,
         detail: r.detail,
       };
     });
