@@ -1,4 +1,5 @@
 "use client";
+import Swal from 'sweetalert2';
 import React, { useState, useEffect, Suspense } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
@@ -1847,16 +1848,26 @@ function CalendarContent() {
                           const availableBorrowed = vansList.filter(v => v.facultyName !== eventFormData.bookingFaculty);
                           const alreadySelectedVanIds = new Set(eventFormData.selectedVans.map(v => v.vanId));
                           const unselectedBorrow = availableBorrowed.find(v => !alreadySelectedVanIds.has(v.id));
-                          const nextBorrow = unselectedBorrow || availableBorrowed[0] || vansList[0];
+
+                          if (!unselectedBorrow) {
+                            Swal.fire({
+                              title: 'จัดสรรรถครบแล้ว',
+                              text: 'คุณได้เลือกขอยืมรถครบทุกคณะที่มีอยู่ในระบบแล้ว',
+                              icon: 'info',
+                              confirmButtonText: 'รับทราบ',
+                              confirmButtonColor: '#311171'
+                            });
+                            return;
+                          }
 
                           const newBorrowItem: SelectedVanItem = {
                             id: `van-${Date.now()}-${eventFormData.selectedVans.length + 1}`,
-                            vanId: nextBorrow ? nextBorrow.id : '',
-                            facultyName: nextBorrow ? nextBorrow.facultyName : '',
+                            vanId: unselectedBorrow.id,
+                            facultyName: unselectedBorrow.facultyName,
                             isBorrow: true,
-                            plate: nextBorrow ? nextBorrow.plate : '',
-                            driverName: nextBorrow ? nextBorrow.driverName : '',
-                            phone: nextBorrow ? nextBorrow.driverPhone : ''
+                            plate: unselectedBorrow.plate,
+                            driverName: unselectedBorrow.driverName,
+                            phone: unselectedBorrow.driverPhone
                           };
                           setEventFormData({
                             ...eventFormData,
