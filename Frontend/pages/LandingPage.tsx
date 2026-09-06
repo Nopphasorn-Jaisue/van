@@ -993,7 +993,7 @@ function EventDetailModal({ event, onClose }: { event: NetworkCalendarEvent | nu
   ];
 
   if (isCrossFaculty && ownerFaculty) {
-    detailItems.push({ label: 'ยืมรถจาก', value: ownerFaculty.name });
+    detailItems.push({ label: 'ยืมรถ', value: ownerFaculty.name });
   }
 
   return (
