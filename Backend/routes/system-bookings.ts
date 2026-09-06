@@ -1,3 +1,5 @@
+import { facultyVansList } from '@/Frontend/data/faculty-vans';
+import { addStoredCalendarEvent } from "@/Backend/services/calendar-store";
 import type { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -143,29 +145,160 @@ export async function handleCreateSystemBooking(request: Request) {
       requesterId = defaultUser?.id || 1;
     }
 
-    const bookingId = `UPV-2569-${Math.floor(1000 + Math.random() * 9000)}`;
+    const startAtDate = body.startAt ? new Date(body.startAt) : new Date();
+    const endAtDate = body.endAt ? new Date(body.endAt) : new Date();
+    
+    const userFacultyName = body.requesterFaculty || user?.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร";
+    const userFaculty = (await prisma.faculty.findFirst({
+      where: { nameTh: userFacultyName }
+    })) || (await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } }));
 
-    const created = await prisma.booking.create({
-      data: {
-        id: bookingId,
-        requesterId: typeof requesterId === 'number' ? requesterId : 1,
-        destination: body.destination || "ไม่ระบุจุดหมาย",
-        objective: body.purpose || body.objective || "ปฏิบัติภารกิจ",
-        passengersCount: Number(body.passengers || 1),
-        departureDate: body.startAt ? new Date(body.startAt) : new Date(),
-        returnDate: body.endAt ? new Date(body.endAt) : new Date(),
-        tripType: body.tripType || "ในจังหวัดพะเยา",
-        budgetSource: body.budgetSource || "งบประมาณคณะ",
-        phone: body.phone || "-",
-        targetFacultyId: body.targetFacultyId ? Number(body.targetFacultyId) : 1,
-        status: "WAITING_ADMIN",
+    const targetFacultyNames: string[] = Array.isArray(body.targetFaculties) && body.targetFaculties.length > 0
+      ? body.targetFaculties
+      : [];
+
+    const requestedVehicleCount = Math.max(1, Number(body.vehiclesCount || body.vanCount || (targetFacultyNames.length > 0 ? targetFacultyNames.length + 1 : 1)));
+    const baseObjective = body.purpose || body.objective || "ปฏิบัติภารกิจ";
+
+    const facultiesToBook: { faculty: typeof userFaculty; isBorrow: boolean; vanId?: string }[] = [];
+
+    // Check if explicitly assignedVans is provided (from user/faculty calendar modal)
+    if (Array.isArray(body.assignedVans) && body.assignedVans.length > 0) {
+      for (const av of body.assignedVans) {
+        let fac = userFaculty;
+        if (av.facultyName) {
+          const found = await prisma.faculty.findFirst({
+            where: { nameTh: { contains: av.facultyName.replace('คณะ', '') } }
+          });
+          if (found) fac = found;
+        }
+        facultiesToBook.push({
+          faculty: fac,
+          isBorrow: av.isBorrow === true || (av.facultyName && av.facultyName !== userFacultyName),
+          vanId: av.vanId
+        });
       }
-    });
+    } else if (Array.isArray(body.selectedVanIds) && body.selectedVanIds.length > 0) {
+      for (const vId of body.selectedVanIds) {
+        const vInfo = facultyVansList.find(v => v.id === vId);
+        let fac = userFaculty;
+        if (vInfo && vInfo.facultyName) {
+          const found = await prisma.faculty.findFirst({
+            where: { nameTh: { contains: vInfo.facultyName.replace('คณะ', '') } }
+          });
+          if (found) fac = found;
+        }
+        facultiesToBook.push({
+          faculty: fac,
+          isBorrow: vInfo ? vInfo.facultyName !== userFacultyName : false,
+          vanId: vId
+        });
+      }
+    } else if (targetFacultyNames.length > 0) {
+      if (body.vanId !== "borrow" || requestedVehicleCount > targetFacultyNames.length) {
+        facultiesToBook.push({ faculty: userFaculty, isBorrow: false });
+      }
+      for (const tName of targetFacultyNames) {
+        const found = await prisma.faculty.findFirst({
+          where: { nameTh: { contains: tName.replace('คณะ', '') } }
+        });
+        if (found) {
+          facultiesToBook.push({ faculty: found, isBorrow: true });
+        }
+      }
+    } else if (body.targetFacultyId) {
+      const found = await prisma.faculty.findUnique({ where: { id: Number(body.targetFacultyId) } });
+      if (found) {
+        facultiesToBook.push({ faculty: found, isBorrow: found.id !== userFaculty.id });
+      } else {
+        facultiesToBook.push({ faculty: userFaculty, isBorrow: false });
+      }
+    } else {
+      facultiesToBook.push({ faculty: userFaculty, isBorrow: false });
+    }
+
+    const latest = await prisma.booking.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
+    let lastNumber = latest ? Number((latest.id.match(/(\d+)/)?.[1] || "0")) : 64;
+
+    const createdBookings = [];
+
+    for (let i = 0; i < facultiesToBook.length; i++) {
+      const item = facultiesToBook[i];
+      lastNumber += 1;
+      const bookingId = `UPV-2569-${lastNumber.toString().padStart(4, "0")}`;
+
+      const vanSuffix = facultiesToBook.length > 1
+        ? ` (คันที่ ${i + 1}/${facultiesToBook.length} - ${item.isBorrow ? `ยืมรถ${item.faculty.nameTh}` : 'รถประจำคณะ'})`
+        : '';
+
+      const destinationsList = Array.isArray(body.destinations) && body.destinations.length > 0
+        ? body.destinations
+        : [{ place: body.destination || "ไม่ระบุจุดหมาย", province: body.province || "พะเยา" }];
+      
+      const destinationText = destinationsList.map((d: { place: string; province?: string }) => d.place + (d.province ? ` (${d.province})` : '')).join(' -> ');
+      const rawPurpose = body.purposeRaw || body.purpose || body.objective || baseObjective;
+      const requestTimestamp = new Date().toISOString();
+
+      const created = await prisma.booking.create({
+        data: {
+          id: bookingId,
+          requesterId: typeof requesterId === 'number' ? requesterId : 1,
+          destination: destinationText,
+          objective: `${rawPurpose}${vanSuffix}`,
+          passengersCount: Number(body.passengerCount || body.passengers || 1),
+          departureDate: startAtDate,
+          returnDate: endAtDate,
+          tripType: body.tripScope || body.tripType || "ในจังหวัดพะเยา",
+          budgetSource: body.budgetSource || "งบประมาณคณะ",
+          phone: body.phone || "-",
+          passengerNames: body.passengerNames || "-",
+          targetFacultyId: item.faculty.id,
+          status: BookingStatus.WAITING_ADMIN,
+        }
+      });
+
+      // Add to calendar store as well so it's instantly visible on the calendar
+      addStoredCalendarEvent({
+        id: `bk-${bookingId}`,
+        vanId: item.vanId || String(item.faculty.id),
+        facultyId: String(item.faculty.id),
+        bookingFaculty: userFacultyName,
+        destination: destinationText,
+        purpose: `${rawPurpose}${vanSuffix}`,
+        purposeRaw: rawPurpose,
+        date: startAtDate.toISOString().slice(0, 10),
+        returnDate: endAtDate.toISOString().slice(0, 10),
+        time: `${body.startTime || '08:30'} - ${body.endTime || '16:30'} น.`,
+        passengers: Number(body.passengerCount || body.passengers || 1),
+        requester: body.requester || user?.name || "ผู้ขอใช้บริการ",
+        phone: body.phone || "-",
+        department: "สำนักงานคณบดี",
+        status: "pending",
+        statusText: item.isBorrow ? "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)" : "รอดำเนินการ (รอคณบดีอนุมัติ)",
+        statusTime: "บันทึกในระบบ",
+        tripType: body.tripScope || body.tripType || "ในจังหวัดพะเยา",
+        pickupLocation: body.pickupLocation || body.pickup_location || "มหาวิทยาลัยพะเยา",
+        dropoffLocation: body.dropoffLocation || body.dropoff_location || destinationText,
+        coordinatorName: body.coordinatorName || body.coordinator_name || "",
+        coordinatorPhone: body.coordinatorPhone || body.coordinator_phone || "",
+        passengerNames: body.passengerNames || "",
+        requestedVehicleCount: Number(body.requestedVehicleCount || body.vehiclesCount || facultiesToBook.length),
+        requestTimestamp: requestTimestamp,
+        destinations: destinationsList
+      });
+
+      createdBookings.push(created);
+    }
 
     invalidateBookingsCache();
     invalidateDbBookingsCache();
 
-    return NextResponse.json({ success: true, booking: created });
+    return NextResponse.json({ 
+      success: true, 
+      booking: createdBookings[0],
+      bookings: createdBookings,
+      count: createdBookings.length
+    });
   } catch (error) {
     console.error("Error creating booking:", error);
     return NextResponse.json({ success: false, error: (error as Error)?.message || String(error) }, { status: 500 });
@@ -209,11 +342,15 @@ export async function handleUpdateSystemBooking(request: Request, id: string) {
     const updateData: Prisma.BookingUpdateInput = {
       destination: body.destination,
       objective: body.purpose || body.objective || body.reason,
-      passengersCount: body.passengers ? Number(body.passengers) : (body.passengersCount ? Number(body.passengersCount) : undefined),
+      passengersCount: body.passengers ? Number(body.passengers) : (body.passengersCount ? Number(body.passengersCount) : (body.passengerCount ? Number(body.passengerCount) : undefined)),
       phone: body.phone,
-      tripType: body.tripType,
+      tripType: body.tripScope || body.tripType,
       budgetSource: body.budgetSource || body.budget,
     };
+    if (body.status === 'CANCELLED' || body.status === 'REJECTED') {
+      updateData.status = BookingStatus.REJECTED;
+      updateData.rejectReason = body.cancellationReason || body.rejectReason || 'ยกเลิกคำขอ';
+    }
     if (body.startAt || body.startDate) {
       updateData.departureDate = new Date(body.startAt || body.startDate);
     }

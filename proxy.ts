@@ -27,7 +27,8 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/static') ||
     path === '/icon.png' ||
     path === '/opengraph-image.png' ||
-    path === '/twitter-image.png';
+    path === '/twitter-image.png' ||
+    path === '/api/vans/ranking';
 
   // Read-only public endpoints (such as calendar read for users)
   const isPublicReadOnlyApi =

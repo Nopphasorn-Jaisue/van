@@ -1,24 +1,248 @@
 [
   {
-    "vanId": "3",
-    "facultyId": "1",
-    "bookingFaculty": "คณะเภสัชฯ",
-    "destination": "020",
-    "purpose": "20202",
-    "purposeDetail": "20202",
-    "routeDetail": "พะเยา -> 020",
-    "date": "2026-08-30",
-    "returnDate": "2026-08-30",
+    "vanId": "9",
+    "facultyId": "2",
+    "bookingFaculty": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+    "destination": "รพ",
+    "pickupLocation": "ICT",
+    "purpose": "ป่วย",
+    "purposeDetail": "ป่วย",
+    "routeDetail": "ICT -> รพ",
+    "budgetSource": "งบประมาณคณะ",
+    "date": "2026-09-02",
+    "returnDate": "2026-09-02",
     "time": "08:30 - 16:30 น.",
     "passengers": 1,
-    "requester": "20202",
-    "phone": "0587867687",
+    "requester": "นภสร ใจซื่อ",
+    "phone": "0084894444",
     "department": "สำนักงานคณบดี",
     "tripType": "ในจังหวัดพะเยา",
-    "status": "pending_cross_faculty",
-    "statusText": "รอการยืนยันจากคณะเจ้าของรถ",
+    "status": "pending",
+    "statusText": "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)",
     "statusTime": "บันทึกในระบบ",
+    "selectedVans": [
+      {
+        "id": "van-1788711820956-1",
+        "vanId": "3",
+        "facultyName": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        "isBorrow": false,
+        "plate": "1นช3009 กรุงเทพมหานคร",
+        "driverName": "นาย",
+        "phone": "0812345678"
+      },
+      {
+        "id": "van-1788711825517-2",
+        "vanId": "8",
+        "facultyName": "คณะเภสัชฯ",
+        "isBorrow": true,
+        "plate": "นก 25555 พะเยา",
+        "driverName": "555",
+        "phone": "5555"
+      },
+      {
+        "id": "van-1788711826846-3",
+        "vanId": "9",
+        "facultyName": "คณะวิทยาศาสตร์",
+        "isBorrow": true,
+        "plate": "นข 3948 พะเยา",
+        "driverName": "พนักงานขับรถ",
+        "phone": "0812345678"
+      }
+    ],
+    "id": "bk-UPV-2569-2572",
+    "assignedVans": [
+      {
+        "id": "van-1788711820956-1",
+        "vanId": "3",
+        "facultyName": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        "isBorrow": false,
+        "plate": "1นช3009 กรุงเทพมหานคร",
+        "driverName": "นาย",
+        "phone": "0812345678"
+      },
+      {
+        "id": "van-1788711825517-2",
+        "vanId": "8",
+        "facultyName": "คณะเภสัชฯ",
+        "isBorrow": true,
+        "plate": "นก 25555 พะเยา",
+        "driverName": "555",
+        "phone": "5555"
+      },
+      {
+        "id": "van-1788711826846-3",
+        "vanId": "9",
+        "facultyName": "คณะวิทยาศาสตร์",
+        "isBorrow": true,
+        "plate": "นข 3948 พะเยา",
+        "driverName": "พนักงานขับรถ",
+        "phone": "0812345678"
+      }
+    ],
+    "createdAt": "2026-09-06T16:24:20.130Z"
+  },
+  {
+    "vanId": "8",
+    "facultyId": "6",
+    "bookingFaculty": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+    "destination": "รพ",
+    "pickupLocation": "ICT",
+    "purpose": "ป่วย",
+    "purposeDetail": "ป่วย",
+    "routeDetail": "ICT -> รพ",
+    "budgetSource": "งบประมาณคณะ",
+    "date": "2026-09-02",
+    "returnDate": "2026-09-02",
+    "time": "08:30 - 16:30 น.",
+    "passengers": 1,
+    "requester": "นภสร ใจซื่อ",
+    "phone": "0084894444",
+    "department": "สำนักงานคณบดี",
+    "tripType": "ในจังหวัดพะเยา",
+    "status": "pending",
+    "statusText": "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)",
+    "statusTime": "บันทึกในระบบ",
+    "selectedVans": [
+      {
+        "id": "van-1788711820956-1",
+        "vanId": "3",
+        "facultyName": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        "isBorrow": false,
+        "plate": "1นช3009 กรุงเทพมหานคร",
+        "driverName": "นาย",
+        "phone": "0812345678"
+      },
+      {
+        "id": "van-1788711825517-2",
+        "vanId": "8",
+        "facultyName": "คณะเภสัชฯ",
+        "isBorrow": true,
+        "plate": "นก 25555 พะเยา",
+        "driverName": "555",
+        "phone": "5555"
+      },
+      {
+        "id": "van-1788711826846-3",
+        "vanId": "9",
+        "facultyName": "คณะวิทยาศาสตร์",
+        "isBorrow": true,
+        "plate": "นข 3948 พะเยา",
+        "driverName": "พนักงานขับรถ",
+        "phone": "0812345678"
+      }
+    ],
+    "id": "bk-UPV-2569-2571",
+    "assignedVans": [
+      {
+        "id": "van-1788711820956-1",
+        "vanId": "3",
+        "facultyName": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        "isBorrow": false,
+        "plate": "1นช3009 กรุงเทพมหานคร",
+        "driverName": "นาย",
+        "phone": "0812345678"
+      },
+      {
+        "id": "van-1788711825517-2",
+        "vanId": "8",
+        "facultyName": "คณะเภสัชฯ",
+        "isBorrow": true,
+        "plate": "นก 25555 พะเยา",
+        "driverName": "555",
+        "phone": "5555"
+      },
+      {
+        "id": "van-1788711826846-3",
+        "vanId": "9",
+        "facultyName": "คณะวิทยาศาสตร์",
+        "isBorrow": true,
+        "plate": "นข 3948 พะเยา",
+        "driverName": "พนักงานขับรถ",
+        "phone": "0812345678"
+      }
+    ],
+    "createdAt": "2026-09-06T16:24:19.953Z"
+  },
+  {
+    "vanId": "3",
+    "facultyId": "1",
+    "bookingFaculty": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+    "destination": "รพ",
+    "pickupLocation": "ICT",
+    "purpose": "ป่วย",
+    "purposeDetail": "ป่วย",
+    "routeDetail": "ICT -> รพ",
+    "budgetSource": "งบประมาณคณะ",
+    "date": "2026-09-02",
+    "returnDate": "2026-09-02",
+    "time": "08:30 - 16:30 น.",
+    "passengers": 1,
+    "requester": "นภสร ใจซื่อ",
+    "phone": "0084894444",
+    "department": "สำนักงานคณบดี",
+    "tripType": "ในจังหวัดพะเยา",
+    "status": "pending",
+    "statusText": "รอดำเนินการ (รอคณบดีอนุมัติ)",
+    "statusTime": "บันทึกในระบบ",
+    "selectedVans": [
+      {
+        "id": "van-1788711820956-1",
+        "vanId": "3",
+        "facultyName": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        "isBorrow": false,
+        "plate": "1นช3009 กรุงเทพมหานคร",
+        "driverName": "นาย",
+        "phone": "0812345678"
+      },
+      {
+        "id": "van-1788711825517-2",
+        "vanId": "8",
+        "facultyName": "คณะเภสัชฯ",
+        "isBorrow": true,
+        "plate": "นก 25555 พะเยา",
+        "driverName": "555",
+        "phone": "5555"
+      },
+      {
+        "id": "van-1788711826846-3",
+        "vanId": "9",
+        "facultyName": "คณะวิทยาศาสตร์",
+        "isBorrow": true,
+        "plate": "นข 3948 พะเยา",
+        "driverName": "พนักงานขับรถ",
+        "phone": "0812345678"
+      }
+    ],
     "id": "bk-UPV-2569-2570",
-    "createdAt": "2026-08-27T06:45:52.373Z"
+    "assignedVans": [
+      {
+        "id": "van-1788711820956-1",
+        "vanId": "3",
+        "facultyName": "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        "isBorrow": false,
+        "plate": "1นช3009 กรุงเทพมหานคร",
+        "driverName": "นาย",
+        "phone": "0812345678"
+      },
+      {
+        "id": "van-1788711825517-2",
+        "vanId": "8",
+        "facultyName": "คณะเภสัชฯ",
+        "isBorrow": true,
+        "plate": "นก 25555 พะเยา",
+        "driverName": "555",
+        "phone": "5555"
+      },
+      {
+        "id": "van-1788711826846-3",
+        "vanId": "9",
+        "facultyName": "คณะวิทยาศาสตร์",
+        "isBorrow": true,
+        "plate": "นข 3948 พะเยา",
+        "driverName": "พนักงานขับรถ",
+        "phone": "0812345678"
+      }
+    ],
+    "createdAt": "2026-09-06T16:24:19.778Z"
   }
 ]

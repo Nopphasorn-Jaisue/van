@@ -12,6 +12,7 @@ import {
 import { getGoogleCalendarClient } from "@/Backend/services/google-calendar";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { BookingStatus } from "@prisma/client";
 
 export interface MappedDbBooking {
   id: string;
@@ -584,6 +585,17 @@ export async function handleSystemCalendarEvents(request: Request) {
     }
   });
 
+  // Deduplicate events to guarantee unique IDs
+  const seenEventIds = new Set<string>();
+  const uniqueEvents: CalendarEventRecord[] = [];
+  for (const ev of events) {
+    if (ev.id && !seenEventIds.has(ev.id)) {
+      seenEventIds.add(ev.id);
+      uniqueEvents.push(ev);
+    }
+  }
+  events = uniqueEvents;
+
   const eventsByDate = events.reduce<Record<string, Array<{
     id: string;
     time: string;
@@ -671,158 +683,192 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    // Default new calendar bookings to pending (waiting for Dean approval)
     const initialStatus = body.status === 'approved' ? 'approved' : 'pending';
 
-    // 1. Persist directly to Prisma Database
-    let dbBookingId: string | null = null;
-    try {
-      const faculty = (await prisma.faculty.findFirst({
-        where: { nameTh: body.bookingFaculty || authUser.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร" }
-      })) || (await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } }));
+    // Extract selected vans (supports multi-van bookings e.g. 1 own van + 2 borrowed vans)
+    const rawSelectedVans: Array<{
+      id: string;
+      vanId: string;
+      facultyName: string;
+      plate?: string;
+      driverName?: string;
+      phone?: string;
+      isBorrow?: boolean;
+    }> = Array.isArray(body.selectedVans) && body.selectedVans.length > 0
+      ? body.selectedVans
+      : [{
+          id: `van-${Date.now()}-1`,
+          vanId: body.vanId || 'v-ict',
+          facultyName: body.targetFaculty || body.bookingFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+          plate: body.plate || '',
+          driverName: body.driverName || '',
+          phone: body.phone || '',
+          isBorrow: body.status === 'pending_cross_faculty' || body.vanType === 'BORROW' || false
+        }];
 
-      let requester = null;
-      const requesterName = (body.requester || '').trim();
+    const userFacultyName = body.bookingFaculty || authUser.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร";
+    const userFaculty = (await prisma.faculty.findFirst({
+      where: { nameTh: userFacultyName }
+    })) || (await prisma.faculty.findFirstOrThrow({ orderBy: { id: "asc" } }));
 
-      if (requesterName && requesterName !== authUser.name) {
-        requester = await prisma.user.findFirst({ where: { name: requesterName } });
-        if (!requester) {
-          const slug = requesterName.replace(/\s+/g, ".").toLowerCase().replace(/[^a-z0-9.]/g, "") || "user";
-          requester = await prisma.user.create({
-            data: {
-              facultyId: faculty.id,
-              name: requesterName,
-              email: `${Date.now()}-${slug}@example.local`,
-              role: "USER"
-            }
-          });
-        }
-      } else {
-        requester = authUser.id 
-          ? await prisma.user.findFirst({ where: { id: Number(authUser.id) } })
-          : null;
-        if (!requester) {
-          requester = await prisma.user.create({
-            data: {
-              facultyId: faculty.id,
-              name: authUser.name || "ผู้ขอใช้บริการ",
-              email: `${Date.now()}-user@example.local`,
-              role: authUser.role || "FACULTY_ADMIN"
-            }
-          });
-        }
-      }
+    let requester = null;
+    const requesterName = (body.requester || '').trim();
 
-      const latest = await prisma.booking.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
-      const lastNumber = latest ? Number((latest.id.match(/(\d+)/)?.[1] || "0")) : 64;
-      dbBookingId = `UPV-2569-${(lastNumber + 1).toString().padStart(4, "0")}`;
-
-      const startDateRaw = body.date ? String(body.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
-      const endDateRaw = body.returnDate ? String(body.returnDate).slice(0, 10) : startDateRaw;
-      
-      let startTime = "08:30:00";
-      let endTime = "16:30:00";
-      if (body.time) {
-        const parts = String(body.time).replace(/น\./g, '').split('-').map((s: string) => s.trim());
-        if (parts[0] && parts[0].includes(':')) startTime = `${parts[0]}:00`;
-        if (parts[1] && parts[1].includes(':')) endTime = `${parts[1]}:00`;
-      }
-
-      const startDateTime = new Date(`${startDateRaw}T${startTime}+07:00`);
-      const endDateTime = new Date(`${endDateRaw}T${endTime}+07:00`);
-
-      let targetFaculty = faculty;
-      const targetFacultyName = body.targetFaculty || body.ownerFacultyName || body.borrowFromFaculty || body.targetFacultyName;
-      if (targetFacultyName) {
-        const foundTarget = await prisma.faculty.findFirst({
-          where: { nameTh: { contains: targetFacultyName.replace('คณะ', '') } }
+    if (requesterName && requesterName !== authUser.name) {
+      requester = await prisma.user.findFirst({ where: { name: requesterName } });
+      if (!requester) {
+        const slug = requesterName.replace(/\s+/g, ".").toLowerCase().replace(/[^a-z0-9.]/g, "") || "user";
+        requester = await prisma.user.create({
+          data: {
+            facultyId: userFaculty.id,
+            name: requesterName,
+            email: `${Date.now()}-${slug}@example.local`,
+            role: "USER"
+          }
         });
-        if (foundTarget) targetFaculty = foundTarget;
       }
-      if (body.targetFacultyId) {
-        const foundTarget = await prisma.faculty.findUnique({ where: { id: Number(body.targetFacultyId) } });
-        if (foundTarget) targetFaculty = foundTarget;
+    } else {
+      requester = authUser.id 
+        ? await prisma.user.findFirst({ where: { id: Number(authUser.id) } })
+        : null;
+      if (!requester) {
+        requester = await prisma.user.create({
+          data: {
+            facultyId: userFaculty.id,
+            name: authUser.name || "ผู้ขอใช้บริการ",
+            email: `${Date.now()}-user@example.local`,
+            role: authUser.role || "FACULTY_ADMIN"
+          }
+        });
       }
-      if (body.vanId) {
-        const vanNum = parseInt(String(body.vanId).replace(/\D/g, ''));
+    }
+
+    const startDateRaw = body.date ? String(body.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const endDateRaw = body.returnDate ? String(body.returnDate).slice(0, 10) : startDateRaw;
+    
+    let startTime = "08:30:00";
+    let endTime = "16:30:00";
+    if (body.time) {
+      const parts = String(body.time).replace(/น\./g, '').split('-').map((s: string) => s.trim());
+      if (parts[0] && parts[0].includes(':')) startTime = `${parts[0]}:00`;
+      if (parts[1] && parts[1].includes(':')) endTime = `${parts[1]}:00`;
+    }
+
+    const startDateTime = new Date(`${startDateRaw}T${startTime}+07:00`);
+    const endDateTime = new Date(`${endDateRaw}T${endTime}+07:00`);
+
+    const latest = await prisma.booking.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
+    let lastNumber = latest ? Number((latest.id.match(/(\d+)/)?.[1] || "0")) : 64;
+
+    const createdEvents: CalendarEventRecord[] = [];
+    const createdDbBookings: string[] = [];
+
+    // Loop through ALL selected vans to create distinct bookings and calendar events
+    for (let i = 0; i < rawSelectedVans.length; i++) {
+      const sv = rawSelectedVans[i];
+      lastNumber += 1;
+      const dbBookingId = `UPV-2569-${lastNumber.toString().padStart(4, "0")}`;
+
+      // Resolve target faculty for this specific van
+      let targetFaculty = userFaculty;
+      if (sv.facultyName) {
+        const found = await prisma.faculty.findFirst({
+          where: { nameTh: { contains: sv.facultyName.replace('คณะ', '') } }
+        });
+        if (found) targetFaculty = found;
+      }
+      if (sv.vanId) {
+        const vanNum = parseInt(String(sv.vanId).replace(/\D/g, ''));
         if (!isNaN(vanNum)) {
           const v = await prisma.van.findUnique({ where: { id: vanNum }, include: { faculty: true } });
           if (v?.faculty) targetFaculty = v.faculty;
         }
       }
 
-      await prisma.booking.create({
-        data: {
-          id: dbBookingId,
-          requesterId: requester.id,
-          targetFacultyId: targetFaculty.id,
-          destination: body.destination || "ไม่ระบุสถานที่",
-          objective: body.purpose || "ภารกิจใช้รถตู้",
-          departureDate: isNaN(startDateTime.getTime()) ? new Date() : startDateTime,
-          returnDate: isNaN(endDateTime.getTime()) ? new Date() : endDateTime,
-          passengersCount: Number(body.passengers || 1),
-          phone: body.phone || null,
-          budgetSource: "งบประมาณคณะ",
-          tripType: body.tripType || "ในจังหวัดพะเยา",
-      status: initialStatus === 'approved' ? 'APPROVED' : 'WAITING_EXEC',
-        }
-      });
-    } catch (dbErr) {
-      console.warn("Notice: Failed to persist calendar event to Prisma DB:", dbErr);
-    }
+      const isBorrow = sv.isBorrow === true || (sv.facultyName && sv.facultyName !== userFacultyName);
+      const isApproved = initialStatus === 'approved';
+      const dbStatus: BookingStatus = isApproved ? BookingStatus.APPROVED : (isBorrow ? BookingStatus.WAITING_ADMIN : BookingStatus.WAITING_EXEC);
+      const calendarStatus = isApproved ? 'approved' : 'pending';
+      const statusText = isApproved 
+        ? "อนุมัติแล้ว" 
+        : (isBorrow ? "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)" : "รอดำเนินการ (รอคณบดีอนุมัติ)");
 
-    const created = addStoredCalendarEvent({
-      ...body,
-      id: dbBookingId ? `bk-${dbBookingId}` : undefined,
-      status: initialStatus,
-    });
+      const vanSuffix = rawSelectedVans.length > 1
+        ? ` (คันที่ ${i + 1}/${rawSelectedVans.length} - ${isBorrow ? `ยืมรถ${targetFaculty.nameTh}` : 'รถประจำคณะ'})`
+        : '';
 
-    // ONLY push to Google Calendar if status is explicitly approved (e.g. Dean approval)
-    if (created.status === 'approved' && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
-        const targetCalendarId = await resolveCalendarId(created.vanId);
-
-        if (targetCalendarId) {
-          const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
-          
-          const startDateRaw = created.date ? created.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
-          const endDateRaw = created.returnDate ? created.returnDate.slice(0, 10) : startDateRaw;
-
-          const startDateTime = `${startDateRaw}T08:30:00+07:00`;
-          const endDateTime = `${endDateRaw}T16:30:00+07:00`;
-
-          const gcalResponse = await calendar.events.insert({
-            calendarId: targetCalendarId,
-            requestBody: {
-              summary: `[${created.bookingFaculty || 'คณะ'}] ${created.destination || 'ภารกิจใช้รถตู้'}`,
-              description: `ผู้ขอใช้บริการ: ${created.requester || '-'}\nหน่วยงาน: ${created.bookingFaculty || '-'}\nวัตถุประสงค์: ${created.purpose || '-'}\nขอบเขตการเดินทาง: ${created.tripType || 'ในจังหวัดพะเยา'}\nผู้โดยสาร: ${created.passengers || 1} คน`,
-              start: { dateTime: startDateTime, timeZone: 'Asia/Bangkok' },
-              end: { dateTime: endDateTime, timeZone: 'Asia/Bangkok' },
-            },
-          });
-
-          if (gcalResponse.data.id) {
-            created.gcalId = gcalResponse.data.id;
-            updateStoredCalendarEvent(created.id, { gcalId: created.gcalId });
+        await prisma.booking.create({
+          data: {
+            id: dbBookingId,
+            requesterId: requester.id,
+            targetFacultyId: targetFaculty.id,
+            destination: body.destination || "ไม่ระบุสถานที่",
+            objective: `${body.purpose || "ภารกิจใช้รถตู้"}${vanSuffix}`,
+            departureDate: isNaN(startDateTime.getTime()) ? new Date() : startDateTime,
+            returnDate: isNaN(endDateTime.getTime()) ? new Date() : endDateTime,
+            passengersCount: Number(body.passengers || 1),
+            phone: body.phone || null,
+            budgetSource: body.budgetSource || "งบประมาณคณะ",
+            tripType: body.tripType || "ในจังหวัดพะเยา",
+            status: dbStatus,
           }
+        });
+        createdDbBookings.push(dbBookingId);
+      } catch (dbErr) {
+        console.warn("Notice: Failed to persist calendar event to Prisma DB:", dbErr);
+      }
+
+      const calEvent = addStoredCalendarEvent({
+        ...body,
+        id: `bk-${dbBookingId}`,
+        vanId: sv.vanId,
+        facultyId: String(targetFaculty.id),
+        bookingFaculty: userFacultyName,
+        status: calendarStatus,
+        statusText: statusText,
+        statusTime: "บันทึกในระบบ",
+        assignedVans: rawSelectedVans
+      });
+
+      createdEvents.push(calEvent);
+
+      // Push to Google Calendar if approved
+      if (calEvent.status === 'approved' && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+        try {
+          const targetCalendarId = await resolveCalendarId(calEvent.vanId);
+          if (targetCalendarId) {
+            const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
+            const startDT = `${startDateRaw}T08:30:00+07:00`;
+            const endDT = `${endDateRaw}T16:30:00+07:00`;
+            const gcalRes = await calendar.events.insert({
+              calendarId: targetCalendarId,
+              requestBody: {
+                summary: `[${userFacultyName}] ${calEvent.destination || 'ภารกิจใช้รถตู้'}`,
+                description: `ผู้ขอใช้บริการ: ${calEvent.requester || '-'}\nหน่วยงาน: ${userFacultyName}\nวัตถุประสงค์: ${calEvent.purpose || '-'}\nผู้โดยสาร: ${calEvent.passengers || 1} คน`,
+                start: { dateTime: startDT, timeZone: 'Asia/Bangkok' },
+                end: { dateTime: endDT, timeZone: 'Asia/Bangkok' },
+              },
+            });
+            if (gcalRes.data.id) {
+              calEvent.gcalId = gcalRes.data.id;
+              updateStoredCalendarEvent(calEvent.id, { gcalId: calEvent.gcalId });
+            }
+          }
+        } catch (gcalErr) {
+          console.warn("Google Calendar Push Insert Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
         }
-      } catch (gcalErr) {
-        console.warn("Google Calendar Push Insert Warning:", gcalErr instanceof Error ? gcalErr.message : gcalErr);
       }
     }
 
-    // Invalidate Google Calendar cache only if pushed to Google Calendar
-    if (created.status === 'approved') {
-      const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
-      if (globalCacheObj.gcalCache) {
-        globalCacheObj.gcalCache = {};
-      }
-      Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
     invalidateDbBookingsCache();
-    try { if (fs.existsSync(GCAL_CACHE_FILE)) fs.unlinkSync(GCAL_CACHE_FILE); } catch {}
-    }
-
-    return NextResponse.json({ success: true, event: created });
+    
+    return NextResponse.json({ 
+      success: true, 
+      events: createdEvents, 
+      event: createdEvents[0] || null,
+      count: createdEvents.length 
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ success: false, error: "Failed to create event" }, { status: 500 });

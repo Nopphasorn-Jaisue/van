@@ -26,6 +26,15 @@ export type CalendarEventRecord = {
   statusText: string;
   statusTime: string;
   tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
+  purposeRaw?: string;
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  coordinatorName?: string;
+  coordinatorPhone?: string;
+  passengerNames?: string;
+  requestedVehicleCount?: number;
+  requestTimestamp?: string;
+  destinations?: Array<{ id?: string; place: string; province?: string }>;
   assignedVans?: Array<{
     id: string;
     vanId: string;
@@ -78,12 +87,18 @@ export function saveStoredCalendarEvents(events: CalendarEventRecord[]): boolean
 
 export function addStoredCalendarEvent(newEvent: Omit<CalendarEventRecord, 'id' | 'createdAt'> & { id?: string }): CalendarEventRecord {
   const events = getStoredCalendarEvents();
+  const targetId = newEvent.id || `UP-2569-${String(Date.now()).slice(-4)}`;
+  const existingIndex = events.findIndex(e => e.id === targetId);
   const created: CalendarEventRecord = {
     ...newEvent,
-    id: newEvent.id || `UP-2569-${String(Date.now()).slice(-4)}`,
+    id: targetId,
     createdAt: new Date().toISOString()
   };
-  events.unshift(created);
+  if (existingIndex >= 0) {
+    events[existingIndex] = created;
+  } else {
+    events.unshift(created);
+  }
   saveStoredCalendarEvents(events);
   return created;
 }

@@ -83,3 +83,30 @@ export const facultiesList: FacultyDirectory[] = [
     palette: { surface: 'bg-[#51621F]/10', border: 'border-[#51621F]/30', accent: 'text-[#51621F]', chip: 'bg-[#51621F]', muted: 'text-[#51621F]/80', accentRgb: '#51621F' },
   }
 ];
+
+export const normalizeFacultyKey = (name?: string | null): string => {
+  if (!name) return '';
+  const s = String(name).trim().toLowerCase();
+  if (s === 'all' || s === 'ทุกคณะรวมกัน' || s === '') return 'all';
+  if (s.includes('เภสัช') || s === '6' || s === '8' || s === 'van-008' || s === 'v-pharm' || s === 'pharm') return 'pharm';
+  if ((s.includes('วิทยาศาสตร์') && !s.includes('สารสนเทศ')) || s === '2' || s === '9' || s === 'van-009' || s === 'v-sci' || s === 'sci') return 'sci';
+  if (s.includes('สารสนเทศ') || s.includes('ict') || s.includes('ไอซีที') || s === '1' || s === '3' || s === 'v-ict') return 'ict';
+  if (s.includes('เกษตร') || s === 'agri') return 'agri';
+  if (s.includes('พลังงาน') || s.includes('seen') || s === 'seen') return 'seen';
+  if (s.includes('แพทย') || s.includes('แพทย์') || s === 'med') return 'med';
+  if (s.includes('นิติ') || s === 'law') return 'law';
+  if (s.includes('บริหาร') || s.includes('นิเทศ') || s === 'bca') return 'bca';
+  return s.replace(/^คณะ/, '').replace(/\s+/g, '');
+};
+
+export const isFacultyMatch = (facA?: string | null, facB?: string | null): boolean => {
+  if (!facA || !facB) return false;
+  if (facA === 'all' || facB === 'all' || facA === 'ทุกคณะรวมกัน' || facB === 'ทุกคณะรวมกัน') return true;
+  const keyA = normalizeFacultyKey(facA);
+  const keyB = normalizeFacultyKey(facB);
+  if (keyA && keyB && keyA === keyB) return true;
+  const cleanA = String(facA).replace(/^คณะ/, '').trim();
+  const cleanB = String(facB).replace(/^คณะ/, '').trim();
+  if (cleanA && cleanB && (cleanA.includes(cleanB) || cleanB.includes(cleanA))) return true;
+  return false;
+};
