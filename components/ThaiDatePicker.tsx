@@ -106,7 +106,7 @@ export default function ThaiDatePicker({ value, onChange, className = '', placeh
 
       {/* Popover */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 top-full left-0 w-64 bg-white rounded-xl shadow-xl border border-gray-200 p-3 animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute z-[150] mt-1.5 top-full left-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-200 p-3 animate-in fade-in zoom-in-95 duration-100">
           
           {/* Header */}
           <div className="flex justify-between items-center mb-3">

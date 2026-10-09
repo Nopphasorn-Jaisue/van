@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/app/actions/auth";
 import { cookies } from "next/headers";
+import { Role } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -101,13 +102,16 @@ export async function GET(request: NextRequest) {
         data: { nameTh: "มหาวิทยาลัยพะเยา" },
       });
 
+      const validRoles: Role[] = [Role.USER, Role.FACULTY_ADMIN, Role.EXECUTIVE, Role.SUPER_ADMIN, Role.DRIVER];
+      const assignedRole: Role = validRoles.includes(roleParam as Role) ? (roleParam as Role) : Role.USER;
+
       dbUser = await prisma.user.create({
         data: {
           email,
           name,
           avatar: avatarUrl,
           phone: phone,
-          role: "USER",
+          role: assignedRole,
           facultyId: fallbackFaculty.id,
         },
         include: { faculty: true },
@@ -124,6 +128,14 @@ export async function GET(request: NextRequest) {
           where: { id: dbUser.id },
           data: updateData,
           include: { faculty: true },
+        });
+      }
+
+      // If user is a DRIVER, automatically sync their official Microsoft 365 photo to Driver table
+      if (avatarUrl && dbUser.role === "DRIVER") {
+        await prisma.driver.updateMany({
+          where: { userId: dbUser.id },
+          data: { avatar: avatarUrl }
         });
       }
     }

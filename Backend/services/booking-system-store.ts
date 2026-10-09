@@ -16,34 +16,6 @@ type CalendarRow = {
   assignedVanPlate: string;
 };
 
-type SeedDriver = {
-  name: string;
-  phone: string;
-  facultyName: string;
-  vanPlate: string;
-  age: number;
-};
-
-type SeedBooking = {
-  id: string;
-  requester: string;
-  requesterFaculty: string;
-  destination: string;
-  purpose: string;
-  passengers: number;
-  startAt: string;
-  endAt: string;
-  status: "WAITING_ADMIN" | "WAITING_EXEC" | "APPROVED" | "REJECTED";
-  assignedDriverName?: string;
-};
-
-const seedDrivers: SeedDriver[] = [];
-
-const seedBookings: SeedBooking[] = [];
-
-const globalForSeed = globalThis as unknown as { seeded?: boolean };
-let seeded = true;
-
 function normalizeRole(rawRole: unknown): string {
   const role = String(rawRole || "USER").toUpperCase();
   if (["USER", "FACULTY_ADMIN", "EXECUTIVE", "SUPER_ADMIN", "DRIVER"].includes(role)) {
@@ -90,6 +62,9 @@ type DriverWithRelations = Prisma.DriverGetPayload<{
 }>;
 
 async function toBookingDto(row: BookingWithRelations) {
+  const driverWithVan = row.assignedDriver as (typeof row.assignedDriver & { assignedVan?: { id: number; plate: string } | null }) | null;
+  const assignedVan = driverWithVan?.assignedVan || row.assignedDriver?.faculty?.vans?.[0];
+
   return {
     id: row.id,
     requester: row.requester.name,
@@ -107,8 +82,10 @@ async function toBookingDto(row: BookingWithRelations) {
     rejectReason: row.rejectReason || undefined,
     assignedDriverId: row.assignedDriver ? makeDriverCode(row.assignedDriver.id) : undefined,
     assignedDriverName: row.assignedDriver?.user.name,
-    assignedVanId: row.assignedDriver?.faculty.vans?.[0]?.id ? `van-${row.assignedDriver.faculty.vans[0].id.toString().padStart(3, "0")}` : undefined,
-    assignedVanPlate: row.assignedDriver?.faculty.vans?.[0]?.plate,
+    assignedVanId: assignedVan?.id 
+      ? `van-${assignedVan.id.toString().padStart(3, "0")}` 
+      : undefined,
+    assignedVanPlate: assignedVan?.plate,
   };
 }
 
@@ -128,7 +105,7 @@ export async function listBookings(status?: SystemBookingStatus, facultyId?: num
     where,
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: true } },
+      assignedDriver: { include: { user: true, assignedVan: true, faculty: { include: { vans: true } } } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -143,7 +120,7 @@ export async function getBookingById(id: string) {
     where: { id },
     include: {
       requester: { include: { faculty: true } },
-      assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
+      assignedDriver: { include: { user: true, assignedVan: true, faculty: { include: { vans: true } } } },
     },
   });
 
@@ -343,7 +320,7 @@ export async function listDrivers(date?: string, facultyId?: number, facultyName
       name: driver.user.name,
       email: driver.user.email,
       phone: driver.phone,
-      avatar: driver.avatar || `https://i.pravatar.cc/150?u=${driver.id}`,
+      avatar: driver.avatar || driver.user.avatar || "",
       faculty: driver.faculty.nameTh,
       facultyId: driver.facultyId,
       assignedVanId: driver.assignedVanId,
@@ -488,7 +465,7 @@ export async function getDriverDashboard(driverCode: string) {
       orderBy: { departureDate: "asc" },
       include: {
         requester: { include: { faculty: true } },
-        assignedDriver: { include: { user: true, faculty: { include: { vans: true } } } },
+        assignedDriver: { include: { user: true, assignedVan: true, faculty: { include: { vans: true } } } },
       },
     }),
     prisma.driverLog.findMany({

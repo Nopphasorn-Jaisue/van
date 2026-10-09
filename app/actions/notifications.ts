@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
-import { getAuthUser } from "@/app/actions/auth";
+import { getAuthUser } from "@/lib/auth-util";
 
 export interface AppNotification {
   id: string;
@@ -16,6 +16,21 @@ export interface AppNotification {
   badgeText?: string;
 }
 
+type NotifCacheStore = { [key: string]: { data: AppNotification[]; timestamp: number } };
+
+function getNotifsCache(): NotifCacheStore {
+  const g = globalThis as unknown as { __notifsCache?: NotifCacheStore };
+  if (!g.__notifsCache) {
+    g.__notifsCache = {};
+  }
+  return g.__notifsCache;
+}
+
+export async function invalidateNotificationsCache() {
+  const g = globalThis as unknown as { __notifsCache?: NotifCacheStore };
+  g.__notifsCache = {};
+}
+
 export async function getNotifications(role?: Role, userId?: number): Promise<AppNotification[]> {
   try {
     const user = await getAuthUser();
@@ -23,17 +38,35 @@ export async function getNotifications(role?: Role, userId?: number): Promise<Ap
     const currentUserId = userId || (typeof user?.id === 'number' ? user.id : undefined);
     const facultyId = user?.facultyId || 1;
 
+    const cacheKey = `${currentRole}_${currentUserId || 'all'}_${facultyId}`;
+    const notifsCache = getNotifsCache();
+    const existing = notifsCache[cacheKey];
+    if (existing && (Date.now() - existing.timestamp < 120 * 1000)) {
+      return existing.data;
+    }
+
     const results: AppNotification[] = [];
 
-    // 1. Fetch real DB bookings for notifications based on role
+    // 1. Fetch real DB bookings for notifications based on role (optimized select to reduce DB egress)
     if (currentRole === 'FACULTY_ADMIN' || currentRole === 'SUPER_ADMIN') {
       const recentBookings = await prisma.booking.findMany({
         where: currentRole === 'FACULTY_ADMIN' 
           ? { OR: [{ targetFacultyId: facultyId }, { requesterId: currentUserId }] }
           : {},
-        include: {
-          requester: { include: { faculty: true } },
-          targetFaculty: true
+        select: {
+          id: true,
+          destination: true,
+          status: true,
+          departureDate: true,
+          rejectReason: true,
+          targetFacultyId: true,
+          requester: {
+            select: {
+              name: true,
+              facultyId: true,
+              faculty: { select: { nameTh: true } }
+            }
+          }
         },
         orderBy: { departureDate: 'desc' },
         take: 8
@@ -79,12 +112,21 @@ export async function getNotifications(role?: Role, userId?: number): Promise<Ap
         });
       });
     } else if (currentRole === 'DRIVER') {
+      const now = new Date();
+      const recentThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const driverRecords = await prisma.booking.findMany({
         where: {
           assignedDriver: { userId: currentUserId },
-          status: 'APPROVED'
+          status: 'APPROVED',
+          driverLog: null,
+          returnDate: { gte: recentThreshold }
         },
-        include: { requester: true },
+        select: {
+          id: true,
+          destination: true,
+          departureDate: true,
+          requester: { select: { name: true } }
+        },
         orderBy: { departureDate: 'desc' },
         take: 6
       });
@@ -102,9 +144,15 @@ export async function getNotifications(role?: Role, userId?: number): Promise<Ap
         });
       });
     } else {
-      // General USER
+      // General USER - only select needed fields to save Supabase egress
       const userBookings = await prisma.booking.findMany({
         where: currentUserId ? { requesterId: currentUserId } : {},
+        select: {
+          id: true,
+          destination: true,
+          status: true,
+          departureDate: true
+        },
         orderBy: { departureDate: 'desc' },
         take: 6
       });
@@ -165,6 +213,7 @@ export async function getNotifications(role?: Role, userId?: number): Promise<Ap
       });
     } catch {}
 
+    notifsCache[cacheKey] = { data: results, timestamp: Date.now() };
     return results;
   } catch (error) {
     console.error("Failed to fetch notifications:", error);
@@ -174,6 +223,7 @@ export async function getNotifications(role?: Role, userId?: number): Promise<Ap
 
 export async function markNotificationAsRead(id: number | string) {
   try {
+    invalidateNotificationsCache();
     const numId = typeof id === 'number' ? id : parseInt(String(id).replace(/\D/g, ''), 10);
     if (!isNaN(numId)) {
       await prisma.notification.updateMany({

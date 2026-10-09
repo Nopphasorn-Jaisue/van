@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthUser } from "@/app/actions/auth";
+import { getAuthUser } from "@/lib/auth-util";
 
 
 export async function handleGetCurrentUser() {
@@ -17,6 +17,7 @@ export async function handleGetCurrentUser() {
       });
     }
 
+    const facultyName = user.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร";
     return NextResponse.json({
       authenticated: true,
       id: user.id,
@@ -25,17 +26,29 @@ export async function handleGetCurrentUser() {
       name: user.name,
       fullName: user.name,
       facultyId: user.facultyId,
-      faculty: user.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-      facultyName: user.faculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+      faculty: facultyName,
+      facultyName: facultyName,
+      avatar: user.avatar || null,
+      user: {
+        id: user.id,
+        role: user.role,
+        email: user.email,
+        name: user.name,
+        facultyId: user.facultyId,
+        faculty: facultyName,
+        facultyName: facultyName,
+        avatar: user.avatar || null
+      }
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json({
       authenticated: false,
       role: "USER",
       email: null,
       name: "ผู้ขอใช้บริการ",
       faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
-      facultyId: 1
+      facultyId: 1,
+      user: null
     });
   }
 }

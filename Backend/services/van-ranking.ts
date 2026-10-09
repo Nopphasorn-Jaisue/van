@@ -1,7 +1,7 @@
-import { facultyVansList } from "@/Frontend/data/faculty-vans";
 import { isFacultyMatch } from "@/Frontend/data/faculties";
 import { getStoredCalendarEvents } from "./calendar-store";
 import { prisma } from "@/lib/prisma";
+
 
 export interface RankedVanItem {
   id: string;
@@ -80,11 +80,75 @@ export async function getRankedRecommendedVans(params: {
     console.warn("Prisma query warning:", e);
   }
 
+  // 1.5 Fetch live vans and drivers strictly from Supabase DB
+  let baseVans: Array<{
+    id: string;
+    facultyId: string;
+    facultyName: string;
+    shortFacultyName: string;
+    vanName: string;
+    plate: string;
+    driverName: string;
+    driverPhone: string;
+    driverImage: string;
+    vanImage: string;
+  }> = [];
+
+  try {
+    const dbVans = await prisma.van.findMany({
+      where: { isActive: true },
+      include: {
+        faculty: true,
+        assignedDrivers: {
+          include: { user: true }
+        }
+      },
+      orderBy: { id: 'asc' }
+    });
+
+    if (dbVans && dbVans.length > 0) {
+      baseVans = dbVans.map(v => {
+        const assignedDriver = v.assignedDrivers && v.assignedDrivers.length > 0 ? v.assignedDrivers[0] : null;
+        const driverUser = assignedDriver?.user;
+
+        // Pull avatars directly from Supabase DB (supports Base64, Supabase Storage URLs, /uploads/)
+        const rawDriverAvatar = (assignedDriver?.avatar && !assignedDriver.avatar.includes('unsplash.com'))
+          ? assignedDriver.avatar
+          : (driverUser?.avatar && !driverUser.avatar.includes('unsplash.com'))
+            ? driverUser.avatar
+            : "";
+
+        // Pull van image directly from Supabase DB
+        const vanImage = (v.image && !v.image.includes('unsplash.com'))
+          ? v.image
+          : "";
+
+        const facultyName = v.faculty?.nameTh || "มหาวิทยาลัยพะเยา";
+        const shortFacultyName = facultyName.replace("คณะ", "").trim();
+
+        return {
+          id: String(v.id),
+          facultyId: String(v.facultyId),
+          facultyName: facultyName,
+          shortFacultyName: shortFacultyName,
+          vanName: v.name || `รถตู้ ${facultyName} (${v.plate})`,
+          plate: v.plate,
+          driverName: driverUser?.name || "พนักงานขับรถ",
+          driverPhone: assignedDriver?.phone || driverUser?.phone || "-",
+          driverImage: rawDriverAvatar,
+          vanImage: vanImage,
+        };
+      });
+    }
+  } catch (err) {
+    console.error("Notice: Error fetching real vans from Supabase DB:", err);
+  }
+
   const storedCalendarEvents = getStoredCalendarEvents();
 
   // 2. คำนวณภาระงานสะสม (Driver Workload)
   const workloadMap: Record<string, number> = {};
-  facultyVansList.forEach(v => {
+  baseVans.forEach(v => {
     workloadMap[v.id] = 0;
   });
 
@@ -105,7 +169,7 @@ export async function getRankedRecommendedVans(params: {
   });
 
   // 3. ตรวจสอบความว่างแบบ Fixed Time Window (No Buffer Time)
-  const allRanked: RankedVanItem[] = facultyVansList.map(v => {
+  const allRanked: RankedVanItem[] = baseVans.map(v => {
     let isAvailable = true;
     let conflictReason: string | undefined = undefined;
 

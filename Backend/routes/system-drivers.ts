@@ -1,61 +1,117 @@
-import type { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/app/actions/auth";
+import { getAuthUser } from "@/lib/auth-util";
 
 
-let cachedDrivers: { [key: string]: { data: unknown[]; timestamp: number } } = {};
+type DriverCacheStore = { [key: string]: { data: unknown[]; timestamp: number } };
 
-export function invalidateDriversCache() {
-  cachedDrivers = {};
+function getDriverCache(): DriverCacheStore {
+  const g = globalThis as unknown as { __driversCache?: DriverCacheStore };
+  if (!g.__driversCache) {
+    g.__driversCache = {};
+  }
+  return g.__driversCache;
 }
 
-export async function handleListDrivers() {
+export function invalidateDriversCache() {
+  const g = globalThis as unknown as { __driversCache?: DriverCacheStore };
+  g.__driversCache = {};
+}
+
+export async function handleListDrivers(request?: Request) {
+  const url = request?.url ? new URL(request.url) : null;
+  const bypass =
+    url?.searchParams.has('_t') ||
+    url?.searchParams.has('nocache') ||
+    request?.headers.get('cache-control')?.includes('no-cache') ||
+    request?.headers.get('cache-control')?.includes('no-store');
+
   const user = await getAuthUser();
   const facultyId = user?.facultyId;
   const facultyName = user?.faculty?.nameTh;
   const cacheKey = facultyId ? String(facultyId) : (facultyName || 'all');
-
-  const existing = cachedDrivers[cacheKey];
-  if (existing && (Date.now() - existing.timestamp < 30 * 1000)) {
-    return NextResponse.json({ drivers: existing.data });
+  const driverCache = getDriverCache();
+  const existing = !bypass ? driverCache[cacheKey] : null;
+  // 120s memory cache to dramatically reduce Supabase DB queries and egress
+  if (existing && (Date.now() - existing.timestamp < 120 * 1000)) {
+    return NextResponse.json({ drivers: existing.data }, {
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' }
+    });
   }
 
   try {
-    const where: Prisma.DriverWhereInput = {};
+    const rawDrivers = await prisma.$queryRaw<Array<{
+      id: number;
+      phone: string | null;
+      age: number | null;
+      type: string | null;
+      isActive: boolean;
+      avatar: string | null;
+      facultyId: number;
+      assignedVanId: number | null;
+      userName: string | null;
+      userEmail: string | null;
+      userAvatar: string | null;
+      facultyName: string | null;
+      vanPlate: string | null;
+    }>>`
+      SELECT 
+        d.id,
+        d.phone,
+        d.age,
+        d.type,
+        d.is_active AS "isActive",
+        d.avatar AS avatar,
+        d.faculty_id AS "facultyId",
+        d.assigned_van_id AS "assignedVanId",
+        u.name AS "userName",
+        u.email AS "userEmail",
+        u.avatar AS "userAvatar",
+        f.name_th AS "facultyName",
+        v.plate AS "vanPlate"
+      FROM drivers d
+      LEFT JOIN users u ON u.id = d.user_id
+      LEFT JOIN faculties f ON f.id = d.faculty_id
+      LEFT JOIN vans v ON v.id = d.assigned_van_id
+      ORDER BY d.id ASC;
+    `;
+
+    let filtered = rawDrivers;
     if (user?.role === "FACULTY_ADMIN" || user?.role === "EXECUTIVE") {
-      if (facultyId) where.facultyId = facultyId;
-      else if (facultyName) where.faculty = { nameTh: facultyName };
+      if (facultyId) filtered = filtered.filter(d => d.facultyId === facultyId);
+      else if (facultyName) filtered = filtered.filter(d => d.facultyName === facultyName);
     }
 
-    const dbDrivers = await prisma.driver.findMany({
-      where,
-      include: { user: true, faculty: true, assignedVan: true },
-      orderBy: { id: "asc" },
-    });
-
-    const mapped = dbDrivers.map((d) => ({
+    const mapped = filtered.map((d) => ({
       id: `drv-${d.id.toString().padStart(3, "0")}`,
       dbId: d.id,
-      name: d.user?.name || "พนักงานขับรถ",
-      email: d.user?.email || "-",
+      name: d.userName || "พนักงานขับรถ",
+      email: d.userEmail || "-",
       phone: d.phone || "-",
-      facultyName: d.faculty?.nameTh || "กองอาคารสถานที่",
+      faculty: d.facultyName || "กองอาคารสถานที่",
+      facultyName: d.facultyName || "กองอาคารสถานที่",
       facultyId: d.facultyId,
-      vanAssigned: d.assignedVan?.plate || (d.facultyId === 1 ? "1นช3009 กรุงเทพมหานคร" : "ยังไม่ผูกทะเบียน"),
-      vanPlate: d.assignedVan?.plate || (d.facultyId === 1 ? "1นช3009 กรุงเทพมหานคร" : "ยังไม่ผูกทะเบียน"),
-      vanId: d.assignedVanId ? `van-${d.assignedVanId.toString().padStart(3, "0")}` : (d.facultyId === 1 ? "van-003" : ""),
+      vanAssigned: d.vanPlate || "ยังไม่ผูกทะเบียน",
+      vanPlate: d.vanPlate || "ยังไม่ผูกทะเบียน",
+      vanId: d.assignedVanId ? `van-${d.assignedVanId.toString().padStart(3, "0")}` : "",
+      assignedVanId: d.assignedVanId ? String(d.assignedVanId) : "",
       status: d.isActive ? "ready" : "offline",
-      rating: 4.9,
-      tripsCount: 24,
-      avatar: d.avatar || d.user?.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
+      availability: d.isActive ? "AVAILABLE" : "OFF_DUTY",
+      rating: 5.0,
+      score: 5.0,
+      experienceYears: 5,
+      assignedCount: 0,
+      tripsCount: 0,
+      avatar: (d.avatar && !d.avatar.includes('unsplash.com')) ? d.avatar : ((d.userAvatar && !d.userAvatar.includes('unsplash.com')) ? d.userAvatar : ""),
       licenseExpiry: "2029-01-01",
       isLocked: !d.isActive,
       isActive: d.isActive,
     }));
 
-    cachedDrivers[cacheKey] = { data: mapped, timestamp: Date.now() };
-    return NextResponse.json({ drivers: mapped });
+    driverCache[cacheKey] = { data: mapped, timestamp: Date.now() };
+    return NextResponse.json({ drivers: mapped }, {
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' }
+    });
   } catch (error) {
     console.error("Error fetching live drivers from database:", error);
     if (existing) {
@@ -73,10 +129,20 @@ export async function handleCreateDriver(request: Request) {
     }
     const body = await request.json();
     let facultyId = body.facultyId;
-    if (!facultyId && user?.facultyId) facultyId = user.facultyId;
+    if (user.role === 'FACULTY_ADMIN' && user.facultyId) {
+      facultyId = user.facultyId;
+    } else if (!facultyId && user?.facultyId) {
+      facultyId = user.facultyId;
+    }
     if (!facultyId) {
       const defaultFac = await prisma.faculty.findFirst();
       facultyId = defaultFac?.id || 1;
+    }
+
+    let assignedVanId: number | null = null;
+    if (body.assignedVanId) {
+      const vanNum = parseInt(String(body.assignedVanId).replace(/\D/g, ''), 10);
+      if (!isNaN(vanNum)) assignedVanId = vanNum;
     }
 
     const createdUser = await prisma.user.create({
@@ -85,6 +151,8 @@ export async function handleCreateDriver(request: Request) {
         email: body.email || `driver-${Date.now()}@up.ac.th`,
         role: "DRIVER",
         facultyId: Number(facultyId),
+        avatar: body.avatar || null,
+        phone: body.phone || null,
       }
     });
 
@@ -94,7 +162,10 @@ export async function handleCreateDriver(request: Request) {
         facultyId: Number(facultyId),
         phone: body.phone || "-",
         age: Number(body.age || 35),
-        isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
+        isActive: body.isActive !== undefined ? Boolean(body.isActive) : (body.isLocked !== undefined ? !Boolean(body.isLocked) : true),
+        assignedVanId,
+        avatar: body.avatar || null,
+        contractStart: body.contractStart ? new Date(body.contractStart) : new Date(),
       }
     });
 
@@ -118,10 +189,13 @@ export async function handleGetDriverDashboard(_request: Request, id: string) {
       dashboard: {
         driverId: id,
         name: driver?.user?.name || "พนักงานขับรถ",
-        assignedVan: driver?.assignedVan?.plate || "1นช3009 กรุงเทพมหานคร",
-        status: driver?.isActive ? "ready" : "offline",
-        todayMissions: [],
-        upcomingMissions: [],
+        plate: driver?.assignedVan?.plate || "ไม่ระบุ",
+        faculty: driver?.faculty?.nameTh || "กองอาคารสถานที่",
+        status: driver?.isActive ? "พร้อมปฏิบัติงาน" : "ไม่พร้อมปฏิบัติงาน",
+        totalTrips: 0,
+        completedTrips: 0,
+        pendingTrips: 0,
+        recentTrips: []
       }
     });
   } catch (err) {
@@ -145,16 +219,53 @@ export async function handleUpdateDriver(request: Request, id: string) {
       return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์แก้ไขข้อมูลพนักงานขับรถ" }, { status: 403 });
     }
     const body = await request.json().catch(() => ({}));
-    const numericId = parseInt(id.replace('drv-', ''));
+    const numericId = parseInt(id.replace('drv-', ''), 10);
     if (!isNaN(numericId)) {
       const driver = await prisma.driver.findUnique({ where: { id: numericId } });
-      if (driver) {
-        if (body.phone !== undefined) {
-          await prisma.driver.update({ where: { id: numericId }, data: { phone: body.phone } });
-        }
-        if (body.name !== undefined && driver.userId) {
-          await prisma.user.update({ where: { id: driver.userId }, data: { name: body.name } });
-        }
+      if (!driver) {
+        return NextResponse.json({ error: "ไม่พบข้อมูลพนักงานขับรถ" }, { status: 404 });
+      }
+      if (user.role === 'FACULTY_ADMIN' && driver.facultyId !== user.facultyId) {
+        return NextResponse.json({ error: "Forbidden: คุณไม่มีสิทธิ์แก้ไขข้อมูลพนักงานขับรถของหน่วยงานอื่น" }, { status: 403 });
+      }
+
+      const driverUpdateData: {
+        phone?: string;
+        isActive?: boolean;
+        assignedVanId?: number | null;
+        avatar?: string;
+        contractStart?: Date;
+        facultyId?: number;
+      } = {};
+
+      if (body.phone !== undefined) driverUpdateData.phone = body.phone;
+      if (body.isLocked !== undefined) driverUpdateData.isActive = !Boolean(body.isLocked);
+      if (body.isActive !== undefined) driverUpdateData.isActive = Boolean(body.isActive);
+      if (body.assignedVanId !== undefined) {
+        const vanNum = body.assignedVanId ? parseInt(String(body.assignedVanId).replace(/\D/g, ''), 10) : null;
+        driverUpdateData.assignedVanId = (vanNum && !isNaN(vanNum)) ? vanNum : null;
+      }
+      if (body.avatar !== undefined) driverUpdateData.avatar = body.avatar;
+      if (body.contractStart !== undefined) driverUpdateData.contractStart = new Date(body.contractStart);
+      if (user.role === 'SUPER_ADMIN' && body.facultyId !== undefined && !isNaN(Number(body.facultyId))) {
+        driverUpdateData.facultyId = Number(body.facultyId);
+      }
+
+      if (Object.keys(driverUpdateData).length > 0) {
+        await prisma.driver.update({ where: { id: numericId }, data: driverUpdateData });
+      }
+
+      const userUpdateData: { name?: string; email?: string; avatar?: string; facultyId?: number; phone?: string } = {};
+      if (body.name !== undefined) userUpdateData.name = body.name;
+      if (body.email !== undefined) userUpdateData.email = body.email;
+      if (body.avatar !== undefined) userUpdateData.avatar = body.avatar;
+      if (body.phone !== undefined) userUpdateData.phone = body.phone;
+      if (user.role === 'SUPER_ADMIN' && body.facultyId !== undefined && !isNaN(Number(body.facultyId))) {
+        userUpdateData.facultyId = Number(body.facultyId);
+      }
+
+      if (driver.userId && Object.keys(userUpdateData).length > 0) {
+        await prisma.user.update({ where: { id: driver.userId }, data: userUpdateData });
       }
     }
     invalidateDriversCache();
@@ -171,8 +282,14 @@ export async function handleDeleteDriver(_request: Request, id: string) {
     if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'FACULTY_ADMIN')) {
       return NextResponse.json({ error: "Unauthorized: คุณไม่มีสิทธิ์ลบพนักงานขับรถ" }, { status: 403 });
     }
-    const numericId = parseInt(id.replace('drv-', ''));
+    const numericId = parseInt(id.replace('drv-', ''), 10);
     if (!isNaN(numericId)) {
+      if (user.role === 'FACULTY_ADMIN') {
+        const driver = await prisma.driver.findUnique({ where: { id: numericId } });
+        if (!driver || driver.facultyId !== user.facultyId) {
+          return NextResponse.json({ error: "Forbidden: คุณไม่มีสิทธิ์ลบพนักงานขับรถของหน่วยงานอื่น" }, { status: 403 });
+        }
+      }
       await prisma.driver.delete({ where: { id: numericId } });
     }
     invalidateDriversCache();

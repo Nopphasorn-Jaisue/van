@@ -94,7 +94,7 @@ export default function FacultyAdminDashboard() {
         };
         
         const rawBookings = Array.isArray(reqData.bookings) ? reqData.bookings : [];
-        const pendingBookings = rawBookings.filter((b: { status?: string }) => b.status === 'WAITING_ADMIN' || b.status === 'WAITING_EXEC');
+        const pendingBookings = rawBookings.filter((b: { status?: string }) => b.status === 'WAITING_ADMIN');
         
         const mapped = pendingBookings.map((b: Booking) => ({
           id: b.id,
@@ -127,7 +127,7 @@ export default function FacultyAdminDashboard() {
                 flattenedCalEvents.push({
                   id: ev.id,
                   startAt: `${ev.date || dateKey}T08:30:00`,
-                  status: ev.status === 'approved' ? 'APPROVED' : 'WAITING_ADMIN'
+                  status: ev.status === 'approved' ? 'APPROVED' : (ev.status === 'WAITING_EXEC' ? 'WAITING_EXEC' : 'WAITING_ADMIN')
                 });
               });
             }

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
   Bell, LogOut, CalendarDays, CarFront, FileSignature, Users, User, BarChart3, Clock, LayoutDashboard, Wrench,
-  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FileSpreadsheet, Menu
+  X, ShieldCheck, UserPlus, Bus, Calendar, Info, FileText, FileSpreadsheet, Menu, Mail
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 import { getNotifications, markNotificationAsRead, type AppNotification } from '@/app/actions/notifications';
@@ -31,12 +31,22 @@ const getInitialFaculty = (path: string) => {
   return 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
 };
 
+const getInitialEmail = (path: string) => {
+  if (!path) return '';
+  if (path.startsWith('/faculty-admin')) return 'faculty.admin@up.ac.th';
+  if (path.startsWith('/executive')) return 'executive@up.ac.th';
+  if (path.startsWith('/driver')) return 'driver@up.ac.th';
+  if (path.startsWith('/super-admin')) return 'admin@up.ac.th';
+  return '';
+};
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [userRole, setUserRole] = useState<string>(() => getInitialRole(pathname));
   const [displayName, setDisplayName] = useState<string>('ผู้ใช้งานระบบ');
   const [facultyName, setFacultyName] = useState<string>(() => getInitialFaculty(pathname));
+  const [userEmail, setUserEmail] = useState<string>(() => getInitialEmail(pathname));
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
@@ -48,6 +58,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(cached);
         if (parsed.role) setUserRole(parsed.role);
         if (parsed.name) setDisplayName(parsed.name);
+        if (parsed.email) setUserEmail(parsed.email);
         if (parsed.facultyName) setFacultyName(parsed.facultyName);
       }
     } catch {}
@@ -63,6 +74,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           if (user && user.authenticated !== false) {
             setUserRole(user.role);
             setDisplayName(user.name || user.fullName || 'ผู้ใช้งานระบบ');
+            if (user.email) setUserEmail(user.email);
             const fName = user.faculty || user.facultyName || (
               user.role === 'SUPER_ADMIN' ? 'ศูนย์จัดการระบบส่วนกลาง' :
               user.role === 'EXECUTIVE' ? 'สำนักงานคณบดี' :
@@ -79,6 +91,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 facultyName: fName
               }));
             } catch {}
+          } else if (user && user.authenticated === false && pathname !== '/login') {
+            try { sessionStorage.removeItem('cached_auth_user'); } catch {}
+            router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
           }
         }
       } catch (err) {
@@ -110,31 +125,77 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [showNotifications]);
 
+  const getReadNotifIds = (): string[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      return JSON.parse(localStorage.getItem('read_notif_ids') || '[]');
+    } catch {
+      return [];
+    }
+  };
+
+  const saveReadNotifId = (id: string | number) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = getReadNotifIds();
+      const strId = String(id);
+      if (!current.includes(strId)) {
+        current.push(strId);
+        if (current.length > 200) current.shift();
+        localStorage.setItem('read_notif_ids', JSON.stringify(current));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
+    let lastFetched = Date.now();
     const fetchNotifications = async () => {
       try {
         if (!userRole) return;
         const data = await getNotifications(userRole as Role).catch(() => []);
         if (Array.isArray(data)) {
-          setNotifications(data);
+          const readIds = getReadNotifIds();
+          const merged = data.map(n => readIds.includes(String(n.id)) ? { ...n, isRead: true } : n);
+          setNotifications(merged);
+          lastFetched = Date.now();
         }
-      } catch (err) {
+      } catch {
         // Silently handle any background polling interruption
       }
     };
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000);
-    return () => clearInterval(interval);
+
+    // Poll every 3 minutes (180s) only when tab is active to heavily conserve Supabase egress
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchNotifications();
+      }
+    }, 180000);
+
+    // Refresh on window focus only if more than 2 minutes elapsed
+    const handleFocus = () => {
+      if (Date.now() - lastFetched > 120000) {
+        fetchNotifications();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [userRole]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const handleMarkAsRead = async (id: string | number) => {
+    saveReadNotifId(id);
     await markNotificationAsRead(id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const handleMarkAllAsRead = async () => {
+    notifications.forEach(n => saveReadNotifId(n.id));
     for (const n of notifications) {
       if (!n.isRead) await markNotificationAsRead(n.id);
     }
@@ -147,6 +208,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* 1. เรียกใช้งาน Sidebar พร้อมส่ง Role ไปควบคุมการเปิด/ปิดเมนู */}
       <Sidebar 
         userRole={userRole} 
+        displayName={displayName}
+        userEmail={userEmail}
         facultyName={facultyName} 
         isAuthLoading={isAuthLoading} 
         isOpen={isMobileMenuOpen}
@@ -157,7 +220,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col h-full overflow-hidden w-full">
         
         {/* แถบหัวบน (Top Navbar) */}
-        <nav className="bg-white px-4 md:px-6 py-3 border-b border-gray-200 flex items-center justify-between shadow-sm z-10 w-full">
+        <nav className="relative bg-white px-4 md:px-6 py-3 border-b border-gray-200 flex items-center justify-between shadow-sm z-40 w-full shrink-0">
           <div className="flex items-center gap-3 md:hidden">
             <button 
               onClick={() => setIsMobileMenuOpen(true)}
@@ -169,16 +232,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <h1 className="font-bold text-gray-900 text-lg">Van Booking</h1>
           </div>
           
-          <div className="hidden md:flex items-center text-sm">
-            <span className="font-bold text-[#311171]">
-              {userRole === 'SUPER_ADMIN' ? `ผู้ดูแลระบบสูงสุด (${displayName})` :
-               userRole === 'EXECUTIVE' ? 'รองคณบดีฝ่ายบริหาร' : 
-               userRole === 'FACULTY_ADMIN' ? `แอดมินคณะ (${displayName})` :
-               userRole === 'DRIVER' ? `พนักงานขับรถ (${displayName})` : ''}
-            </span>
-          </div>
+          {/* Spacer สำหรับจัด layout ให้ปุ่ม Action อยู่ชิดขวา */}
+          <div className="hidden md:block flex-1" />
 
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 ml-auto">
             {userRole === 'FACULTY_ADMIN' && (
               <button 
                 onClick={() => setShowDutiesModal(true)}
@@ -202,7 +259,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-84 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
                   <div className="p-3.5 px-4 border-b border-gray-100 bg-slate-50/80 flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <span className="font-black text-gray-900 text-sm">การแจ้งเตือน</span>
@@ -424,7 +481,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 // ==========================================
 // 🛠️ SUB-COMPONENT: เมนูด้านซ้าย (Sidebar ฉบับแก้ไขสิทธิ์)
 // ==========================================
-function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { userRole: string, facultyName: string, isAuthLoading: boolean, isOpen: boolean, onClose: () => void }) {
+function Sidebar({ 
+  userRole, 
+  displayName,
+  userEmail,
+  facultyName, 
+  isAuthLoading, 
+  isOpen, 
+  onClose 
+}: { 
+  userRole: string;
+  displayName?: string;
+  userEmail?: string;
+  facultyName: string; 
+  isAuthLoading: boolean; 
+  isOpen: boolean; 
+  onClose: () => void;
+}) {
   const pathname = usePathname(); 
 
   // 🌟 โครงสร้างเมนูตาม Role ที่กำหนด
@@ -436,11 +509,10 @@ function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { us
         { icon: CalendarDays, label: "ตารางการใช้รถตู้", href: "/faculty-admin/calendar" },
         { icon: FileSignature, label: "คำขอที่ต้องอนุมัติ", href: "/faculty-admin/approvals" },
         { icon: CarFront, label: "จัดการรถประจำคณะ", href: "/faculty-admin/vans" },
-                { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
+        { icon: Users, label: "จัดการคนขับ", href: "/faculty-admin/drivers" },
 
         { icon: FileSpreadsheet, label: "รายงานการใช้งานรถตู้", href: "/faculty-admin/usage-report" },
         { icon: BarChart3, label: "รายงานและสถิติ", href: "/faculty-admin/reports" },
-        { icon: User, label: "บัญชีผู้ใช้", href: "/faculty-admin/profile" },
       ];
     }
 
@@ -522,7 +594,7 @@ function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { us
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         <div className="p-5 border-b border-white/10 flex items-center justify-between">
-          <div>
+          <div className="min-w-0 flex-1">
           {isAuthLoading ? (
             <>
               <div className="h-6 bg-white/10 rounded w-3/4 animate-pulse mb-1"></div>
@@ -531,7 +603,15 @@ function Sidebar({ userRole, facultyName, isAuthLoading, isOpen, onClose }: { us
           ) : (
             <>
               <h1 className="font-black text-lg tracking-tight leading-tight" suppressHydrationWarning>{userFaculty}</h1>
-              <p className="text-xs text-purple-200" suppressHydrationWarning>{getRoleDisplayName(userRole)}</p>
+              <p className="text-xs text-purple-200 mt-0.5" suppressHydrationWarning>
+                {getRoleDisplayName(userRole)}{displayName ? ` (${displayName})` : ''}
+              </p>
+              {userEmail && (
+                <p className="text-[11px] text-purple-300/80 font-medium flex items-center gap-1.5 mt-1 truncate">
+                  <Mail size={11} className="text-purple-300 shrink-0" />
+                  <span className="truncate">{userEmail}</span>
+                </p>
+              )}
             </>
           )}
           <div className="mt-2 flex items-center gap-1.5">

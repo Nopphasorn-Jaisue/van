@@ -3,7 +3,7 @@ const { Client } = require('pg');
 
 async function run() {
   const client = new Client({
-    connectionString: "postgresql://postgres.ljcfcyeohhzvgbztrsss:Joule404325@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres",
+    connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/postgres",
   });
   
   await client.connect();

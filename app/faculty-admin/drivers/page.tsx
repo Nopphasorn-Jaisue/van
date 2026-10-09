@@ -3,10 +3,12 @@ import { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Users, Mail, Phone, Search, Plus, Edit, 
-  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, Camera} from 'lucide-react';
+  Trash2, X, Lock, Unlock, Calendar, AlertCircle, CheckCircle2, Camera,
+  RefreshCcw, CarFront, Link2, Loader2, ShieldCheck, Check
+} from 'lucide-react';
 import { getPendingAvailabilityRequests, updateAvailabilityApproval } from '@/app/actions/driver-availability';
 import { getFaculties } from '@/app/actions/superadmin';
-import { getAuthUser } from '@/app/actions/auth';
+import { lookupUniversityUser } from '@/app/actions/driver';
 
 
 interface FacultyOption {
@@ -20,9 +22,12 @@ interface FacultyOption {
 
 interface VanOption {
   id: string | number;
+  dbId?: number;
   vanName: string;
   plate: string;
-  faculty?: {
+  facultyId?: number | string;
+  facultyName?: string;
+  faculty?: string | {
     id: number;
     nameTh?: string;
   };
@@ -63,6 +68,7 @@ interface Driver {
   contractStart: string;
   licenseExpiry: string;
   isLocked: boolean;
+  isActive?: boolean;
   avatar: string;
 }
 
@@ -76,14 +82,21 @@ export default function DriversPage() {
   const [pendingRequests, setPendingRequests] = useState<Awaited<ReturnType<typeof getPendingAvailabilityRequests>>>([]);
 
   const [adminId, setAdminId] = useState<number | null>(null);
-  const [userFacultyId, setUserFacultyId] = useState<string>("");
+  const [userFacultyId, setUserFacultyId] = useState<string>("1");
+  const [userFacultyName, setUserFacultyName] = useState<string>("คณะเทคโนโลยีสารสนเทศและการสื่อสาร");
   const [faculties, setFaculties] = useState<FacultyOption[]>([]);
   const [vans, setVans] = useState<VanOption[]>([]);
 
   const loadDrivers = async (silent = false) => {
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch('/api/drivers');
+      const res = await fetch(`/api/drivers?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
       if (res.ok) {
         const text = await res.text();
         const data = JSON.parse(text);
@@ -92,13 +105,13 @@ export default function DriversPage() {
           name: d.name || d.user?.name || 'ไม่มีชื่อ',
           email: d.email || d.user?.email || 'ไม่มีอีเมล',
           phone: d.phone,
-          vanAssigned: d.vanAssigned || (d.assignedVan as { plate?: string } | undefined)?.plate || (d as { vanPlate?: string }).vanPlate || ((d as { facultyId?: number }).facultyId === 1 || (d as { dbId?: number }).dbId === 5 ? '1นช3009 กรุงเทพมหานคร' : 'ยังไม่ผูกทะเบียน'),
+          vanAssigned: d.vanAssigned || (d.assignedVan as { plate?: string } | undefined)?.plate || (d as { vanPlate?: string }).vanPlate || 'ยังไม่ผูกทะเบียน',
           assignedVanId: d.assignedVanId ? d.assignedVanId.toString() : (d.assignedVan?.id ? d.assignedVan.id.toString() : ""),
           facultyId: d.facultyId ? d.facultyId.toString() : "",
           contractStart: d.contractStart || '2024-01-01',
           licenseExpiry: d.licenseExpiry && !d.licenseExpiry.startsWith('2025') ? d.licenseExpiry : '2029-01-01',
           isLocked: !d.isActive,
-          avatar: d.avatar || `https://i.pravatar.cc/150?u=${d.id}`
+          avatar: (d.avatar && !d.avatar.includes('unsplash.com') && !d.avatar.includes('pravatar.cc')) ? d.avatar : ""
         }));
         setDrivers(mapped);
         try {
@@ -136,12 +149,29 @@ export default function DriversPage() {
     loadDrivers(true);
     setTimeout(() => setIsLoading(false), 1200);
     
-    getAuthUser().then(user => {
-      if (user) {
-        if (user.id) setAdminId(Number(user.id));
-        if (user.facultyId) setUserFacultyId(user.facultyId.toString());
-      }
-    }).catch(console.error);
+    fetch('/api/me')
+      .then(res => res.json())
+      .then((me) => {
+        if (me && me.authenticated !== false) {
+          if (me.id) setAdminId(Number(me.id));
+          const facId = me.facultyId || me.user?.facultyId || 1;
+          setUserFacultyId(String(facId));
+          const fName = me.faculty || me.facultyName || me.user?.facultyName;
+          if (fName) setUserFacultyName(fName);
+        }
+      })
+      .catch(console.error);
+
+    fetch(`/api/vans?_t=${Date.now()}`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.vans && Array.isArray(data.vans)) {
+          setVans(data.vans);
+        }
+      })
+      .catch(console.error);
+
+    getFaculties().then(setFaculties).catch(console.error);
 
     loadPendingRequests();
   }, []);
@@ -179,6 +209,54 @@ export default function DriversPage() {
     avatar: ""
   });
 
+  const [isLookingUpEmail, setIsLookingUpEmail] = useState(false);
+  const [lookupNotice, setLookupNotice] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+
+  const handleLookupByEmail = async (overrideEmail?: string) => {
+    const targetEmail = (overrideEmail !== undefined ? overrideEmail : formData.email).trim().toLowerCase();
+    if (!targetEmail) {
+      setLookupNotice({ type: 'error', message: 'กรุณากรอกอีเมลมหาวิทยาลัย (@up.ac.th) ก่อนดึงข้อมูล' });
+      setTimeout(() => setLookupNotice(null), 3500);
+      return;
+    }
+    setIsLookingUpEmail(true);
+    setLookupNotice(null);
+    try {
+      const res = await lookupUniversityUser(targetEmail);
+      if (res.found && res.user) {
+        setFormData(prev => ({
+          ...prev,
+          name: res.user.name || prev.name,
+          avatar: res.user.avatar || prev.avatar,
+          assignedVanId: res.user.assignedVanId ? String(res.user.assignedVanId).replace(/\D/g, '') : prev.assignedVanId,
+          vanAssigned: res.user.vanPlate || prev.vanAssigned
+        }));
+        if (res.user.avatar) {
+          setLookupNotice({
+            type: 'success',
+            message: `ดึงข้อมูลสำเร็จ: ${res.user.name} (พร้อมรูปโปรไฟล์ 365)`
+          });
+        } else {
+          setLookupNotice({
+            type: 'info',
+            message: `ดึงชื่อสำเร็จ: ${res.user.name} แต่ยังไม่มีรูป 365 ในระบบ (สามารถกด 'อัปโหลดรูปใหม่' เพื่อใส่รูปได้ทันที)`
+          });
+        }
+      } else {
+        setLookupNotice({
+          type: 'info',
+          message: 'ไม่พบข้อมูลในระบบสำหรับอีเมลนี้ คุณสามารถอัปโหลดรูปและกรอกข้อมูลเองได้เลย'
+        });
+      }
+    } catch {
+      setLookupNotice({ type: 'error', message: 'เกิดข้อผิดพลาดในการดึงข้อมูล กรุณาลองใหม่อีกครั้ง' });
+    } finally {
+      setIsLookingUpEmail(false);
+      setTimeout(() => setLookupNotice(null), 4500);
+    }
+  };
+
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -213,44 +291,62 @@ export default function DriversPage() {
   };
 
   const openAddModal = () => {
-    if (faculties.length === 0) {
-      getFaculties().then(setFaculties).catch(console.error);
-    }
-    if (vans.length === 0) {
-      fetch('/api/vans').then(res => res.json()).then(data => setVans(data.vans || [])).catch(console.error);
-    }
-
     setEditingId(null);
-    const defaultFacId = userFacultyId || (faculties.length > 0 ? faculties[0].id.toString() : "");
-    const matchingVans = vans.filter(v => !defaultFacId || v.faculty?.id?.toString() === defaultFacId || !v.faculty);
-    const defaultVanId = matchingVans.length > 0 ? matchingVans[0].id.toString() : "";
+    setShowUrlInput(false);
+    setLookupNotice(null);
+    const targetFacId = userFacultyId || "1";
+    const matchingVans = vans.filter(v => {
+      const vFacId = v.facultyId !== undefined ? String(v.facultyId) : "";
+      return !vFacId || vFacId === targetFacId || (v.facultyName && userFacultyName && v.facultyName.includes(userFacultyName));
+    });
+    const defaultVanId = matchingVans.length > 0 ? String(matchingVans[0].dbId || matchingVans[0].id).replace(/\D/g, '') : "";
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const expiryDate = calculateExpiry(todayStr, 5);
+    const expiryStr = expiryDate.toISOString().split('T')[0];
 
     setFormData({
       name: "",
       email: "",
       phone: "",
-      vanAssigned: "",
+      vanAssigned: matchingVans.length > 0 ? matchingVans[0].plate : "",
       assignedVanId: defaultVanId,
-      facultyId: defaultFacId,
-      contractStart: new Date().toISOString().split('T')[0],
-      licenseExpiry: new Date().toISOString().split('T')[0],
+      facultyId: targetFacId,
+      contractStart: todayStr,
+      licenseExpiry: expiryStr,
       isLocked: false,
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80"
+      avatar: ""
     });
     setIsModalOpen(true);
   };
 
   const openEditModal = (driver: Driver) => {
-    if (faculties.length === 0) {
-      getFaculties().then(setFaculties).catch(console.error);
-    }
-    if (vans.length === 0) {
-      fetch('/api/vans').then(res => res.json()).then(data => setVans(data.vans || [])).catch(console.error);
+    setEditingId(driver.id);
+    setShowUrlInput(false);
+    setLookupNotice(null);
+    const facId = driver.facultyId ? String(driver.facultyId) : (userFacultyId || "1");
+    
+    // Find driver's assigned van ID (numeric string)
+    let driverVanId = driver.assignedVanId ? String(driver.assignedVanId).replace(/\D/g, '') : "";
+    
+    // If not set, check if vanAssigned matches any van plate
+    if (!driverVanId && driver.vanAssigned) {
+      const matched = vans.find(v => v.plate && driver.vanAssigned.includes(v.plate));
+      if (matched) {
+        driverVanId = String(matched.dbId || matched.id).replace(/\D/g, '');
+      }
     }
 
-    setEditingId(driver.id);
-    const facId = driver.facultyId ? driver.facultyId.toString() : (userFacultyId || (faculties.length > 0 ? faculties[0].id.toString() : ""));
-    const driverVanId = driver.assignedVanId ? driver.assignedVanId.toString() : "";
+    // If still not set, default to first van of this faculty
+    if (!driverVanId) {
+      const facVans = vans.filter(v => {
+        const vFacId = v.facultyId !== undefined ? String(v.facultyId) : "";
+        return !vFacId || vFacId === facId;
+      });
+      if (facVans.length > 0) {
+        driverVanId = String(facVans[0].dbId || facVans[0].id).replace(/\D/g, '');
+      }
+    }
 
     setFormData({
       name: driver.name,
@@ -269,39 +365,52 @@ export default function DriversPage() {
 
   const handleSave = async () => {
     try {
+      const targetFacId = formData.facultyId || userFacultyId || "1";
+      const payload = {
+        ...formData,
+        facultyId: targetFacId
+      };
       if (editingId) {
+        setDrivers(prev => prev.map(d => d.id === editingId ? { ...d, ...payload } : d));
+        try { sessionStorage.removeItem('cached_faculty_drivers'); } catch {}
         await fetch(`/api/drivers/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(payload)
         });
       } else {
         await fetch('/api/drivers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(payload)
         });
       }
+      try { sessionStorage.removeItem('cached_faculty_drivers'); } catch {}
       setIsModalOpen(false);
-      loadDrivers();
+      await loadDrivers(true);
     } catch (err) {
       console.error(err);
     }
   };
 
   const toggleLock = async (driver: Driver) => {
+    const nextLocked = !driver.isLocked;
+    // Optimistic UI update
+    setDrivers(prev => prev.map(d => d.id === driver.id ? { ...d, isLocked: nextLocked } : d));
     try {
       await fetch(`/api/drivers/${driver.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: driver.phone,
-          isLocked: !driver.isLocked
+          isLocked: nextLocked,
+          isActive: !nextLocked
         })
       });
       loadDrivers();
     } catch (err) {
       console.error(err);
+      loadDrivers();
     }
   };
 
@@ -363,12 +472,11 @@ export default function DriversPage() {
 
   return (
     <AppShell>
-      <div className="w-full space-y-6 animate-in fade-in pb-6 flex flex-col h-full">
-
+      <div className="max-w-[1400px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0">
 
         {/* Pending Requests Section */}
         {pendingRequests.length > 0 && (
-          <div className="px-6 flex-shrink-0">
+          <div className="mb-6 shrink-0">
             <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5 shadow-sm">
               <h3 className="font-bold text-amber-800 flex items-center gap-2 mb-3">
                 <AlertCircle size={20} />
@@ -418,27 +526,26 @@ export default function DriversPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-10">
-          
-          {/* ----- Dean Section (Read Only) ----- */}
-          {/* ----- Toolbar ----- */}
-          <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
-            <div className="relative w-full sm:w-72">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="ค้นหาชื่อ หรือ อีเมลคนขับ..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:border-[#311171] shadow-sm transition-all"
-              />
-            </div>
-            <div className="flex items-center gap-4 text-sm font-bold">
-              <span className="text-gray-500">ทั้งหมด: <span className="text-gray-900">{drivers.length} คน</span></span>
-            </div>
+        {/* ----- Toolbar ----- */}
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+          <div className="relative w-full sm:w-72">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="ค้นหาชื่อ หรือ อีเมลคนขับ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 focus:bg-white transition-all"
+            />
           </div>
+          <div className="flex items-center gap-4 text-sm font-bold">
+            <span className="text-gray-500">ทั้งหมด: <span className="text-gray-900">{drivers.length} คน</span></span>
+            <span className="text-gray-500">พร้อมปฏิบัติหน้าที่: <span className="text-green-600">{drivers.filter(d => d.isActive && !d.isLocked).length} คน</span></span>
+          </div>
+        </div>
 
-          {/* ----- Drivers Grid ----- */}
+        {/* ----- Grid Content ----- */}
+        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {isLoading ? (
             <div className="flex items-center justify-center h-40 text-gray-500 font-bold">กำลังโหลดข้อมูล...</div>
           ) : (
@@ -453,7 +560,13 @@ export default function DriversPage() {
                   <div key={driver.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col">
                     <div className="flex items-start gap-4 mb-5">
                       <div className="relative shrink-0">
-                        <img src={driver.avatar} alt={driver.name} className={`w-16 h-16 rounded-xl object-cover ${driver.isLocked ? 'grayscale opacity-60' : ''}`} />
+                        {driver.avatar && driver.avatar.trim() !== '' ? (
+                          <img src={driver.avatar} alt={driver.name} className={`w-16 h-16 rounded-xl object-cover ${driver.isLocked ? 'grayscale opacity-60' : ''}`} />
+                        ) : (
+                          <div className={`w-16 h-16 rounded-xl bg-gradient-to-br from-[#311171] to-[#4c1d95] text-white font-black text-xl flex items-center justify-center shadow-inner ${driver.isLocked ? 'grayscale opacity-60' : ''}`}>
+                            {driver.name ? driver.name.trim().charAt(0) : <Users size={24} />}
+                          </div>
+                        )}
                         {driver.isLocked && (
                           <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center backdrop-blur-[1px]">
                             <Lock size={20} className="text-white" />
@@ -556,17 +669,28 @@ export default function DriversPage() {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in"
           onClick={() => setIsModalOpen(false)}
         >
           <div 
-            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] border border-purple-100"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-5 border-b border-gray-100">
-              <h2 className="text-xl font-black text-[#311171]">
-                {editingId ? 'แก้ไขข้อมูลคนขับ' : 'เพิ่มคนขับรถใหม่'}
-              </h2>
+            {/* Header */}
+            <div className="flex justify-between items-center px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-purple-50/60 via-white to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#311171]/10 flex items-center justify-center text-[#311171]">
+                  <Users size={22} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-[#311171] leading-tight">
+                    {editingId ? 'แก้ไขข้อมูลคนขับ' : 'เพิ่มคนขับรถใหม่'}
+                  </h2>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">
+                    จัดการข้อมูลประจำตัว บัญชีมหาวิทยาลัย และสังกัดรถตู้
+                  </p>
+                </div>
+              </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-xl transition-colors"
@@ -577,171 +701,374 @@ export default function DriversPage() {
             
             <div className="p-6 overflow-y-auto flex-1 space-y-5">
               
-              {/* Profile Image Section */}
-              <div className="flex flex-col items-center justify-center gap-2 pb-2">
-                <div className="relative group w-24 h-24 rounded-full overflow-hidden border-2 border-[#311171]/20 shadow-md bg-gray-100 flex items-center justify-center">
-                  {formData.avatar ? (
-                    <img src={formData.avatar} alt="Driver Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <Users size={40} className="text-gray-400" />
-                  )}
-                  <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer">
+              {/* Lookup Notice Alert */}
+              {lookupNotice && (
+                <div className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center gap-2.5 transition-all animate-in fade-in ${
+                  lookupNotice.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                  lookupNotice.type === 'error' ? 'bg-rose-50 text-rose-800 border border-rose-200' :
+                  'bg-blue-50 text-blue-800 border border-blue-200'
+                }`}>
+                  {lookupNotice.type === 'success' && <Check size={16} className="text-emerald-600 shrink-0" />}
+                  {lookupNotice.type === 'error' && <AlertCircle size={16} className="text-rose-600 shrink-0" />}
+                  {lookupNotice.type === 'info' && <AlertCircle size={16} className="text-blue-600 shrink-0" />}
+                  <span className="flex-1">{lookupNotice.message}</span>
+                </div>
+              )}
+
+              {/* Profile Image Card */}
+              <div className="bg-gradient-to-br from-purple-50/40 via-white to-gray-50 border border-purple-100/90 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-4 sm:gap-5 shadow-sm">
+                <div className="relative group shrink-0">
+                  <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[#311171]/20 shadow-md bg-gray-100 flex items-center justify-center ring-4 ring-purple-100">
+                    {formData.avatar && formData.avatar.trim() !== '' ? (
+                      <img src={formData.avatar} alt="Driver Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <Users size={38} className="text-gray-400" />
+                    )}
+                  </div>
+                  <label 
+                    className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer backdrop-blur-[1px]"
+                    title="คลิกเพื่อเปลี่ยนรูปภาพ"
+                  >
                     <Camera size={20} />
-                    <span className="text-[10px] font-bold mt-1">อัปโหลดรูป</span>
+                    <span className="text-[10px] font-bold mt-1">เปลี่ยนรูป</span>
                     <input 
                       type="file" 
                       accept="image/*" 
                       className="hidden" 
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (file) {
+                        if (!file) return;
+                        try {
+                          const uploadForm = new FormData();
+                          uploadForm.append('file', file);
+                          uploadForm.append('type', 'drivers');
+                          const res = await fetch('/api/upload', {
+                            method: 'POST',
+                            body: uploadForm
+                          });
+                          const data = await res.json();
+                          if (data.success && data.url) {
+                            setFormData(prev => ({ ...prev, avatar: data.url }));
+                            return;
+                          }
+                        } catch (err) {
+                          console.warn('Server upload failed, falling back to base64', err);
+                        }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setFormData(prev => ({ ...prev, avatar: reader.result as string }));
+                        };
+                        reader.readAsDataURL(file);
+                      }} 
+                    />
+                  </label>
+                </div>
+
+                <div className="flex-1 w-full text-center sm:text-left space-y-2">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                    <span className="text-sm font-bold text-gray-800">รูปภาพโปรไฟล์คนขับ</span>
+                    {formData.email && formData.email.toLowerCase().endsWith('@up.ac.th') && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-purple-100 text-[#311171] px-2 py-0.5 rounded-full">
+                        <ShieldCheck size={12} /> บัญชีทางการ มพ.
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    รองรับไฟล์รูปภาพ PNG, JPG หรือดึงรูปทางการอัตโนมัติจากบัญชีอีเมลมหาวิทยาลัย
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:border-[#311171] hover:text-[#311171] text-gray-700 text-xs font-bold rounded-xl transition-all shadow-sm">
+                      <Camera size={14} />
+                      <span>อัปโหลดรูปใหม่</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const uploadForm = new FormData();
+                            uploadForm.append('file', file);
+                            uploadForm.append('type', 'drivers');
+                            const res = await fetch('/api/upload', {
+                              method: 'POST',
+                              body: uploadForm
+                            });
+                            const data = await res.json();
+                            if (data.success && data.url) {
+                              setFormData(prev => ({ ...prev, avatar: data.url }));
+                              return;
+                            }
+                          } catch (err) {
+                            console.warn('Server upload failed, falling back to base64', err);
+                          }
                           const reader = new FileReader();
                           reader.onloadend = () => {
                             setFormData(prev => ({ ...prev, avatar: reader.result as string }));
                           };
                           reader.readAsDataURL(file);
-                        }
-                      }} 
-                    />
+                        }} 
+                      />
+                    </label>
+
+                    {formData.avatar && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, avatar: '' }))}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-medium"
+                      >
+                        ลบรูป
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowUrlInput(!showUrlInput)}
+                      className="text-[11px] text-gray-400 hover:text-gray-600 underline font-medium ml-auto"
+                    >
+                      {showUrlInput ? 'ซ่อน URL' : 'ระบุ URL เอง'}
+                    </button>
+                  </div>
+
+                  {showUrlInput && (
+                    <div className="pt-2 animate-in fade-in duration-150">
+                      <div className="relative">
+                        <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input 
+                          type="text" 
+                          value={formData.avatar}
+                          onChange={(e) => setFormData(prev => ({ ...prev, avatar: e.target.value }))}
+                          placeholder="https://example.com/avatar.jpg หรือ /uploads/..."
+                          className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-mono text-gray-600"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* University Email Section */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-gray-700">
+                    อีเมลมหาวิทยาลัย (University Email) <span className="text-rose-500">*</span>
                   </label>
+                  <span className="text-[11px] text-gray-400">ใช้อีเมล @up.ac.th เพื่อดึงข้อมูลและรูปทางการ</span>
                 </div>
-                <div className="w-full">
-                  <label className="block text-[11px] font-bold text-gray-500 text-center mb-1">หรือระบุ URL รูปโปรไฟล์</label>
-                  <input 
-                    type="text" 
-                    value={formData.avatar}
-                    onChange={(e) => setFormData(prev => ({ ...prev, avatar: e.target.value }))}
-                    placeholder="https://example.com/avatar.jpg"
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#311171]/20 text-center"
-                  />
-                </div>
-              </div>
-
-              {!editingId && (
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">อีเมล (มหาวิทยาลัย)</label>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Mail size={16} />
+                  </div>
                   <input 
                     type="email" 
                     value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    placeholder="เช่น user@up.ac.th"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
+                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="เช่น 66012555@up.ac.th หรือ user@up.ac.th"
+                    className="w-full pl-10 pr-44 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-medium text-gray-800"
                   />
+                  <button
+                    type="button"
+                    onClick={() => handleLookupByEmail()}
+                    disabled={isLookingUpEmail || !formData.email}
+                    className="absolute right-1.5 top-1.5 bottom-1.5 px-3.5 bg-[#311171] hover:bg-[#240c55] disabled:opacity-40 disabled:hover:bg-[#311171] text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                    title="ดึงรูปภาพโปรไฟล์จาก Microsoft 365 และข้อมูลคนขับตามอีเมลนี้"
+                  >
+                    {isLookingUpEmail ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <RefreshCcw size={13} />
+                    )}
+                    <span>ดึงรูป & ข้อมูล 365</span>
+                  </button>
                 </div>
-              )}
+                <p className="text-[11px] text-gray-400 mt-1">
+                  กรอกอีเมลมหาวิทยาลัยแล้วกดปุ่มเพื่อดึงรูปโปรไฟล์ทางการจากระบบ Microsoft 365 อัตโนมัติ
+                </p>
+              </div>
 
-              {editingId && (
+              {/* Name & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">อีเมล (มหาวิทยาลัย)</label>
-                  <input 
-                    type="email" 
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">ชื่อ - นามสกุล</label>
-                  <input 
-                    type="text" 
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    placeholder="กรอกชื่อ-นามสกุล"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
-                  />
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                    ชื่อ - นามสกุล <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+                      <Users size={16} />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={formData.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="กรอกชื่อ-นามสกุล คนขับ"
+                      className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-medium text-gray-800"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">เบอร์โทรศัพท์ติดต่อ</label>
-                  <input 
-                    type="text" 
-                    maxLength={10}
-                    value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})}
-                    placeholder="เช่น 0812345678"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-700">
+                      เบอร์โทรศัพท์ติดต่อ
+                    </label>
+                    <span className="text-[11px] text-gray-400">กรอกเอง</span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+                      <Phone size={16} />
+                    </div>
+                    <input 
+                      type="text" 
+                      maxLength={10}
+                      value={formData.phone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                      placeholder="กรอกเบอร์โทร เช่น 0812345678"
+                      className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-medium tracking-wide text-gray-800"
+                    />
+                  </div>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Contract Date & Driver License Expiry */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">วันที่เริ่มสัญญา</label>
-                  <input 
-                    type="date" 
-                    value={formData.contractStart ? formData.contractStart.split('T')[0] : ''}
-                    onChange={(e) => setFormData({...formData, contractStart: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-700">วันที่เริ่มสัญญา</label>
+                    <span className="text-[10px] bg-purple-100 text-[#311171] font-bold px-1.5 py-0.5 rounded">ระยะสัญญา 5 ปี</span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <input 
+                      type="date" 
+                      value={formData.contractStart ? formData.contractStart.split('T')[0] : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData(prev => {
+                          const next = { ...prev, contractStart: val };
+                          if (val) {
+                            const startD = new Date(val);
+                            startD.setFullYear(startD.getFullYear() + 5);
+                            next.licenseExpiry = startD.toISOString().split('T')[0];
+                          }
+                          return next;
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-medium text-gray-700 bg-white"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">วันหมดอายุใบขับขี่</label>
-                  <input 
-                    type="date" 
-                    value={formData.licenseExpiry ? formData.licenseExpiry.split('T')[0] : ''}
-                    onChange={(e) => setFormData({...formData, licenseExpiry: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20"
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-700">วันหมดอายุใบขับขี่</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const baseDate = formData.contractStart ? new Date(formData.contractStart) : new Date();
+                        baseDate.setFullYear(baseDate.getFullYear() + 5);
+                        setFormData(prev => ({ ...prev, licenseExpiry: baseDate.toISOString().split('T')[0] }));
+                      }}
+                      className="text-[10px] text-[#311171] hover:underline font-bold"
+                    >
+                      + 5 ปีอัตโนมัติ
+                    </button>
+                  </div>
+                  <div className="relative flex items-center">
+                    <input 
+                      type="date" 
+                      value={formData.licenseExpiry ? formData.licenseExpiry.split('T')[0] : ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, licenseExpiry: e.target.value }))}
+                      className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-medium text-gray-700 bg-white"
+                    />
+                  </div>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">สังกัดคณะ (Faculty)</label>
-                  <select 
-                    value={formData.facultyId}
-                    onChange={(e) => {
-                      const newFacId = e.target.value;
-                      const validVans = vans.filter(v => !newFacId || v.faculty?.id?.toString() === newFacId || !v.faculty);
-                      setFormData({
-                        ...formData, 
-                        facultyId: newFacId,
-                        assignedVanId: validVans.length > 0 ? validVans[0].id.toString() : ""
-                      });
-                    }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-bold text-gray-800"
-                  >
-                    <option value="" disabled>-- เลือกคณะ --</option>
-                    {faculties.map(f => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">รถตู้ประจำการ (Van)</label>
-                  <select 
-                    value={formData.assignedVanId}
-                    onChange={(e) => setFormData({...formData, assignedVanId: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-bold text-gray-800"
-                  >
-                    <option value="">-- ไม่ระบุรถตู้ --</option>
-                    {vans
-                      .filter(v => !formData.facultyId || v.faculty?.id?.toString() === formData.facultyId || !v.faculty)
-                      .map(v => (
-                      <option key={v.id} value={v.id}>{v.vanName} ({v.plate})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              {/* Faculty and Van Section */}
+              {(() => {
+                const facultyObj = faculties.find(f => String(f.id) === String(formData.facultyId || userFacultyId));
+                const displayFacultyName = facultyObj?.name || userFacultyName || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
+                const targetFacId = formData.facultyId || userFacultyId || "1";
+                const matchingFacultyVans = vans.filter(v => {
+                  const vFacId = v.facultyId !== undefined ? String(v.facultyId) : "";
+                  return !vFacId || vFacId === targetFacId || (v.facultyName && displayFacultyName && v.facultyName.includes(displayFacultyName));
+                });
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">สังกัดคณะ (Faculty)</label>
+                      <div className="w-full px-3.5 py-2.5 bg-purple-50/70 border border-purple-200/90 rounded-xl text-sm font-bold text-[#311171] flex items-center justify-between shadow-sm min-h-[44px]">
+                        <div className="flex items-center gap-2 min-w-0 mr-2">
+                          <Users size={16} className="text-[#311171] shrink-0" />
+                          <span className="truncate" title={displayFacultyName}>{displayFacultyName}</span>
+                        </div>
+                        <span className="text-[10px] bg-[#311171] text-white px-2 py-0.5 rounded-md shrink-0 font-bold whitespace-nowrap">
+                          คณะของคุณ
+                        </span>
+                      </div>
+                      <input type="hidden" value={targetFacId} />
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
+                        <CarFront size={14} className="text-[#311171]" />
+                        <span>รถตู้ประจำการ (Van)</span>
+                      </label>
+                      <div className="relative">
+                        <select 
+                          value={formData.assignedVanId}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const matchedVan = vans.find(v => String(v.dbId || v.id).replace(/\D/g, '') === selectedId);
+                            setFormData(prev => ({
+                              ...prev, 
+                              assignedVanId: selectedId,
+                              vanAssigned: matchedVan?.plate || prev.vanAssigned
+                            }));
+                          }}
+                          className="w-full pl-3.5 pr-8 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#311171]/20 font-bold text-gray-800 bg-white shadow-sm min-h-[44px]"
+                        >
+                          <option value="">-- ไม่ระบุรถตู้ --</option>
+                          {matchingFacultyVans.map(v => {
+                            const val = String(v.dbId || v.id).replace(/\D/g, '');
+                            return (
+                              <option key={v.id} value={val}>
+                                {v.vanName ? `${v.vanName} (${v.plate})` : v.plate}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1">รถตู้ที่คนขับท่านนี้รับผิดชอบประจำ</p>
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
             
-            <div className="p-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="px-5 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded-xl transition-colors"
-              >
-                ยกเลิก
-              </button>
-              <button 
-                onClick={handleSave}
-                disabled={!formData.name || !formData.email}
-                className="px-5 py-2.5 bg-[#311171] hover:bg-[#240c55] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors flex items-center gap-2"
-              >
-                <CheckCircle2 size={18} /> บันทึกข้อมูล
-              </button>
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/80 rounded-b-3xl">
+              <div className="text-xs text-gray-400">
+                <span className="text-rose-500">*</span> จำเป็นต้องระบุข้อมูล
+              </div>
+              <div className="flex items-center gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 text-sm font-bold text-gray-600 hover:text-gray-800 hover:bg-gray-200/70 rounded-xl transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleSave}
+                  disabled={!formData.name || !formData.email}
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#311171] to-[#451897] hover:from-[#250d55] hover:to-[#311171] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-purple-950/20 hover:shadow-lg flex items-center gap-2"
+                >
+                  <CheckCircle2 size={18} />
+                  <span>บันทึกข้อมูล</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -6,7 +6,6 @@ import {
   addStoredCalendarEvent, 
   updateStoredCalendarEvent, 
   deleteStoredCalendarEvent,
-  facultyVansList,
   CalendarEventRecord
 } from "@/Backend/services/calendar-store";
 import { getGoogleCalendarClient } from "@/Backend/services/google-calendar";
@@ -35,7 +34,7 @@ export interface MappedDbBooking {
   assignedVanPlate: string;
 }
 import { UnifiedVanInfo } from "@/Frontend/data/faculty-vans";
-import { getAuthUser } from "@/app/actions/auth";
+import { getAuthUser } from "@/lib/auth-util";
 
 interface GoogleCalendarCache {
   events: CalendarEventRecord[];
@@ -72,6 +71,7 @@ const globalForGcal = globalThis as unknown as {
   gcalCache?: Record<string, GoogleCalendarCache>;
   isFetching?: Record<string, boolean>;
   cachedVans?: { data: UnifiedVanInfo[]; timestamp: number } | null;
+  cachedDbBookings?: { data: MappedDbBooking[]; timestamp: number } | null;
 };
 
 if (!globalForGcal.gcalCache) {
@@ -101,6 +101,7 @@ export async function resolveCalendarId(vanId?: string): Promise<string | undefi
   
   const vanIdNum = parseInt(vanId);
   if (!isNaN(vanIdNum)) {
+    // 1. Check if vanIdNum matches a Van
     const van = await prisma.van.findUnique({
       where: { id: vanIdNum },
       include: { faculty: true }
@@ -111,25 +112,37 @@ export async function resolveCalendarId(vanId?: string): Promise<string | undefi
       if (van.faculty.nameTh.includes('วิทยาศาสตร์')) return FACULTY_CALENDARS.SCI;
       if (van.faculty.nameTh.includes('สารสนเทศ') || van.faculty.nameTh.includes('ICT')) return FACULTY_CALENDARS.ICT;
     }
-  } else {
-    let facultyName = '';
-    if (vanId === 'v-ict') facultyName = 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร';
-    else if (vanId === 'v-eng') facultyName = 'คณะวิศวกรรมศาสตร์';
-    else if (vanId === 'v-sci') facultyName = 'คณะวิทยาศาสตร์';
-    else if (vanId === 'v-agr') facultyName = 'คณะเกษตรศาสตร์';
-    else if (vanId === 'v-ener') facultyName = 'คณะพลังงานและสิ่งแวดล้อม';
-    else if (vanId === 'v-pharm') facultyName = 'คณะเภสัชศาสตร์';
-    
-    if (vanId === 'v-pharm') return FACULTY_CALENDARS.PHARM;
-    if (vanId === 'v-sci') return FACULTY_CALENDARS.SCI;
-    if (vanId === 'v-ict') return FACULTY_CALENDARS.ICT;
-    
-    if (facultyName) {
-      const fac = await prisma.faculty.findFirst({ where: { nameTh: facultyName } });
-      if (fac && fac.googleCalendarId) return fac.googleCalendarId;
+
+    // 2. Check if vanIdNum matches a Faculty directly
+    const fac = await prisma.faculty.findUnique({
+      where: { id: vanIdNum }
+    });
+    if (fac) {
+      if (fac.googleCalendarId) return fac.googleCalendarId;
+      if (fac.nameTh.includes('เภสัช')) return FACULTY_CALENDARS.PHARM;
+      if (fac.nameTh.includes('วิทยาศาสตร์')) return FACULTY_CALENDARS.SCI;
+      if (fac.nameTh.includes('สารสนเทศ') || fac.nameTh.includes('ICT')) return FACULTY_CALENDARS.ICT;
     }
   }
-  
+
+  // 3. String keywords & mapping
+  const cleanId = String(vanId).trim().toLowerCase();
+  if (cleanId.includes('pharm') || cleanId.includes('เภสัช') || cleanId === '6') return FACULTY_CALENDARS.PHARM;
+  if (cleanId.includes('sci') || (cleanId.includes('วิทย์') && !cleanId.includes('สารสนเทศ')) || cleanId === '2') return FACULTY_CALENDARS.SCI;
+  if (cleanId.includes('ict') || cleanId.includes('สารสนเทศ') || cleanId === '1') return FACULTY_CALENDARS.ICT;
+
+  try {
+    const facByName = await prisma.faculty.findFirst({
+      where: {
+        OR: [
+          { nameTh: { contains: String(vanId).replace('คณะ', '').trim() } },
+          { nameEn: { contains: String(vanId).trim() } }
+        ]
+      }
+    });
+    if (facByName?.googleCalendarId) return facByName.googleCalendarId;
+  } catch {}
+
   return defaultCalendarId;
 }
 
@@ -210,6 +223,30 @@ export async function pushBookingToGoogleCalendar(booking: {
     });
 
     invalidateDbBookingsCache();
+    const gcalId = gcalResponse.data.id;
+    if (gcalId) {
+      addOrUpdateEventInCache({
+        id: `gcal-${gcalId}`,
+        gcalId: gcalId,
+        vanId: booking.assignedVanId || '1',
+        facultyId: booking.assignedVanId || '1',
+        date: startDateRaw,
+        returnDate: endDateRaw,
+        time: booking.startAt && booking.startAt.includes('T') ? new Date(booking.startAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.' : '08:30 น.',
+        destination: booking.destination,
+        purpose: booking.purpose || booking.destination,
+        passengers: booking.passengers || 1,
+        status: 'approved',
+        bookingFaculty: booking.requesterFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+        requester: booking.requester || 'Google Calendar Sync',
+        department: 'Google Calendar Live',
+        purposeDetail: booking.purpose,
+        routeDetail: booking.destination,
+        statusText: 'ซิงค์จาก Google Calendar',
+        statusTime: 'Live Data',
+        createdAt: new Date().toISOString()
+      });
+    }
     return gcalResponse.data.id;
   } catch (err) {
     console.warn("Failed to push approved booking to Google Calendar:", err);
@@ -240,17 +277,16 @@ async function fetchGoogleCalendarEvents(year: number): Promise<CalendarEventRec
             calendarId: cal.id,
             timeMin,
             timeMax,
-            maxResults: 500,
+            maxResults: 250,
             singleEvents: true,
             orderBy: 'startTime',
           }),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 6000))
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 4500))
         ]);
 
         const response = await fetchWithTimeout;
         return { items: response.data.items || [], meta: cal };
       } catch {
-        console.warn(`Notice: Google Calendar fetch completed/bypassed for ${cal.id}`);
         return null;
       }
     });
@@ -347,55 +383,96 @@ async function fetchGoogleCalendarEvents(year: number): Promise<CalendarEventRec
 }
 
 
-let cachedDbBookings: { data: MappedDbBooking[]; timestamp: number } | null = null;
-
 export function invalidateDbBookingsCache() {
-  cachedDbBookings = null;
-  if (globalForGcal.cachedVans) globalForGcal.cachedVans = null;
+  if (globalForGcal) {
+    globalForGcal.cachedDbBookings = null;
+    if (globalForGcal.cachedVans) globalForGcal.cachedVans = null;
+  }
 }
 
 async function getCachedDbBookings(): Promise<MappedDbBooking[]> {
-  if (cachedDbBookings && (Date.now() - cachedDbBookings.timestamp < 30 * 1000)) {
-    return cachedDbBookings.data;
+  const cached = globalForGcal.cachedDbBookings;
+  if (cached && (Date.now() - cached.timestamp < 60 * 1000)) {
+    return cached.data;
   }
 
   try {
-    const dbBookings = await prisma.booking.findMany({
-      where: { status: { not: 'REJECTED' } },
-      include: {
-        requester: { include: { faculty: true } },
-        assignedDriver: { include: { user: true } },
-        targetFaculty: true,
-      },
-      orderBy: { createdAt: "desc" }
-    });
+    const rawRows = await prisma.$queryRaw<Array<{
+      id: string;
+      destination: string;
+      purpose: string;
+      passengers: number;
+      startAt: Date;
+      endAt: Date;
+      submittedAt: Date;
+      budgetSource: string;
+      tripType: string;
+      status: string;
+      phone: string | null;
+      requester: string | null;
+      requesterFaculty: string | null;
+      requesterFacultyId: number | null;
+      targetFaculty: string | null;
+      targetFacultyId: number | null;
+      assignedDriverName: string | null;
+      vanPlate: string | null;
+    }>>`
+      SELECT 
+        b.id,
+        b.destination,
+        b.objective AS purpose,
+        b.passengers_count AS "passengers",
+        b.departure_date AS "startAt",
+        b.return_date AS "endAt",
+        b.created_at AS "submittedAt",
+        b.budget_source AS "budgetSource",
+        b.trip_type AS "tripType",
+        b.status,
+        b.phone,
+        u.name AS requester,
+        f.name_th AS "requesterFaculty",
+        f.id AS "requesterFacultyId",
+        tf.name_th AS "targetFaculty",
+        b.target_faculty_id AS "targetFacultyId",
+        du.name AS "assignedDriverName",
+        v.plate AS "vanPlate"
+      FROM bookings b
+      LEFT JOIN users u ON u.id = b.requester_id
+      LEFT JOIN faculties f ON f.id = u.faculty_id
+      LEFT JOIN faculties tf ON tf.id = b.target_faculty_id
+      LEFT JOIN drivers d ON d.id = b.assigned_driver_id
+      LEFT JOIN users du ON du.id = d.user_id
+      LEFT JOIN vans v ON v.id = d.assigned_van_id
+      WHERE b.status != 'REJECTED'
+      ORDER BY b.created_at DESC;
+    `;
 
-    const mapped = dbBookings.map(b => ({
+    const mapped: MappedDbBooking[] = rawRows.map(b => ({
       id: b.id,
-      requester: b.requester?.name || "ผู้ขอใช้บริการ",
+      requester: b.requester || "ผู้ขอใช้บริการ",
       phone: b.phone || "-",
-      requesterFaculty: b.requester?.faculty?.nameTh || (b.requester?.facultyId === 6 ? "คณะเภสัชฯ" : "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"),
-      requesterFacultyId: b.requester?.facultyId || 1,
-      targetFaculty: b.targetFaculty?.nameTh || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+      requesterFaculty: b.requesterFaculty || (b.requesterFacultyId === 6 ? "คณะเภสัชฯ" : "คณะเทคโนโลยีสารสนเทศและการสื่อสาร"),
+      requesterFacultyId: b.requesterFacultyId || 1,
+      targetFaculty: b.targetFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
       targetFacultyId: b.targetFacultyId || 1,
       destination: b.destination,
-      purpose: b.objective,
-      passengers: b.passengersCount || 1,
-      startAt: b.departureDate ? new Date(b.departureDate).toISOString() : new Date().toISOString(),
-      endAt: b.returnDate ? new Date(b.returnDate).toISOString() : new Date().toISOString(),
-      submittedAt: b.createdAt ? new Date(b.createdAt).toISOString() : new Date().toISOString(),
+      purpose: b.purpose,
+      passengers: b.passengers || 1,
+      startAt: b.startAt ? new Date(b.startAt).toISOString() : new Date().toISOString(),
+      endAt: b.endAt ? new Date(b.endAt).toISOString() : new Date().toISOString(),
+      submittedAt: b.submittedAt ? new Date(b.submittedAt).toISOString() : new Date().toISOString(),
       budgetSource: b.budgetSource || "งบประมาณคณะ",
       tripType: b.tripType || "ในจังหวัดพะเยา",
       status: b.status,
-      assignedDriverName: b.assignedDriver?.user?.name || (b.targetFacultyId === 1 ? "นาย" : "พนักงานขับรถ"),
-      assignedVanPlate: b.targetFacultyId === 1 ? "1นช3009 กรุงเทพมหานคร" : "ยังไม่ผูกทะเบียน",
+      assignedDriverName: b.assignedDriverName || "ยังไม่ระบุคนขับ",
+      assignedVanPlate: b.vanPlate || "ยังไม่ผูกทะเบียน",
     }));
 
-    cachedDbBookings = { data: mapped, timestamp: Date.now() };
+    globalForGcal.cachedDbBookings = { data: mapped, timestamp: Date.now() };
     return mapped;
   } catch (err) {
     console.error("Error fetching live bookings from DB for calendar:", err);
-    return cachedDbBookings?.data || [];
+    return globalForGcal.cachedDbBookings?.data || [];
   }
 }
 
@@ -404,30 +481,47 @@ async function getCachedRealVans(): Promise<UnifiedVanInfo[]> {
     return globalForGcal.cachedVans.data;
   }
   try {
-    const realVans = await prisma.van.findMany({
-      include: {
-        faculty: true,
-        assignedDrivers: {
-          include: { user: true }
-        }
-      },
-      orderBy: { id: "asc" }
-    });
+    const rawVans = await prisma.$queryRaw<Array<{
+      id: number;
+      facultyId: number;
+      facultyName: string | null;
+      name: string | null;
+      plate: string | null;
+      image: string | null;
+      driverName: string | null;
+      driverPhone: string | null;
+      driverAvatar: string | null;
+    }>>`
+      SELECT 
+        v.id,
+        v.faculty_id AS "facultyId",
+        f.name_th AS "facultyName",
+        v.name,
+        v.plate,
+        v.image AS image,
+        u.name AS "driverName",
+        d.phone AS "driverPhone",
+        COALESCE(d.avatar, u.avatar) AS "driverAvatar"
+      FROM vans v
+      LEFT JOIN faculties f ON f.id = v.faculty_id
+      LEFT JOIN drivers d ON d.assigned_van_id = v.id
+      LEFT JOIN users u ON u.id = d.user_id
+      ORDER BY v.id ASC;
+    `;
 
-    if (realVans && realVans.length > 0) {
-      const mapped: UnifiedVanInfo[] = realVans.map(v => {
-        const driver = v.assignedDrivers?.[0] || null;
+    if (rawVans && rawVans.length > 0) {
+      const mapped: UnifiedVanInfo[] = rawVans.map(v => {
         return {
           id: v.id.toString(),
           facultyId: v.facultyId.toString(),
-          facultyName: v.faculty?.nameTh || "คณะรวม",
-          shortFacultyName: v.faculty?.nameTh?.replace('คณะ', '') || "คณะรวม",
-          vanName: v.name || `รถตู้ ${v.faculty?.nameTh || ''} ${v.plate}`,
+          facultyName: v.facultyName || "มหาวิทยาลัยพะเยา",
+          shortFacultyName: v.facultyName?.replace('คณะ', '').trim() || "พะเยา",
+          vanName: v.name || `รถตู้ ${v.facultyName || ''} (${v.plate})`,
           plate: v.plate || "ไม่ระบุทะเบียน",
-          driverName: driver?.user?.name || (v.facultyId === 1 ? "นาย" : "พนักงานขับรถ"),
-          driverPhone: driver?.phone || "0812345678",
-          driverImage: driver?.user?.avatar || driver?.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-          vanImage: (v.image && (v.image.startsWith('http') || v.image.startsWith('data:image') || v.image.startsWith('/'))) ? v.image : "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80"
+          driverName: v.driverName || "ยังไม่ระบุคนขับ",
+          driverPhone: v.driverPhone || "-",
+          driverImage: (v.driverAvatar && !v.driverAvatar.includes('unsplash.com')) ? v.driverAvatar : "",
+          vanImage: (v.image && !v.image.includes('unsplash.com') && (v.image.startsWith('http') || v.image.startsWith('data:image') || v.image.startsWith('/'))) ? v.image : ""
         };
       });
       globalForGcal.cachedVans = { data: mapped, timestamp: Date.now() };
@@ -465,7 +559,8 @@ export async function handleSystemCalendarEvents(request: Request) {
         id: `bk-${b.id}`,
         vanId: facultyIdStr,
         facultyId: facultyIdStr,
-        bookingFaculty: b.targetFaculty || b.requesterFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        bookingFaculty: b.requesterFaculty || "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
+        targetFaculty: b.targetFaculty || undefined,
         destination: b.destination,
         purpose: b.purpose,
         purposeDetail: b.purpose,
@@ -478,16 +573,42 @@ export async function handleSystemCalendarEvents(request: Request) {
         phone: b.phone || "",
         department: b.requesterFaculty || "ระบบจองรถตู้",
         status: isApproved ? "approved" : "pending",
-        statusText: isApproved ? "อนุมัติแล้ว" : "รอดำเนินการ (รอคณบดีอนุมัติ)",
+        statusText: isApproved 
+          ? "อนุมัติแล้ว" 
+          : (b.targetFacultyId && b.requesterFacultyId && b.targetFacultyId !== b.requesterFacultyId 
+              ? "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)" 
+              : (b.status === "WAITING_EXEC" ? "รอดำเนินการ (รอคณบดีอนุมัติ)" : "รอดำเนินการ (รอแอดมินคณะอนุมัติ)")),
         statusTime: "ระบบการจอง",
         tripType: (b.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || "ในจังหวัดพะเยา",
         createdAt: b.submittedAt || new Date().toISOString()
       };
     });
 
+    // Map DB events by id so live database data updates store without wiping rich metadata
+    const dbEventMap = new Map(dbEvents.map(e => [e.id, e]));
+    events = events.map(e => {
+      if (e.id && dbEventMap.has(e.id)) {
+        const live = dbEventMap.get(e.id)!;
+        return {
+          ...e,
+          ...live,
+          attachments: e.attachments || live.attachments || [],
+          assignedVans: e.assignedVans || live.assignedVans,
+          vanId: e.vanId || live.vanId,
+          targetFaculty: live.targetFaculty || e.targetFaculty,
+          bookingFaculty: live.bookingFaculty || e.bookingFaculty
+        };
+      }
+      return e;
+    });
+
     const existingIds = new Set(events.map(e => e.id));
     const newDbEvents = dbEvents.filter(e => !existingIds.has(e.id));
     events = [...newDbEvents, ...events];
+
+    // Filter out any bk- events that are marked REJECTED in the DB
+    const rejectedBookingIds = new Set(allDbBookings.filter(b => b.status === 'REJECTED').map(b => `bk-${b.id}`));
+    events = events.filter(e => !rejectedBookingIds.has(e.id));
   } catch (err) {
     console.warn("Notice: Failed to fetch DB bookings for calendar:", err);
   }
@@ -511,22 +632,17 @@ export async function handleSystemCalendarEvents(request: Request) {
       let googleEventsMapped: CalendarEventRecord[] = [];
 
       if (!cached || !cached.events || cached.events.length === 0) {
-        // Check disk cache first to avoid blocking network call
-        const disk = loadGcalCacheFromFile();
-        if (disk && disk[cacheKey] && disk[cacheKey].events && disk[cacheKey].events.length > 0) {
-          cached = disk[cacheKey];
+        const diskCache = loadGcalCacheFromFile();
+        if (diskCache && diskCache[cacheKey] && diskCache[cacheKey].events && diskCache[cacheKey].events.length > 0) {
+          cached = diskCache[cacheKey];
           gcalCache[cacheKey] = cached;
           googleEventsMapped = cached.events;
-          // Background refresh
-          if (!globalForGcal.isFetching?.[cacheKey]) {
-            if (globalForGcal.isFetching) globalForGcal.isFetching[cacheKey] = true;
-            fetchGoogleCalendarEvents(year).finally(() => {
-              if (globalForGcal.isFetching) globalForGcal.isFetching[cacheKey] = false;
-            });
-          }
         } else {
-          // Cold cache: fetch directly
-          googleEventsMapped = await fetchGoogleCalendarEvents(year);
+          try {
+            googleEventsMapped = await fetchGoogleCalendarEvents(year);
+          } catch {
+            googleEventsMapped = [];
+          }
         }
       } else {
         googleEventsMapped = cached.events;
@@ -576,14 +692,9 @@ export async function handleSystemCalendarEvents(request: Request) {
     });
   }
 
-  // Fetch real vans
-    const realVansList = await getCachedRealVans();
-    const allVans = [...realVansList];
-  facultyVansList.forEach(fv => {
-    if (!realVansList.some(rv => rv.facultyName === fv.facultyName || rv.shortFacultyName === fv.shortFacultyName)) {
-      allVans.push(fv);
-    }
-  });
+  // Fetch real vans strictly from Supabase DB
+  const realVansList = await getCachedRealVans();
+  const allVans = [...realVansList];
 
   // Deduplicate events to guarantee unique IDs
   const seenEventIds = new Set<string>();
@@ -624,8 +735,8 @@ export async function handleSystemCalendarEvents(request: Request) {
         ? "bg-green-200 text-green-800 border-green-300"
         : "bg-yellow-200 text-yellow-800 border-yellow-300";
 
-      const vanInfo = allVans.find(v => v.id === event.vanId);
-      const plate = vanInfo ? vanInfo.plate : event.vanId;
+      const vanInfo = allVans.find(v => v.id === event.vanId || v.facultyId === event.facultyId || (event.vanId && v.facultyId === event.vanId));
+      const plate = vanInfo ? vanInfo.plate : (event.assignedVans?.[0]?.plate || event.vanId);
       const itemTitle = `${event.destination} (${plate}) - ${event.bookingFaculty}`;
 
       for (let d = new Date(startDate); d <= validEndDate; d.setDate(d.getDate() + 1)) {
@@ -652,7 +763,7 @@ export async function handleSystemCalendarEvents(request: Request) {
           status: event.status,
           tripType: event.tripType,
           color,
-          ownerFacultyName: vanInfo ? vanInfo.facultyName : undefined
+          ownerFacultyName: event.targetFaculty || (vanInfo ? vanInfo.facultyName : undefined)
         });
       }
 
@@ -668,7 +779,7 @@ export async function handleSystemCalendarEvents(request: Request) {
     vans: allVans
   }, {
     headers: {
-      'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10',
+      'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
     }
   });
 }
@@ -787,15 +898,54 @@ export async function POST(request: Request) {
 
       const isBorrow = sv.isBorrow === true || (sv.facultyName && sv.facultyName !== userFacultyName);
       const isApproved = initialStatus === 'approved';
-      const dbStatus: BookingStatus = isApproved ? BookingStatus.APPROVED : (isBorrow ? BookingStatus.WAITING_ADMIN : BookingStatus.WAITING_EXEC);
+      const isFacultyAdminRequester = requester.role === 'FACULTY_ADMIN' || authUser.role === 'FACULTY_ADMIN';
+      const dbStatus: BookingStatus = isApproved 
+        ? BookingStatus.APPROVED 
+        : (isBorrow ? BookingStatus.WAITING_ADMIN : (isFacultyAdminRequester ? BookingStatus.WAITING_EXEC : BookingStatus.WAITING_ADMIN));
       const calendarStatus = isApproved ? 'approved' : 'pending';
       const statusText = isApproved 
         ? "อนุมัติแล้ว" 
-        : (isBorrow ? "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)" : "รอดำเนินการ (รอคณบดีอนุมัติ)");
+        : (isBorrow ? "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)" : (isFacultyAdminRequester ? "รอดำเนินการ (รอคณบดีอนุมัติ)" : "รอดำเนินการ (รอแอดมินคณะอนุมัติ)"));
 
       const vanSuffix = rawSelectedVans.length > 1
         ? ` (คันที่ ${i + 1}/${rawSelectedVans.length} - ${isBorrow ? `ยืมรถ${targetFaculty.nameTh}` : 'รถประจำคณะ'})`
         : '';
+
+      let autoAssignedDriverId: number | null = null;
+      if (sv.driverName) {
+        const cleanName = sv.driverName.trim();
+        const dUser = await prisma.user.findFirst({
+          where: { name: { contains: cleanName } },
+          include: { driverProfile: true }
+        });
+        if (dUser?.driverProfile) {
+          autoAssignedDriverId = dUser.driverProfile.id;
+        } else {
+          const directDriver = await prisma.driver.findFirst({
+            where: { user: { name: { contains: cleanName } } }
+          });
+          if (directDriver) autoAssignedDriverId = directDriver.id;
+        }
+      }
+      if (!autoAssignedDriverId && targetFaculty?.id) {
+        const facDriver = await prisma.driver.findFirst({ where: { facultyId: targetFaculty.id } });
+        if (facDriver) autoAssignedDriverId = facDriver.id;
+      }
+      // Double Booking Check: Prevent booking if van already has an approved conflicting booking
+      const conflictingApproved = await prisma.booking.findFirst({
+        where: {
+          targetFacultyId: targetFaculty.id,
+          status: BookingStatus.APPROVED,
+          departureDate: { lt: isNaN(endDateTime.getTime()) ? new Date() : endDateTime },
+          returnDate: { gt: isNaN(startDateTime.getTime()) ? new Date() : startDateTime }
+        }
+      });
+      if (conflictingApproved) {
+        return NextResponse.json({
+          success: false,
+          error: `รถตู้ของ${targetFaculty.nameTh} มีภารกิจที่ได้รับการอนุมัติแล้วในช่วงวันเวลาดังกล่าว (คำขอเลขที่ ${conflictingApproved.id}) กรุณาเลือกวันเวลาอื่นหรือยืมรถจากคณะอื่น`
+        }, { status: 409 });
+      }
 
       try {
         await prisma.booking.create({
@@ -812,9 +962,26 @@ export async function POST(request: Request) {
             budgetSource: body.budgetSource || "งบประมาณคณะ",
             tripType: body.tripType || "ในจังหวัดพะเยา",
             status: dbStatus,
+            assignedDriverId: autoAssignedDriverId,
           }
         });
         createdDbBookings.push(dbBookingId);
+
+        if (Array.isArray(body.attachments) && body.attachments.length > 0) {
+          for (const att of body.attachments) {
+            if (att.url && att.name) {
+              const fSize = typeof att.size === 'number' ? Number((att.size / (1024 * 1024)).toFixed(2)) : 0;
+              await prisma.attachment.create({
+                data: {
+                  bookingId: dbBookingId,
+                  fileName: att.name,
+                  fileUrl: att.url,
+                  fileSize: fSize
+                }
+              }).catch(e => console.warn("Prisma attachment creation note:", e));
+            }
+          }
+        }
       } catch (dbErr) {
         console.warn("Notice: Failed to persist calendar event to Prisma DB:", dbErr);
       }
@@ -828,7 +995,8 @@ export async function POST(request: Request) {
         status: calendarStatus,
         statusText: statusText,
         statusTime: "บันทึกในระบบ",
-        assignedVans: rawSelectedVans
+        assignedVans: rawSelectedVans,
+        attachments: Array.isArray(body.attachments) ? body.attachments : []
       });
 
       createdEvents.push(calEvent);
@@ -924,6 +1092,29 @@ export async function PATCH(request: Request) {
           }
         }
 
+        if (fields.attachments !== undefined) {
+          try {
+            await prisma.attachment.deleteMany({ where: { bookingId } });
+            if (Array.isArray(fields.attachments) && fields.attachments.length > 0) {
+              for (const att of fields.attachments) {
+                if (att.url && att.name) {
+                  const fSize = typeof att.size === 'number' ? Number((att.size / (1024 * 1024)).toFixed(2)) : 0;
+                  await prisma.attachment.create({
+                    data: {
+                      bookingId,
+                      fileName: att.name,
+                      fileUrl: att.url,
+                      fileSize: fSize
+                    }
+                  }).catch(e => console.warn("Prisma attachment update note:", e));
+                }
+              }
+            }
+          } catch (attErr) {
+            console.warn("Attachment sync error on patch:", attErr);
+          }
+        }
+
         if (fields.requester) {
           const requesterName = String(fields.requester).trim();
           let reqUser = await prisma.user.findFirst({ where: { name: requesterName } });
@@ -1003,14 +1194,12 @@ export async function PATCH(request: Request) {
       }
     }
 
-    // Invalidate Google Calendar cache
-    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
-    if (globalCacheObj.gcalCache) {
-      globalCacheObj.gcalCache = {};
+    // Invalidate Google Calendar cache for this specific event
+    if (targetGcalId) {
+      removeEventFromCache(String(id), targetGcalId);
+    } else {
+      invalidateDbBookingsCache();
     }
-    Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
-    invalidateDbBookingsCache();
-    try { if (fs.existsSync(GCAL_CACHE_FILE)) fs.unlinkSync(GCAL_CACHE_FILE); } catch {}
 
     return NextResponse.json({ success: true, event: updated });
   } catch (error) {
@@ -1031,38 +1220,140 @@ export async function DELETE(request: Request) {
     const gcalId = searchParams.get("gcalId");
     if (!id) return NextResponse.json({ success: false, error: "Missing ID" }, { status: 400 });
 
-    // 1. Delete from local JSON stored events if applicable
+    // 1. Load stored calendar events and find the target event
     const allEvents = getStoredCalendarEvents();
     const storedEvent = allEvents.find(e => String(e.id) === String(id));
     
-    if (storedEvent) {
-      if (authUser.role === 'FACULTY_ADMIN') {
-        const adminFacultyId = String(authUser.facultyId || '');
-        const adminFacultyName = authUser.faculty?.nameTh || '';
-        const matchesId = storedEvent.facultyId === adminFacultyId;
-        const matchesName = storedEvent.bookingFaculty === adminFacultyName;
-        
-        if (!matchesId && !matchesName) {
-          return NextResponse.json({ success: false, error: "Forbidden: ท่านสามารถลบได้เฉพาะตารางงานของคณะตนเองเท่านั้น" }, { status: 403 });
+    if (storedEvent && authUser.role === 'FACULTY_ADMIN') {
+      const adminFacultyId = String(authUser.facultyId || '');
+      const adminFacultyName = authUser.faculty?.nameTh || '';
+      const matchesId = storedEvent.facultyId === adminFacultyId;
+      const matchesName = storedEvent.bookingFaculty === adminFacultyName;
+      
+      if (!matchesId && !matchesName) {
+        return NextResponse.json({ success: false, error: "Forbidden: ท่านสามารถลบได้เฉพาะตารางงานของคณะตนเองเท่านั้น" }, { status: 403 });
+      }
+    }
+
+    // 2. Identify if this booking is part of a fleet / multi-van or borrowed van request
+    const targetSubIds = new Set<string>(
+      (storedEvent?.assignedVans || [])
+        .map((v: { id: string }) => v.id)
+        .filter(Boolean)
+    );
+
+    const hasBorrow = Boolean(
+      (storedEvent?.assignedVans && storedEvent.assignedVans.some((v: { isBorrow?: boolean }) => v.isBorrow)) ||
+      storedEvent?.statusText?.includes('ยืม') ||
+      storedEvent?.purpose?.includes('ยืมรถ') ||
+      storedEvent?.purpose?.includes('คันที่ ')
+    );
+
+    const isFleet = Boolean(
+      (storedEvent?.assignedVans && storedEvent.assignedVans.length > 1) ||
+      hasBorrow
+    );
+
+    const eventsToDelete: CalendarEventRecord[] = storedEvent ? [storedEvent] : [];
+    const calendarIdsToDelete = new Set<string>();
+    calendarIdsToDelete.add(String(id));
+
+    if (storedEvent && isFleet) {
+      const cleanTargetPurpose = (storedEvent.purpose || '').replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+
+      for (const ev of allEvents) {
+        if (ev.id === storedEvent.id) continue;
+
+        let isSibling = false;
+        // A. Match sub-IDs in assignedVans
+        if (targetSubIds.size > 0) {
+          const evSubIds = (ev.assignedVans || []).map((v: { id: string }) => v.id).filter(Boolean);
+          if (evSubIds.some((subId: string) => targetSubIds.has(subId))) {
+            isSibling = true;
+          }
+        }
+
+        // B. Match requestTimestamp
+        if (!isSibling && storedEvent.requestTimestamp && ev.requestTimestamp === storedEvent.requestTimestamp && ev.requester === storedEvent.requester) {
+          isSibling = true;
+        }
+
+        // C. Match trip details
+        if (!isSibling && ev.requester === storedEvent.requester && ev.date === storedEvent.date && ev.destination === storedEvent.destination) {
+          const cleanEvPurpose = (ev.purpose || '').replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+          if (cleanEvPurpose === cleanTargetPurpose) {
+            isSibling = true;
+          }
+        }
+
+        if (isSibling) {
+          eventsToDelete.push(ev);
+          if (ev.id) calendarIdsToDelete.add(String(ev.id));
         }
       }
-      deleteStoredCalendarEvent(id);
     }
 
-    // 2. Delete from Prisma Database booking if id starts with bk-
+    // 3. Find and link DB bookings
+    const dbBookingIdsToDelete = new Set<string>();
     if (String(id).startsWith("bk-")) {
-      const bookingId = String(id).replace("bk-", "");
-      try {
-        await prisma.booking.delete({ where: { id: bookingId } });
-      } catch (dbErr) {
-        console.warn("Notice: Booking already deleted or not found in DB:", dbErr);
+      dbBookingIdsToDelete.add(String(id).replace("bk-", ""));
+    }
+    for (const evId of Array.from(calendarIdsToDelete)) {
+      if (evId.startsWith("bk-")) {
+        dbBookingIdsToDelete.add(evId.replace("bk-", ""));
       }
     }
 
-    // 3. Sync delete to Google Calendar in background (non-blocking for fast UI response)
-    const targetGcalId = gcalId || (storedEvent?.gcalId) || (String(id).startsWith('gcal-') ? String(id).replace('gcal-', '') : null);
+    // Look up sibling DB bookings
+    for (const primaryDbId of Array.from(dbBookingIdsToDelete)) {
+      try {
+        const currentDbBooking = await prisma.booking.findUnique({ where: { id: primaryDbId } });
+        if (currentDbBooking) {
+          const cleanObj = currentDbBooking.objective.replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+          const siblingDbBookings = await prisma.booking.findMany({
+            where: {
+              requesterId: currentDbBooking.requesterId,
+              departureDate: currentDbBooking.departureDate,
+              destination: currentDbBooking.destination,
+              objective: { contains: cleanObj }
+            },
+            select: { id: true }
+          });
+          for (const s of siblingDbBookings) {
+            dbBookingIdsToDelete.add(s.id);
+            calendarIdsToDelete.add(`bk-${s.id}`);
+          }
+        }
+      } catch (dbFindErr) {
+        console.warn("Notice: Error finding sibling DB bookings:", dbFindErr);
+      }
+    }
 
-    if (targetGcalId && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    // 4. Delete all collected calendar store events
+    for (const cId of Array.from(calendarIdsToDelete)) {
+      deleteStoredCalendarEvent(cId);
+      removeEventFromCache(cId);
+    }
+
+    // 5. Delete all collected DB bookings and their attachments
+    for (const bId of Array.from(dbBookingIdsToDelete)) {
+      try {
+        await prisma.attachment.deleteMany({ where: { bookingId: bId } });
+        await prisma.booking.delete({ where: { id: bId } });
+      } catch (dbErr) {
+        console.warn("Notice: Booking already deleted or not found in DB:", bId, dbErr);
+      }
+    }
+
+    // 6. Sync delete to Google Calendar for all events
+    const allGcalIds = new Set<string>();
+    if (gcalId) allGcalIds.add(gcalId);
+    for (const ev of eventsToDelete) {
+      if (ev.gcalId) allGcalIds.add(ev.gcalId);
+      if (String(ev.id).startsWith('gcal-')) allGcalIds.add(String(ev.id).replace('gcal-', ''));
+    }
+
+    if (allGcalIds.size > 0 && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       (async () => {
         try {
           const calendar = getGoogleCalendarClient(['https://www.googleapis.com/auth/calendar']);
@@ -1072,34 +1363,35 @@ export async function DELETE(request: Request) {
           if (FACULTY_CALENDARS.PHARM) candidateCalendars.add(FACULTY_CALENDARS.PHARM);
           if (FACULTY_CALENDARS.SCI) candidateCalendars.add(FACULTY_CALENDARS.SCI);
 
-          await Promise.all(
-            Array.from(candidateCalendars).map(async (calId) => {
-              try {
-                await calendar.events.delete({
-                  calendarId: calId,
-                  eventId: targetGcalId,
-                });
-              } catch {
-                // Not in this particular calendar or already deleted
-              }
-            })
-          );
+          for (const targetGcalId of Array.from(allGcalIds)) {
+            await Promise.all(
+              Array.from(candidateCalendars).map(async (calId) => {
+                try {
+                  await calendar.events.delete({
+                    calendarId: calId,
+                    eventId: targetGcalId,
+                  });
+                } catch {
+                  // Ignore if not present in this calendar
+                }
+              })
+            );
+          }
         } catch (gcalErr) {
           console.warn("Google Calendar Push Delete Warning:", gcalErr);
         }
       })();
     }
 
-    // 4. Invalidate Google Calendar cache immediately
-    const globalCacheObj = globalThis as unknown as { gcalCache?: Record<string, unknown> };
-    if (globalCacheObj.gcalCache) {
-      globalCacheObj.gcalCache = {};
-    }
-    Object.keys(gcalCache).forEach(k => delete gcalCache[k]);
+    // 7. Invalidate cache
     invalidateDbBookingsCache();
-    try { if (fs.existsSync(GCAL_CACHE_FILE)) fs.unlinkSync(GCAL_CACHE_FILE); } catch {}
 
-    return NextResponse.json({ success: true }, {
+    return NextResponse.json({ 
+      success: true,
+      deletedCount: calendarIdsToDelete.size,
+      deletedIds: Array.from(calendarIdsToDelete),
+      isFleet
+    }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
         'Pragma': 'no-cache'

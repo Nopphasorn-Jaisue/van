@@ -4,8 +4,18 @@ import { Pool } from "pg";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; pool?: Pool };
 
-const defaultUrl = "postgresql://postgres.ljcfcyeohhzvgbztrsss:Joule404325@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres";
-const rawUrl = process.env.DATABASE_URL || process.env.DIRECT_URL || defaultUrl;
+if (!process.env.DATABASE_URL && !process.env.DIRECT_URL && typeof process.loadEnvFile === "function") {
+  try {
+    process.loadEnvFile();
+  } catch {
+    // Ignore if file doesn't exist
+  }
+}
+
+const rawUrl = process.env.DATABASE_URL || process.env.DIRECT_URL;
+if (!rawUrl) {
+  throw new Error("Missing DATABASE_URL or DIRECT_URL in environment configuration.");
+}
 const connectionString = rawUrl.replace('?pgbouncer=true', '');
 
 let pool = globalForPrisma.pool;
@@ -14,8 +24,10 @@ if (!pool) {
     connectionString,
     ssl: { rejectUnauthorized: false },
     max: 10,
-    connectionTimeoutMillis: 5000,
-    idleTimeoutMillis: 15000 
+    connectionTimeoutMillis: 8000,
+    idleTimeoutMillis: 1000 * 60 * 10, // Keep connection alive for 10 minutes (prevents cold-start delays on navigation)
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   });
   globalForPrisma.pool = pool;
 }
@@ -31,4 +43,6 @@ export const prisma =
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
+  globalForPrisma.pool = pool;
 }
+

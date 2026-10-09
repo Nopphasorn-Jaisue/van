@@ -898,12 +898,33 @@ function BookingFormContent() {
 
                       {/* ข้อมูลคนขับประจำรถ (Vehicle-Driver Pair - ข้อ 12) */}
                       <div className="flex items-center gap-2.5 pt-2 border-t border-slate-100">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img 
-                          src={van.driverImage} 
-                          alt="driver" 
-                          className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" 
-                        />
+                        {(() => {
+                          const displayImg = (van.driverImage && van.driverImage.trim() !== '' && !van.driverImage.includes('unsplash.com'))
+                            ? van.driverImage.trim()
+                            : (van.vanImage && van.vanImage.trim() !== '' && !van.vanImage.includes('unsplash.com'))
+                              ? van.vanImage.trim()
+                              : null;
+
+                          if (displayImg) {
+                            return (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img 
+                                src={displayImg} 
+                                alt="driver" 
+                                className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" 
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            );
+                          }
+
+                          return (
+                            <div className="w-8 h-8 rounded-full bg-[#311171]/10 text-[#311171] flex items-center justify-center font-bold text-xs shrink-0 border border-slate-200">
+                              {van.driverName ? van.driverName.trim().charAt(0) : <User size={14} />}
+                            </div>
+                          );
+                        })()}
                         <div className="min-w-0 flex-1">
                           <p className="text-[11px] font-bold text-slate-800 truncate">คนขับ: {van.driverName}</p>
                           <p className="text-[10px] text-slate-500 font-medium">โทร: {van.driverPhone}</p>

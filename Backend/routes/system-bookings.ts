@@ -1,17 +1,25 @@
-import { facultyVansList } from '@/Frontend/data/faculty-vans';
-import { addStoredCalendarEvent } from "@/Backend/services/calendar-store";
+import { addStoredCalendarEvent, updateStoredCalendarEvent, deleteStoredCalendarEvent } from "@/Backend/services/calendar-store";
 import type { Prisma } from '@prisma/client';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SystemBookingStatus } from "@/lib/booking-system-types";
-import { getAuthUser } from "@/app/actions/auth";
+import { getAuthUser } from "@/lib/auth-util";
 import { invalidateDbBookingsCache, pushBookingToGoogleCalendar } from "@/Backend/routes/system-calendar";
 import { BookingStatus } from "@prisma/client";
 
-let cachedBookings: { [key: string]: { data: unknown[]; timestamp: number } } = {};
+type BookingsCacheStore = { [key: string]: { data: unknown[]; timestamp: number } };
+
+function getBookingsCache(): BookingsCacheStore {
+  const g = globalThis as unknown as { __bookingsCache?: BookingsCacheStore };
+  if (!g.__bookingsCache) {
+    g.__bookingsCache = {};
+  }
+  return g.__bookingsCache;
+}
 
 export function invalidateBookingsCache() {
-  cachedBookings = {};
+  const g = globalThis as unknown as { __bookingsCache?: BookingsCacheStore };
+  g.__bookingsCache = {};
 }
 
 export async function handleListBookings(request: Request) {
@@ -20,16 +28,25 @@ export async function handleListBookings(request: Request) {
   const status = statusParam || undefined;
   
   const user = await getAuthUser();
-  let facultyId: number | undefined;
-  if (user && (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
-    facultyId = user.facultyId;
+  if (!user) {
+    return NextResponse.json({ success: false, error: "Unauthorized: กรุณาเข้าสู่ระบบก่อนดูรายการจอง" }, { status: 401 });
   }
 
-  const cacheKey = `${status || 'all'}_${facultyId || 'all'}`;
-  const existing = cachedBookings[cacheKey];
+  let facultyId: number | undefined;
+  if ((user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') && user.facultyId) {
+    facultyId = user.facultyId;
+  } else if (user.role === 'USER' || user.role === 'DRIVER') {
+    facultyId = user.facultyId || undefined;
+  }
 
-  if (existing && (Date.now() - existing.timestamp < 30 * 1000)) {
-    return NextResponse.json({ bookings: existing.data });
+  const cacheKey = `${status || 'all'}_${facultyId || 'all'}_${user.id}_${user.role}`;
+  const bookingsCache = getBookingsCache();
+  const existing = bookingsCache[cacheKey];
+
+  if (existing && (Date.now() - existing.timestamp < 60 * 1000)) {
+    return NextResponse.json({ bookings: existing.data }, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' }
+    });
   }
 
   try {
@@ -87,7 +104,7 @@ export async function handleListBookings(request: Request) {
       LEFT JOIN faculties tf ON tf.id = b.target_faculty_id
       LEFT JOIN drivers d ON d.id = b.assigned_driver_id
       LEFT JOIN users du ON du.id = d.user_id
-      LEFT JOIN vans v ON v.faculty_id = b.target_faculty_id
+      LEFT JOIN vans v ON v.id = d.assigned_van_id
       ORDER BY b.created_at DESC;
     `;
 
@@ -95,8 +112,17 @@ export async function handleListBookings(request: Request) {
     if (status) {
       filtered = filtered.filter(b => b.status === status);
     }
-    if (facultyId) {
-      filtered = filtered.filter(b => b.requesterFacultyId === facultyId || b.targetFacultyId === facultyId);
+    if (user.role === 'SUPER_ADMIN') {
+      // Super admin can inspect all bookings across all faculties
+    } else if (user.role === 'FACULTY_ADMIN' || user.role === 'EXECUTIVE') {
+      if (facultyId) {
+        filtered = filtered.filter(b => b.requesterFacultyId === facultyId || b.targetFacultyId === facultyId);
+      }
+    } else if (user.role === 'DRIVER') {
+      filtered = filtered.filter(b => b.assignedDriverName === user.name || (facultyId && b.targetFacultyId === facultyId));
+    } else {
+      // General USER only sees bookings they requested or within their faculty
+      filtered = filtered.filter(b => b.requesterId === user.id || (facultyId && b.requesterFacultyId === facultyId));
     }
 
         const mapped = filtered.map((b) => ({
@@ -123,8 +149,10 @@ export async function handleListBookings(request: Request) {
       assignedVanPlate: b.vanPlate || (b.targetFacultyId === 1 ? "1นช3009 กรุงเทพมหานคร" : "รถตู้ประจำคณะ"),
     }));
 
-    cachedBookings[cacheKey] = { data: mapped, timestamp: Date.now() };
-    return NextResponse.json({ bookings: mapped });
+    bookingsCache[cacheKey] = { data: mapped, timestamp: Date.now() };
+    return NextResponse.json({ bookings: mapped }, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' }
+    });
   } catch (error) {
     console.error("Error fetching live bookings with single SQL:", error);
     if (existing) {
@@ -138,12 +166,17 @@ export async function handleCreateSystemBooking(request: Request) {
   try {
     const body = await request.json();
     const user = await getAuthUser();
-    
-    let requesterId = user?.id;
-    if (!requesterId) {
-      const defaultUser = await prisma.user.findFirst();
-      requesterId = defaultUser?.id || 1;
+    let validUser = null;
+    if (user?.id) {
+      validUser = await prisma.user.findUnique({ where: { id: Number(user.id) } });
     }
+    if (!validUser && user?.email) {
+      validUser = await prisma.user.findUnique({ where: { email: user.email } });
+    }
+    if (!validUser) {
+      validUser = await prisma.user.findFirst({ orderBy: { id: "asc" } });
+    }
+    const requesterId = validUser?.id || 16;
 
     const startAtDate = body.startAt ? new Date(body.startAt) : new Date();
     const endAtDate = body.endAt ? new Date(body.endAt) : new Date();
@@ -180,17 +213,22 @@ export async function handleCreateSystemBooking(request: Request) {
       }
     } else if (Array.isArray(body.selectedVanIds) && body.selectedVanIds.length > 0) {
       for (const vId of body.selectedVanIds) {
-        const vInfo = facultyVansList.find(v => v.id === vId);
         let fac = userFaculty;
-        if (vInfo && vInfo.facultyName) {
-          const found = await prisma.faculty.findFirst({
-            where: { nameTh: { contains: vInfo.facultyName.replace('คณะ', '') } }
+        let isBorrow = false;
+        const numericId = parseInt(String(vId).replace(/^[^\d]*/, ''), 10);
+        if (!isNaN(numericId)) {
+          const dbVan = await prisma.van.findUnique({
+            where: { id: numericId },
+            include: { faculty: true }
           });
-          if (found) fac = found;
+          if (dbVan && dbVan.faculty) {
+            fac = dbVan.faculty;
+            isBorrow = dbVan.faculty.nameTh !== userFacultyName;
+          }
         }
         facultiesToBook.push({
           faculty: fac,
-          isBorrow: vInfo ? vInfo.facultyName !== userFacultyName : false,
+          isBorrow: isBorrow,
           vanId: vId
         });
       }
@@ -217,55 +255,104 @@ export async function handleCreateSystemBooking(request: Request) {
       facultiesToBook.push({ faculty: userFaculty, isBorrow: false });
     }
 
-    const latest = await prisma.booking.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
-    let lastNumber = latest ? Number((latest.id.match(/(\d+)/)?.[1] || "0")) : 64;
+    const transactionResults = await prisma.$transaction(async (tx) => {
+      const existingBookings = await tx.booking.findMany({
+        select: { id: true }
+      });
+      let maxNumber = 0;
+      for (const b of existingBookings) {
+        const match = b.id.match(/(\d+)$/);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (!isNaN(n) && n > maxNumber && n < 1000000) {
+            maxNumber = n;
+          }
+        }
+      }
+      let lastNumber = maxNumber > 0 ? maxNumber : 9053;
 
+      const itemsCreated = [];
+
+      for (let i = 0; i < facultiesToBook.length; i++) {
+        const item = facultiesToBook[i];
+        lastNumber += 1;
+        let bookingId = `UPV-2569-${lastNumber.toString().padStart(4, "0")}`;
+        while (await tx.booking.findUnique({ where: { id: bookingId } })) {
+          lastNumber += 1;
+          bookingId = `UPV-2569-${lastNumber.toString().padStart(4, "0")}`;
+        }
+
+        const vanSuffix = facultiesToBook.length > 1
+          ? ` (คันที่ ${i + 1}/${facultiesToBook.length} - ${item.isBorrow ? `ยืมรถ${item.faculty.nameTh}` : 'รถประจำคณะ'})`
+          : '';
+
+        const destinationsList = Array.isArray(body.destinations) && body.destinations.length > 0
+          ? body.destinations
+          : [{ place: body.destination || "ไม่ระบุจุดหมาย", province: body.province || "พะเยา" }];
+        
+        const destinationText = destinationsList.map((d: { place: string; province?: string }) => d.place + (d.province ? ` (${d.province})` : '')).join(' -> ');
+        const rawPurpose = body.purposeRaw || body.purpose || body.objective || baseObjective;
+
+        const isFacultyAdminBooking = user?.role === 'FACULTY_ADMIN';
+        const initialBookingStatus = (isFacultyAdminBooking && !item.isBorrow)
+          ? BookingStatus.WAITING_EXEC
+          : BookingStatus.WAITING_ADMIN;
+
+        let autoDriverId: number | null = null;
+        if (isFacultyAdminBooking && !item.isBorrow) {
+          const facDriver = await tx.driver.findFirst({
+            where: { facultyId: item.faculty.id }
+          });
+          if (facDriver) autoDriverId = facDriver.id;
+        }
+
+        const created = await tx.booking.create({
+          data: {
+            id: bookingId,
+            requesterId: typeof requesterId === 'number' ? requesterId : 1,
+            destination: destinationText,
+            objective: `${rawPurpose}${vanSuffix}`,
+            passengersCount: Number(body.passengerCount || body.passengers || 1),
+            departureDate: startAtDate,
+            returnDate: endAtDate,
+            tripType: body.tripScope || body.tripType || "ในจังหวัดพะเยา",
+            budgetSource: body.budgetSource || "งบประมาณคณะ",
+            phone: body.phone || "-",
+            passengerNames: body.passengerNames || "-",
+            targetFacultyId: item.faculty.id,
+            status: initialBookingStatus,
+            assignedDriverId: autoDriverId,
+          }
+        });
+
+        itemsCreated.push({
+          created,
+          item,
+          bookingId,
+          vanSuffix,
+          destinationsList,
+          destinationText,
+          rawPurpose,
+          isFacultyAdminBooking
+        });
+      }
+
+      return itemsCreated;
+    });
+
+    const requestTimestamp = new Date().toISOString();
     const createdBookings = [];
 
-    for (let i = 0; i < facultiesToBook.length; i++) {
-      const item = facultiesToBook[i];
-      lastNumber += 1;
-      const bookingId = `UPV-2569-${lastNumber.toString().padStart(4, "0")}`;
-
-      const vanSuffix = facultiesToBook.length > 1
-        ? ` (คันที่ ${i + 1}/${facultiesToBook.length} - ${item.isBorrow ? `ยืมรถ${item.faculty.nameTh}` : 'รถประจำคณะ'})`
-        : '';
-
-      const destinationsList = Array.isArray(body.destinations) && body.destinations.length > 0
-        ? body.destinations
-        : [{ place: body.destination || "ไม่ระบุจุดหมาย", province: body.province || "พะเยา" }];
-      
-      const destinationText = destinationsList.map((d: { place: string; province?: string }) => d.place + (d.province ? ` (${d.province})` : '')).join(' -> ');
-      const rawPurpose = body.purposeRaw || body.purpose || body.objective || baseObjective;
-      const requestTimestamp = new Date().toISOString();
-
-      const created = await prisma.booking.create({
-        data: {
-          id: bookingId,
-          requesterId: typeof requesterId === 'number' ? requesterId : 1,
-          destination: destinationText,
-          objective: `${rawPurpose}${vanSuffix}`,
-          passengersCount: Number(body.passengerCount || body.passengers || 1),
-          departureDate: startAtDate,
-          returnDate: endAtDate,
-          tripType: body.tripScope || body.tripType || "ในจังหวัดพะเยา",
-          budgetSource: body.budgetSource || "งบประมาณคณะ",
-          phone: body.phone || "-",
-          passengerNames: body.passengerNames || "-",
-          targetFacultyId: item.faculty.id,
-          status: BookingStatus.WAITING_ADMIN,
-        }
-      });
-
-      // Add to calendar store as well so it's instantly visible on the calendar
+    for (const record of transactionResults) {
+      const isExecWaiting = record.created.status === BookingStatus.WAITING_EXEC;
       addStoredCalendarEvent({
-        id: `bk-${bookingId}`,
-        vanId: item.vanId || String(item.faculty.id),
-        facultyId: String(item.faculty.id),
+        id: `bk-${record.bookingId}`,
+        vanId: record.item.vanId || String(record.item.faculty.id),
+        facultyId: String(record.item.faculty.id),
         bookingFaculty: userFacultyName,
-        destination: destinationText,
-        purpose: `${rawPurpose}${vanSuffix}`,
-        purposeRaw: rawPurpose,
+        destination: record.destinationText,
+        purpose: `${record.rawPurpose}${record.vanSuffix}`,
+        purposeRaw: record.rawPurpose,
         date: startAtDate.toISOString().slice(0, 10),
         returnDate: endAtDate.toISOString().slice(0, 10),
         time: `${body.startTime || '08:30'} - ${body.endTime || '16:30'} น.`,
@@ -274,20 +361,22 @@ export async function handleCreateSystemBooking(request: Request) {
         phone: body.phone || "-",
         department: "สำนักงานคณบดี",
         status: "pending",
-        statusText: item.isBorrow ? "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)" : "รอดำเนินการ (รอคณบดีอนุมัติ)",
+        statusText: record.item.isBorrow 
+          ? "รอการยืนยันจากคณะเจ้าของรถ (ยืมรถ)" 
+          : (isExecWaiting ? "รอดำเนินการ (รอคณบดีอนุมัติ)" : "รอดำเนินการ (รอแอดมินคณะอนุมัติ)"),
         statusTime: "บันทึกในระบบ",
         tripType: body.tripScope || body.tripType || "ในจังหวัดพะเยา",
         pickupLocation: body.pickupLocation || body.pickup_location || "มหาวิทยาลัยพะเยา",
-        dropoffLocation: body.dropoffLocation || body.dropoff_location || destinationText,
+        dropoffLocation: body.dropoffLocation || body.dropoff_location || record.destinationText,
         coordinatorName: body.coordinatorName || body.coordinator_name || "",
         coordinatorPhone: body.coordinatorPhone || body.coordinator_phone || "",
         passengerNames: body.passengerNames || "",
         requestedVehicleCount: Number(body.requestedVehicleCount || body.vehiclesCount || facultiesToBook.length),
         requestTimestamp: requestTimestamp,
-        destinations: destinationsList
+        destinations: record.destinationsList
       });
 
-      createdBookings.push(created);
+      createdBookings.push(record.created);
     }
 
     invalidateBookingsCache();
@@ -332,10 +421,12 @@ export async function handleUpdateSystemBooking(request: Request, id: string) {
       return NextResponse.json({ success: false, error: "ไม่พบข้อมูลคำขอใช้รถ" }, { status: 404 });
     }
 
-    const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'FACULTY_ADMIN';
+    const isAdmin = user?.role === 'SUPER_ADMIN';
+    const isFacultyAdmin = user?.role === 'FACULTY_ADMIN' && user.facultyId && (existing.targetFacultyId === user.facultyId || existing.requesterId === user.id);
     const isOwner = user && existing.requesterId === user.id;
-    if (!isAdmin && !isOwner) {
-      return NextResponse.json({ success: false, error: "คุณไม่มีสิทธิ์แก้ไขคำขอนี้" }, { status: 403 });
+
+    if (!isAdmin && !isFacultyAdmin && !isOwner) {
+      return NextResponse.json({ success: false, error: "คุณไม่มีสิทธิ์แก้ไขคำขอนี้ (คำขอเป็นของหน่วยงานอื่น)" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -379,18 +470,39 @@ export async function handleDeleteSystemBooking(_request: Request, id: string) {
       return NextResponse.json({ success: false, error: "ไม่พบข้อมูลคำขอใช้รถ" }, { status: 404 });
     }
 
-    const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'FACULTY_ADMIN';
+    const isAdmin = user?.role === 'SUPER_ADMIN';
+    const isFacultyAdmin = user?.role === 'FACULTY_ADMIN' && user.facultyId && (existing.targetFacultyId === user.facultyId || existing.requesterId === user.id);
     const isOwner = user && existing.requesterId === user.id;
-    if (!isAdmin && !isOwner) {
-      return NextResponse.json({ success: false, error: "คุณไม่มีสิทธิ์ลบคำขอนี้" }, { status: 403 });
+
+    if (!isAdmin && !isFacultyAdmin && !isOwner) {
+      return NextResponse.json({ success: false, error: "คุณไม่มีสิทธิ์ลบคำขอนี้ (คำขอเป็นของหน่วยงานอื่น)" }, { status: 403 });
     }
 
-    await prisma.booking.delete({
-      where: { id }
+    const cleanObj = existing.objective.replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+    const siblingBookings = await prisma.booking.findMany({
+      where: {
+        requesterId: existing.requesterId,
+        departureDate: existing.departureDate,
+        destination: existing.destination,
+        objective: { contains: cleanObj }
+      },
+      select: { id: true }
     });
+
+    const idsToDelete = siblingBookings.length > 0 ? siblingBookings.map(b => b.id) : [id];
+
+    for (const bId of idsToDelete) {
+      await prisma.attachment.deleteMany({ where: { bookingId: bId } }).catch(() => {});
+      await prisma.booking.delete({ where: { id: bId } }).catch(() => {});
+      deleteStoredCalendarEvent(`bk-${bId}`);
+    }
+
     invalidateBookingsCache();
     invalidateDbBookingsCache();
-    return NextResponse.json({ success: true, message: `ลบคำขอ ${id} เรียบร้อยแล้ว` });
+    return NextResponse.json({ 
+      success: true, 
+      message: `ลบคำขอ ${id} และรายการในขบวนที่เกี่ยวข้องทั้งหมด (${idsToDelete.length} รายการ) เรียบร้อยแล้ว` 
+    });
   } catch (err) {
     console.error("Failed to delete booking:", err);
     return NextResponse.json({ success: false, error: (err as Error)?.message || String(err) }, { status: 500 });
@@ -429,6 +541,28 @@ export async function handleBookingStatusUpdate(request: Request, id: string) {
     });
 
     if (status === 'APPROVED') {
+      // Double Booking Check: Prevent overlapping approved bookings for the same van or driver
+      const conflicting = await prisma.booking.findFirst({
+        where: {
+          id: { not: id },
+          status: BookingStatus.APPROVED,
+          departureDate: { lt: booking.returnDate },
+          returnDate: { gt: booking.departureDate },
+          OR: [
+            ...(booking.targetFacultyId ? [{ targetFacultyId: booking.targetFacultyId }] : []),
+            ...(booking.assignedDriverId ? [{ assignedDriverId: booking.assignedDriverId }] : []),
+          ]
+        },
+        include: { targetFaculty: true }
+      });
+
+      if (conflicting) {
+        return NextResponse.json({ 
+          success: false, 
+          error: `ไม่สามารถอนุมัติได้: รถตู้หรือพนักงานขับรถมีภารกิจที่ได้รับการอนุมัติในช่วงวันเวลาดังกล่าวแล้ว (คำขอเลขที่ ${conflicting.id})` 
+        }, { status: 409 });
+      }
+
       try {
         await pushBookingToGoogleCalendar({
           assignedVanId: updated.targetFacultyId ? String(updated.targetFacultyId) : '1',
@@ -445,6 +579,17 @@ export async function handleBookingStatusUpdate(request: Request, id: string) {
       } catch (gcalErr) {
         console.warn("Failed to push booking to Google Calendar:", gcalErr);
       }
+      try {
+        updateStoredCalendarEvent(`bk-${id}`, {
+          status: 'approved',
+          statusText: 'อนุมัติแล้ว',
+          statusTime: 'ระบบการจอง'
+        });
+      } catch {}
+    } else if (status === 'REJECTED') {
+      try {
+        deleteStoredCalendarEvent(`bk-${id}`);
+      } catch {}
     }
 
     invalidateBookingsCache();
@@ -462,16 +607,59 @@ export async function handleAssignDriverToBooking(request: Request, id: string) 
       return NextResponse.json({ success: false, error: "Unauthorized: คุณไม่มีสิทธิ์จัดสรรคนขับ" }, { status: 403 });
     }
 
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking) {
+      return NextResponse.json({ success: false, error: "ไม่พบคำขอใช้รถ" }, { status: 404 });
+    }
+
+    // Faculty admin can only assign drivers to bookings of their own faculty's vans
+    if (user.role === 'FACULTY_ADMIN' && booking.targetFacultyId !== user.facultyId) {
+      return NextResponse.json({ success: false, error: "คุณสามารถจัดสรรคนขับได้เฉพาะคำขอใช้รถของคณะตนเองเท่านั้น" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { driverId } = body;
+    
+    let parsedDriverId: number | null = null;
+    if (driverId !== null && driverId !== undefined && driverId !== "") {
+      const digits = String(driverId).replace(/\D/g, '');
+      const num = parseInt(digits, 10);
+      if (!isNaN(num)) {
+        parsedDriverId = num;
+      }
+    }
+
+    if (parsedDriverId !== null && user.role === 'FACULTY_ADMIN') {
+      const driver = await prisma.driver.findUnique({ where: { id: parsedDriverId } });
+      if (!driver || driver.facultyId !== user.facultyId) {
+        return NextResponse.json({ success: false, error: "ไม่สามารถมอบหมายคนขับของคณะอื่นได้" }, { status: 403 });
+      }
+    }
+
     const updated = await prisma.booking.update({
       where: { id },
       data: {
-        assignedDriverId: driverId ? Number(driverId) : null
+        assignedDriverId: parsedDriverId
+      },
+      include: {
+        assignedDriver: {
+          include: { user: true, assignedVan: true }
+        }
       }
     });
+
     invalidateBookingsCache();
     invalidateDbBookingsCache();
+
+    try {
+      if (updated.assignedDriver?.user?.name) {
+        updateStoredCalendarEvent(`bk-${id}`, {
+          coordinatorName: updated.assignedDriver.user.name,
+          coordinatorPhone: updated.assignedDriver.phone || "0812345678"
+        });
+      }
+    } catch {}
+
     return NextResponse.json({ success: true, booking: updated });
   } catch (err) {
     return NextResponse.json({ error: (err as Error)?.message || String(err) }, { status: 500 });

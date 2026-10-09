@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
+const secretKey = process.env.JWT_SECRET;
+if (!secretKey && process.env.NODE_ENV === "production") {
+  throw new Error("CRITICAL SECURITY ERROR: JWT_SECRET environment variable is missing in production.");
+}
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-key-for-development-only"
+  secretKey || "local-dev-fallback-secret-key-32-chars-minimum"
 );
 
 export async function proxy(request: NextRequest) {
@@ -19,9 +23,6 @@ export async function proxy(request: NextRequest) {
     path === '/auth/confirm' ||
     path === '/auth/error' ||
     path === '/auth/forgot-password' ||
-    path === '/auth/sign-up' ||
-    path === '/auth/sign-up-success' ||
-    path === '/auth/update-password' ||
     path.startsWith('/api/auth') ||
     path.startsWith('/_next') ||
     path.startsWith('/static') ||
@@ -37,9 +38,7 @@ export async function proxy(request: NextRequest) {
       path === '/api/calendar-events/export' ||
       path === '/api/vans' ||
       path === '/api/drivers' ||
-      path === '/api/bookings' ||
-      path === '/api/me' ||
-      path.startsWith('/api/bookings/')
+      path === '/api/me'
     );
 
   if (isPublicPath || isPublicReadOnlyApi) {
@@ -50,6 +49,23 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  // Helper for role-based redirects
+  const getRoleDashboard = (userRole?: string): string => {
+    switch (userRole) {
+      case 'SUPER_ADMIN':
+        return '/super-admin/dashboard';
+      case 'FACULTY_ADMIN':
+        return '/faculty-admin/dashboard';
+      case 'EXECUTIVE':
+        return '/executive/dashboard';
+      case 'DRIVER':
+        return '/driver/dashboard';
+      case 'USER':
+      default:
+        return '/user/calendar';
+    }
+  };
+
   // Get auth token from cookie
   const token = request.cookies.get('auth_token')?.value;
 
@@ -57,7 +73,9 @@ export async function proxy(request: NextRequest) {
     if (path.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized: กรุณาเข้าสู่ระบบก่อนทำรายการ' }, { status: 401 });
     }
-    return NextResponse.redirect(new URL('/login', request.url));
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', path);
+    return NextResponse.redirect(loginUrl);
   }
 
   try {
@@ -72,16 +90,7 @@ export async function proxy(request: NextRequest) {
         if (path.startsWith('/api/')) {
           return NextResponse.json({ error: 'Forbidden: คุณไม่มีสิทธิ์เข้าถึงส่วนงานผู้ดูแลระบบส่วนกลาง' }, { status: 403 });
         }
-        if (role === 'FACULTY_ADMIN') {
-          return NextResponse.redirect(new URL('/faculty-admin/dashboard', request.url));
-        }
-        if (role === 'DRIVER') {
-          return NextResponse.redirect(new URL('/driver/dashboard', request.url));
-        }
-        if (role === 'EXECUTIVE') {
-          return NextResponse.redirect(new URL('/executive/dashboard', request.url));
-        }
-        return NextResponse.redirect(new URL('/login', request.url));
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
     }
     
@@ -92,7 +101,7 @@ export async function proxy(request: NextRequest) {
         if (path.startsWith('/api/')) {
           return NextResponse.json({ error: 'Forbidden: คุณไม่มีสิทธิ์เข้าถึงส่วนงานผู้ดูแลคณะ' }, { status: 403 });
         }
-        return NextResponse.redirect(new URL('/login', request.url));
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
     }
 
@@ -103,7 +112,7 @@ export async function proxy(request: NextRequest) {
         if (path.startsWith('/api/')) {
           return NextResponse.json({ error: 'Forbidden: คุณไม่มีสิทธิ์เข้าถึงส่วนงานผู้บริหาร' }, { status: 403 });
         }
-        return NextResponse.redirect(new URL('/login', request.url));
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
     }
 
@@ -114,7 +123,7 @@ export async function proxy(request: NextRequest) {
         if (path.startsWith('/api/')) {
           return NextResponse.json({ error: 'Forbidden: คุณไม่มีสิทธิ์เข้าถึงส่วนงานพนักงานขับรถ' }, { status: 403 });
         }
-        return NextResponse.redirect(new URL('/login', request.url));
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
     }
 
@@ -128,7 +137,9 @@ export async function proxy(request: NextRequest) {
     if (path.startsWith('/api/')) {
       return NextResponse.json({ error: 'Invalid or expired session token' }, { status: 401 });
     }
-    return NextResponse.redirect(new URL('/login', request.url));
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', path);
+    return NextResponse.redirect(loginUrl);
   }
 }
 

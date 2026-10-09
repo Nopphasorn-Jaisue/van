@@ -2,27 +2,23 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
-import { SignJWT, jwtVerify } from "jose";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-key-for-development-only"
-);
+import { 
+  signToken as signTokenUtil, 
+  verifyToken as verifyTokenUtil, 
+  getAuthUser as getAuthUserUtil,
+  type AuthUserType
+} from "@/lib/auth-util";
 
 export async function signToken(payload: Record<string, unknown>) {
-  return await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("24h")
-    .sign(JWT_SECRET);
+  return await signTokenUtil(payload);
 }
 
 export async function verifyToken(token: string) {
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload;
-  } catch {
-    return null;
-  }
+  return await verifyTokenUtil(token);
+}
+
+export async function getAuthUser(): Promise<AuthUserType | null> {
+  return await getAuthUserUtil();
 }
 
 export async function setMockSession(role: string, email?: string) {
@@ -90,28 +86,7 @@ export async function clearSession() {
   cookieStore.delete("mock_email");
 }
 
-import { Prisma } from "@prisma/client";
 
-type AuthUserType = Prisma.UserGetPayload<{ include: { faculty: true } }>;
-
-export async function getAuthUser(): Promise<AuthUserType | null> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth_token")?.value;
-
-    if (token) {
-      const payload = await verifyToken(token);
-      if (payload) {
-        // Fast path: local JWT verified in 0.01ms with zero network latency
-        return payload as unknown as AuthUserType;
-      }
-    }
-  } catch (e) {
-    // Ignore error
-  }
-  
-  return null;
-}
 
 export async function getRoleByEmail(email: string) {
   const dbUser = await prisma.user.findUnique({

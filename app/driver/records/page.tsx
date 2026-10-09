@@ -3,12 +3,36 @@ import React, { useState, useEffect, useRef } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Camera, FileText, UploadCloud, MapPin, CheckCircle, 
-  Plus, Trash2, Car, AlertTriangle, X, ChevronRight, Receipt
+  Plus, Trash2, Car, AlertTriangle, X, ChevronRight, Receipt, Edit
 } from 'lucide-react';
-import { getAssignedBookings, submitDriverLog, createAdhocBooking } from '@/app/actions/driver';
+import { getAssignedBookings, submitDriverLog, updateDriverLog, createAdhocBooking } from '@/app/actions/driver';
 import { uploadImage } from '@/app/actions/upload';
 import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ThaiTimePicker from '@/components/ThaiTimePicker';
+
+export interface TripLegItem {
+  id?: number | string;
+  deptDate?: string;
+  deptTime?: string;
+  passenger?: string;
+  destination?: string;
+  startMileage?: string;
+  returnDate?: string;
+  returnTime?: string;
+  endMileage?: string;
+  remark?: string | null;
+}
+
+export interface DriverLogInfo {
+  id?: number;
+  mileageStart?: number;
+  mileageEnd?: number;
+  totalDistance?: number;
+  fuelRemark?: string | null;
+  imgStartUrl?: string | null;
+  imgEndUrl?: string | null;
+  tripLegs?: TripLegItem[];
+}
 
 export interface AssignedBooking {
   id: string;
@@ -23,7 +47,7 @@ export interface AssignedBooking {
     };
   };
   passengersCount?: number;
-  driverLog?: unknown;
+  driverLog?: DriverLogInfo | null;
 }
 
 export interface RawCalendarEvent {
@@ -68,6 +92,8 @@ export default function DriverRecords() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [driverId, setDriverId] = useState<number | null>(null);
+  const [driverName, setDriverName] = useState<string>("พนักงานขับรถ");
+  const [vanPlate, setVanPlate] = useState<string>("ไม่ระบุทะเบียน");
 
   const [assignedBookings, setAssignedBookings] = useState<AssignedBooking[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState("");
@@ -164,17 +190,6 @@ export default function DriverRecords() {
   const [startImageFile, setStartImageFile] = useState<File | null>(null);
   const [startImagePreview, setStartImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const endFileInputRef = useRef<HTMLInputElement>(null);
-  const [endImageFile, setEndImageFile] = useState<File | null>(null);
-  const [endImagePreview, setEndImagePreview] = useState<string | null>(null);
-
-  const handleEndImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setEndImageFile(file);
-      setEndImagePreview(URL.createObjectURL(file));
-    }
-  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -203,6 +218,10 @@ export default function DriverRecords() {
         
         currentDriverId = meData.driverData.id;
         setDriverId(currentDriverId);
+        if (meData.driverData.name) setDriverName(meData.driverData.name);
+        if (meData.driverData.plate || meData.driverData.vanPlate) {
+          setVanPlate(meData.driverData.plate || meData.driverData.vanPlate);
+        }
       }
 
       let dbMapped: AssignedBooking[] = [];
@@ -216,14 +235,16 @@ export default function DriverRecords() {
         const res = await getAssignedBookings(currentDriverId); 
         if (res.success && res.bookings) {
           allDbBookingIds = new Set(res.bookings.map((b: AssignedBooking) => String(b.id)));
-          dbMapped = res.bookings.filter((b: AssignedBooking) => {
-            // Only unfinished trips for today
+          
+          // งานที่รอการบันทึก: กรองเฉพาะงานของ "วันนี้" ที่ยังไม่ได้ลงบันทึกจบงาน
+          const unfinishedToday = res.bookings.filter((b: AssignedBooking) => {
             if (b.driverLog) return false;
-            
-            const dateObj = new Date(b.departureDate);
-            const tripDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(dateObj);
-            return tripDate === todayStr;
+            const deptDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date(b.departureDate));
+            const retDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date(b.returnDate));
+            return todayStr >= deptDate && todayStr <= retDate;
           });
+
+          dbMapped = unfinishedToday;
         }
         if (res.driverFacultyName) {
           driverFacName = res.driverFacultyName;
@@ -236,7 +257,7 @@ export default function DriverRecords() {
         }
       }
 
-      // Fetch Calendar Events
+      // Fetch Calendar Events (เฉพาะงานของวันนี้เท่านั้น)
       let calMapped: AssignedBooking[] = [];
       try {
         const calRes = await fetch('/api/calendar-events');
@@ -246,7 +267,6 @@ export default function DriverRecords() {
             calMapped = calData.rawEvents
               .filter((e: RawCalendarEvent) => {
                 if (e.status === 'rejected' || e.status === 'cancelled') return false;
-                // Only include true Google Calendar events, not DB bookings that were synced to calendar
                 if (e.id && String(e.id).startsWith('bk-')) return false;
                 
                 const eventVanId = String(e.vanId);
@@ -257,9 +277,12 @@ export default function DriverRecords() {
                 if (eventId && allDbBookingIds.has(eventId)) return false;
                 
                 const sDate = e.date ? (e.date.includes('T') ? e.date : `${e.date}T08:30:00`) : new Date().toISOString();
-                const dateObj = new Date(sDate);
-                const tripDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(dateObj);
-                return tripDate === todayStr;
+                const rDate = e.returnDate ? (e.returnDate.includes('T') ? e.returnDate : `${e.returnDate}T16:30:00`) : sDate;
+
+                // กรองเฉพาะงานของวันนี้เท่านั้น
+                const sDateStr = sDate.slice(0, 10);
+                const rDateStr = rDate.slice(0, 10);
+                return todayStr >= sDateStr && todayStr <= rDateStr;
               })
               .map((e: RawCalendarEvent) => {
                 const sDate = e.date ? (e.date.includes('T') ? e.date : `${e.date}T08:30:00`) : new Date().toISOString();
@@ -293,6 +316,8 @@ export default function DriverRecords() {
       setAssignedBookings(combined);
       if (combined.length > 0) {
         setSelectedBookingId(String(combined[0].id));
+      } else {
+        setSelectedBookingId("");
       }
       setIsLoadingBookings(false);
     }
@@ -305,7 +330,8 @@ export default function DriverRecords() {
     setEndTrip(s => ({ ...s, date: isoDate, time: "17:00" }));
   }, []);
 
-  const selectedBooking = assignedBookings.find(b => String(b.id) === String(selectedBookingId));
+  const activeBookings = assignedBookings;
+  const selectedBooking = activeBookings.find(b => String(b.id) === String(selectedBookingId));
 
   useEffect(() => {
     if (selectedBooking) {
@@ -322,32 +348,79 @@ export default function DriverRecords() {
         ? driverFaculty 
         : (selectedBooking.requester?.faculty?.nameTh || "มหาวิทยาลัยพะเยา");
 
-      setStartTrip(s => ({
-        ...s,
-        date: deptDate.toISOString().split('T')[0],
-        time: formatTime(deptDate),
-        location: pickupLocation
-      }));
-      
-      setEndTrip(s => ({
-        ...s,
-        date: retDate.toISOString().split('T')[0],
-        time: formatTime(retDate)
-      }));
+      if (selectedBooking.driverLog) {
+        // ดึงข้อมูลเดิมมาแสดงในโหมดแก้ไข
+        const log = selectedBooking.driverLog;
+        const firstLeg = log.tripLegs?.[0];
+        setStartTrip(s => ({
+          ...s,
+          date: firstLeg?.deptDate || deptDate.toISOString().split('T')[0],
+          time: firstLeg?.deptTime || formatTime(deptDate),
+          location: pickupLocation,
+          mileage: String(log.mileageStart || "")
+        }));
+        
+        setEndTrip(s => ({
+          ...s,
+          date: firstLeg?.returnDate || retDate.toISOString().split('T')[0],
+          time: firstLeg?.returnTime || formatTime(retDate),
+          mileage: String(log.mileageEnd || ""),
+          issues: firstLeg?.remark || "ไม่มีปัญหา",
+          isConfirmed: true
+        }));
 
-      // Pre-fill the destination in step 2
-      setStopovers([
-        {
-          id: Date.now(),
-          location: selectedBooking.destination,
-          timeIn: "",
-          timeOut: "",
-          mileage: "",
-          remark: ""
+        if (log.tripLegs && log.tripLegs.length > 0) {
+          setStopovers(log.tripLegs.map((leg, idx) => ({
+            id: Date.now() + idx,
+            location: leg.destination || selectedBooking.destination,
+            timeIn: leg.deptTime || "",
+            timeOut: leg.returnTime || "",
+            mileage: leg.endMileage || "",
+            remark: leg.remark || ""
+          })));
+        } else {
+          setStopovers([
+            {
+              id: Date.now(),
+              location: selectedBooking.destination,
+              timeIn: "",
+              timeOut: "",
+              mileage: "",
+              remark: ""
+            }
+          ]);
         }
-      ]);
+      } else {
+        // เริ่มต้นฟอร์มใหม่สำหรับงานวันนี้
+        setStartTrip(s => ({
+          ...s,
+          date: deptDate.toISOString().split('T')[0],
+          time: formatTime(deptDate),
+          location: pickupLocation
+        }));
+        
+        setEndTrip(s => ({
+          ...s,
+          date: retDate.toISOString().split('T')[0],
+          time: formatTime(retDate),
+          mileage: "",
+          issues: "ไม่มีปัญหา",
+          isConfirmed: false
+        }));
+
+        setStopovers([
+          {
+            id: Date.now(),
+            location: selectedBooking.destination,
+            timeIn: "",
+            timeOut: "",
+            mileage: "",
+            remark: ""
+          }
+        ]);
+      }
     }
-  }, [selectedBooking]);
+  }, [selectedBooking, driverFaculty]);
 
   // Calculations
   const startMileageNum = Number(startTrip.mileage) || 0;
@@ -402,19 +475,23 @@ export default function DriverRecords() {
     setShowConfirmModal(false);
     setIsSubmitting(true);
     
+    const finalDestination = stopovers.length > 0 && stopovers[0].location
+      ? stopovers.map(s => s.location).filter(Boolean).join(", ")
+      : (selectedBooking?.destination || startTrip.location || "ไม่ระบุสถานที่");
+
     const tripLegs = [
       {
         id: "start",
         deptDate: startTrip.date,
         deptTime: startTrip.time,
-        passenger: selectedBooking?.requester?.name || "",
-        destination: startTrip.location,
+        passenger: selectedBooking?.requester?.name || "ผู้ขอใช้บริการ",
+        destination: finalDestination,
         startMileage: startTrip.mileage,
         returnDate: endTrip.date,
         returnTime: endTrip.time,
         endMileage: endTrip.mileage,
         driverStatus: "มีลายเซ็น",
-        remark: endTrip.issues,
+        remark: endTrip.issues || (stopovers.map(s => s.remark).filter(Boolean).join(", ") || ""),
       }
     ];
 
@@ -445,15 +522,12 @@ export default function DriverRecords() {
 
     const res = await submitDriverLog(selectedBookingId, driverId, data);
     setIsSubmitting(false);
-    
     if (res.success) {
       setSuccess(true);
     } else {
       showNotification(res.error || "เกิดข้อผิดพลาดในการบันทึก", "warning");
     }
   };
-
-
 
   if (success) {
     return (
@@ -462,7 +536,9 @@ export default function DriverRecords() {
           <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-md">
             <CheckCircle size={40} />
           </div>
-          <h2 className="text-2xl font-black text-gray-900 mb-2">บันทึกสมุดการใช้รถเรียบร้อย!</h2>
+          <h2 className="text-2xl font-black text-gray-900 mb-2">
+            บันทึกสมุดการใช้รถเรียบร้อย!
+          </h2>
           <p className="text-gray-500 mb-6 text-center text-sm">
             ระยะทางรวม {totalDistance.toLocaleString("th-TH")} กม. ถูกส่งเข้าสู่ระบบแล้ว
           </p>
@@ -498,30 +574,51 @@ export default function DriverRecords() {
             <h1 className="text-xl font-black text-gray-900 flex items-center gap-2">
               <FileText className="w-6 h-6 text-[#311171]" /> สมุดบันทึกการเดินทาง
             </h1>
-            <button
-              onClick={handleCreateAdhoc}
-              disabled={isCreatingAdhoc}
-              className={`px-3 py-1.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-lg flex items-center gap-1 hover:bg-orange-200 transition-colors ${isCreatingAdhoc ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <Plus size={14} /> ใช้รถนอกแผน
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCreateAdhoc}
+                disabled={isCreatingAdhoc}
+                className={`px-3 py-1.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-lg flex items-center gap-1 hover:bg-orange-200 transition-colors ${isCreatingAdhoc ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <Plus size={14} /> ใช้รถนอกแผน
+              </button>
+            </div>
           </div>
 
           {isLoadingBookings ? (
             <div className="bg-white/90 p-4 rounded-xl border border-purple-200 text-center text-sm font-bold text-gray-500 animate-pulse">กำลังโหลดทริป...</div>
           ) : assignedBookings.length === 0 ? (
-            <div className="bg-orange-50 p-4 rounded-xl border border-orange-200 text-center text-sm font-bold text-orange-700">ไม่มีทริปที่ต้องบันทึกในขณะนี้</div>
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm text-center space-y-2">
+              <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-1">
+                <CheckCircle size={22} />
+              </div>
+              <p className="text-sm font-black text-gray-900">ไม่มีภารกิจที่ต้องบันทึกในขณะนี้</p>
+              <p className="text-xs text-gray-500">ภารกิจเสร็จสิ้นเรียบร้อยแล้ว หรือยังไม่มีคิวรถในวันนี้</p>
+              <div className="pt-2">
+                <a
+                  href="/driver/usage-report"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 text-[#311171] border border-purple-200 hover:bg-purple-100 text-xs font-bold rounded-xl transition-colors shadow-2xs"
+                >
+                  <FileText size={14} /> ไปที่หน้ารายงานการใช้งาน เพื่อดูหรือแก้ไขประวัติ
+                </a>
+              </div>
+            </div>
           ) : (
             <select 
               value={selectedBookingId} 
               onChange={(e) => setSelectedBookingId(e.target.value)}
               className="w-full p-2.5 bg-white border border-gray-200 shadow-sm rounded-xl font-bold text-[#311171] text-sm outline-none focus:ring-2 focus:ring-[#311171]/20 appearance-none"
             >
-              {assignedBookings.map((b: AssignedBooking) => (
-                <option key={b.id} value={b.id}>
-                  {b.id} - {b.destination}
-                </option>
-              ))}
+              {assignedBookings.map((b: AssignedBooking) => {
+                const tripDateStr = b.departureDate 
+                  ? new Date(b.departureDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
+                  : '';
+                return (
+                  <option key={b.id} value={b.id}>
+                    {b.id} - {b.destination} {tripDateStr ? `(${tripDateStr})` : ''}
+                  </option>
+                );
+              })}
             </select>
           )}
         </div>
@@ -531,17 +628,21 @@ export default function DriverRecords() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mx-1">
             <div className="bg-gray-50 p-3 border-b border-gray-200 flex justify-between items-center">
               <span className="font-mono text-xs font-bold text-gray-700">{selectedBooking.id}</span>
-              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">อนุมัติแล้ว</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                selectedBooking.driverLog ? 'bg-purple-100 text-[#311171]' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {selectedBooking.driverLog ? 'เสร็จภารกิจแล้ว' : 'อนุมัติแล้ว'}
+              </span>
             </div>
             <div className="p-4 text-xs space-y-2.5">
               <div className="flex gap-2">
                 <span className="text-gray-400 font-bold w-14 shrink-0">รถตู้:</span>
-                <span className="font-black text-gray-900">นข 1234 พะเยา</span>
+                <span className="font-black text-gray-900">{vanPlate}</span>
               </div>
               <div className="flex gap-2">
                 <span className="text-gray-400 font-bold w-14 shrink-0">ผู้ขับรถ:</span>
                 <div>
-                  <span className="font-black text-[#311171]">นายสมชาย ใจดี</span>
+                  <span className="font-black text-[#311171]">{driverName}</span>
                   <p className="text-[10px] text-gray-500 mt-0.5">คนขับประจำคณะ</p>
                 </div>
               </div>
@@ -638,7 +739,7 @@ export default function DriverRecords() {
                     {startImageFile ? 'ถ่ายแล้ว' : 'แนบรูป'}
                   </button>
                 </div>
-                {startImagePreview && (
+                {startImagePreview && startImagePreview.trim() !== '' && (
                   <div className="mt-2 relative inline-block">
                     <img src={startImagePreview} alt="Preview" className="h-20 w-auto rounded-lg border border-gray-200 object-cover" />
                     <button 
@@ -870,7 +971,8 @@ export default function DriverRecords() {
                   }}
                   className="flex-1 py-3.5 bg-[#311171] text-white font-black rounded-xl text-sm hover:bg-[#250d55] transition-colors shadow-md flex items-center justify-center gap-2"
                 >
-                  <UploadCloud size={18} /> ยืนยันและส่งสมุดบันทึก
+                  <UploadCloud size={18} /> 
+                  ยืนยันและส่งสมุดบันทึก
                 </button>
               </div>
             </div>
@@ -892,14 +994,14 @@ export default function DriverRecords() {
               <div className="p-5 space-y-4">
                 <div className="space-y-2 text-xs font-medium text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-200">
                   <div className="flex justify-between"><span className="text-gray-500">รายการ:</span> <span className="font-bold">{selectedBooking?.id}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">รถ:</span> <span className="font-bold">นข 1234 พะเยา</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">รถ:</span> <span className="font-bold">{vanPlate}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">เวลาออกจริง:</span> <span className="font-bold">{startTrip.time} น.</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">เวลากลับจริง:</span> <span className="font-bold">{endTrip.time} น.</span></div>
                   <div className="flex justify-between pt-2 border-t border-gray-200"><span className="text-gray-500 font-bold">ระยะทางรวม:</span> <span className="font-black text-emerald-600 text-sm">{totalDistance} กม.</span></div>
                 </div>
                 
-                <p className="text-[11px] text-red-500 font-bold text-center bg-red-50 p-2 rounded-lg">
-                  หลังจากส่งแล้วจะไม่สามารถแก้ไขข้อมูลได้โดยตรง
+                <p className="text-[11px] text-gray-500 font-bold text-center bg-gray-50 p-2 rounded-lg">
+                  ยืนยันการบันทึกข้อมูลเพื่อส่งเข้าสู่ระบบ
                 </p>
 
                 <div className="flex gap-2 pt-2">
@@ -907,7 +1009,7 @@ export default function DriverRecords() {
                     กลับไปตรวจสอบ
                   </button>
                   <button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 py-3 bg-emerald-500 text-white font-black rounded-xl text-xs hover:bg-emerald-600 transition-colors shadow-sm flex items-center justify-center gap-1">
-                    {isSubmitting ? "กำลังส่ง..." : "ยืนยันและส่ง"}
+                    {isSubmitting ? "กำลังบันทึก..." : "ยืนยันและส่ง"}
                   </button>
                 </div>
               </div>

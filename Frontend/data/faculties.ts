@@ -61,7 +61,7 @@ export const facultiesList: FacultyDirectory[] = [
   {
     id: 'sci',
     name: 'คณะวิทยาศาสตร์',
-    shortName: 'วิทยาศาสตร์',
+    shortName: 'วิทย์',
     url: 'http://www.science.up.ac.th/carcalendar',
     iconKey: 'flask',
     totalVans: 1,
@@ -89,7 +89,7 @@ export const normalizeFacultyKey = (name?: string | null): string => {
   const s = String(name).trim().toLowerCase();
   if (s === 'all' || s === 'ทุกคณะรวมกัน' || s === '') return 'all';
   if (s.includes('เภสัช') || s === '6' || s === '8' || s === 'van-008' || s === 'v-pharm' || s === 'pharm') return 'pharm';
-  if ((s.includes('วิทยาศาสตร์') && !s.includes('สารสนเทศ')) || s === '2' || s === '9' || s === 'van-009' || s === 'v-sci' || s === 'sci') return 'sci';
+  if (((s.includes('วิทยาศาสตร์') || s.includes('วิทย์')) && !s.includes('สารสนเทศ')) || s === '2' || s === '9' || s === 'van-009' || s === 'v-sci' || s === 'sci') return 'sci';
   if (s.includes('สารสนเทศ') || s.includes('ict') || s.includes('ไอซีที') || s === '1' || s === '3' || s === 'v-ict') return 'ict';
   if (s.includes('เกษตร') || s === 'agri') return 'agri';
   if (s.includes('พลังงาน') || s.includes('seen') || s === 'seen') return 'seen';

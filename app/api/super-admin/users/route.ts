@@ -1,47 +1,50 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { invalidateFacultiesCache } from '@/app/api/super-admin/faculties/route';
 
 export async function GET() {
   try {
-    let dbUsers: Array<{
-      id: number;
-      name: string;
-      email: string;
-      phone?: string | null;
-      avatar: string | null;
-      role: "SUPER_ADMIN" | "FACULTY_ADMIN" | "EXECUTIVE" | "DRIVER" | "USER";
-      faculty?: { nameTh: string } | null;
-      driverProfile?: { phone: string } | null;
-    }> = [];
-
     try {
-      dbUsers = await prisma.user.findMany({
-        include: {
-          faculty: true,
-          driverProfile: true
-        },
-        orderBy: {
-          id: 'desc'
-        }
-      });
+      const rawUsers = await prisma.$queryRaw<Array<{
+        id: number;
+        name: string;
+        email: string;
+        phone: string | null;
+        avatar: string | null;
+        role: "SUPER_ADMIN" | "FACULTY_ADMIN" | "EXECUTIVE" | "DRIVER" | "USER";
+        facultyName: string | null;
+        driverPhone: string | null;
+      }>>`
+        SELECT 
+          u.id,
+          u.name,
+          u.email,
+          u.phone,
+          CASE WHEN length(u.avatar) > 50000 THEN NULL ELSE u.avatar END AS avatar,
+          u.role,
+          f.name_th AS "facultyName",
+          d.phone AS "driverPhone"
+        FROM users u
+        LEFT JOIN faculties f ON f.id = u.faculty_id
+        LEFT JOIN drivers d ON d.user_id = u.id
+        ORDER BY u.id DESC;
+      `;
+
+      if (rawUsers && rawUsers.length > 0) {
+        const mappedUsers = rawUsers.map(u => ({
+          id: u.id,
+          avatar: u.avatar || null,
+          name: u.name,
+          faculty: u.facultyName || "ศูนย์จัดการระบบส่วนกลาง",
+          role: u.role,
+          email: u.email,
+          phone: u.phone || (u.role === 'DRIVER' ? u.driverPhone : null) || "-",
+          status: "ACTIVE",
+          lastLogin: "เข้าใช้งานแล้ว"
+        }));
+        return NextResponse.json({ users: mappedUsers });
+      }
     } catch (dbErr) {
       console.warn("Prisma users fetch notice:", dbErr);
-    }
-
-    if (dbUsers && dbUsers.length > 0) {
-      const mappedUsers = dbUsers.map(u => ({
-        id: u.id,
-        avatar: u.avatar || null,
-        name: u.name,
-        faculty: u.faculty?.nameTh || "ศูนย์จัดการระบบส่วนกลาง",
-        role: u.role,
-        email: u.email,
-        phone: u.phone || (u.role === 'DRIVER' ? u.driverProfile?.phone : null) || "-",
-        status: "ACTIVE",
-        lastLogin: "เข้าใช้งานแล้ว"
-      }));
-      return NextResponse.json({ users: mappedUsers });
     }
 
     return NextResponse.json({ users: [] });
@@ -116,7 +119,6 @@ export async function POST(request: Request) {
       }
     }
 
-    invalidateFacultiesCache();
     return NextResponse.json({ success: true, user: createdUser });
   } catch (error: unknown) {
     console.error('Failed to create user:', error);
@@ -208,7 +210,6 @@ export async function PUT(request: Request) {
       }
     }
 
-    invalidateFacultiesCache();
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error: unknown) {
     console.error('Failed to update user:', error);
@@ -219,7 +220,13 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    let id = searchParams.get('id');
+    if (!id) {
+      try {
+        const body = await request.json();
+        if (body?.id) id = String(body.id);
+      } catch {}
+    }
     if (!id) {
       return NextResponse.json({ success: false, error: 'Missing user ID' }, { status: 400 });
     }
@@ -259,7 +266,6 @@ export async function DELETE(request: Request) {
       }
     }
 
-    invalidateFacultiesCache();
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     console.error('Failed to delete user:', error);

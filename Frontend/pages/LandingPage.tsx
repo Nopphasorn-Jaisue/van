@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -15,15 +15,13 @@ import {
   Mail,
   MapPin,
   MessageCircle,
-  Paperclip,
   Phone,
   X,
 } from 'lucide-react';
 import UpLogo from '@/components/UpLogo';
 import { FacultyGlyph } from '@/Frontend/components/FacultyGlyph';
-import { facultiesList } from '@/Frontend/data/faculties';
+import { facultiesList, normalizeFacultyKey } from '@/Frontend/data/faculties';
 import {
-  buildFallbackNetworkEvents,
   type NetworkCalendarEvent,
   type NetworkCalendarEventStatus,
 } from '@/Frontend/data/network-calendar';
@@ -77,7 +75,22 @@ function toIsoDay(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+function formatThaiDateFromIso(isoDate: string): string {
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (!y || !m || !d || m < 1 || m > 12) return isoDate;
+  return `${d} ${monthNames[m - 1]} ${y + 543}`;
+}
+
 function inferFacultyId(title: string) {
+  if (!title) return 'network';
+  const key = normalizeFacultyKey(title);
+  if (facultiesList.some(f => f.id === key)) {
+    return key;
+  }
   const normalizedTitle = title.toLowerCase();
   const match = facultiesList.find((faculty) => (
     normalizedTitle.includes(faculty.shortName.toLowerCase()) ||
@@ -176,17 +189,6 @@ function getFacultyById(facultyId: string) {
   return facultiesList.find((faculty) => faculty.id === facultyId);
 }
 
-function getFleetStatus(availableVans: number, totalVans: number) {
-  if (availableVans <= 0) {
-    return { label: 'เต็ม', badge: 'bg-red-100 text-red-700' };
-  }
-
-  if (availableVans / totalVans <= 0.4) {
-    return { label: 'ไม่ว่าง', badge: 'bg-orange-100 text-orange-700' };
-  }
-
-  return { label: 'พร้อมใช้งาน', badge: 'bg-emerald-100 text-emerald-700' };
-}
 
 function buildCalendarDays(currentDate: Date | null): DayCell[] {
   if (!currentDate) {
@@ -271,20 +273,30 @@ export default function LandingPage() {
   const [selectedEvent, setSelectedEvent] = useState<NetworkCalendarEvent | null>(null);
   const [isFacultyDropdownOpen, setIsFacultyDropdownOpen] = useState(false);
   const [selectedDayEvents, setSelectedDayEvents] = useState<{ day: DayCell, events: NetworkCalendarEvent[] } | null>(null);
+  const [selectedMobileDate, setSelectedMobileDate] = useState<string | null>(null);
 
   useEffect(() => {
     const now = new Date();
     setCurrentDate(now);
     setToday(now);
 
-    // Instant load from client cache if available
+    // Instant load from client cache if available (wiping legacy mock cache)
     try {
-      const cached = sessionStorage.getItem('cached_landing_calendar_events');
+      sessionStorage.removeItem('cached_landing_calendar_events');
+      const cacheKey = `cached_landing_calendar_events_${now.getFullYear()}`;
+      const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setNetworkEvents(parsed);
-          setIsLoading(false);
+          const hasMock = parsed.some((e: { title?: string; destination?: string }) => 
+            e.destination === 'ดูงานนอกสถานที่ (3 วัน)' || e.title === 'ดูงานนอกสถานที่ (3 วัน)'
+          );
+          if (!hasMock) {
+            setNetworkEvents(parsed);
+            setIsLoading(false);
+          } else {
+            sessionStorage.removeItem(cacheKey);
+          }
         }
       }
     } catch {
@@ -298,7 +310,6 @@ export default function LandingPage() {
     }
 
     const currentYear = currentDate.getFullYear();
-    const fallbackEvents = buildFallbackNetworkEvents(currentDate);
 
     const fetchEvents = async () => {
       try {
@@ -317,8 +328,9 @@ export default function LandingPage() {
         } catch {
           // ignore storage quota error
         }
-      } catch {
-        setNetworkEvents((prev) => (prev.length > 0 ? prev : fallbackEvents));
+      } catch (err) {
+        console.warn('Unable to load calendar events:', err);
+        setNetworkEvents((prev) => prev);
       } finally {
         setIsLoading(false);
       }
@@ -327,14 +339,26 @@ export default function LandingPage() {
     fetchEvents();
   }, [currentDate]);
 
+  useEffect(() => {
+    if (!currentDate) return;
+    const todayIso = today ? toIsoDay(today) : null;
+    const currentYearMonth = `${currentDate.getFullYear()}-${pad(currentDate.getMonth() + 1)}`;
+    if (todayIso && todayIso.startsWith(currentYearMonth)) {
+      setSelectedMobileDate(todayIso);
+    } else {
+      setSelectedMobileDate(toIsoDay(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)));
+    }
+  }, [currentDate, today]);
+
 
   const calendarDays = buildCalendarDays(currentDate);
   const displayedDays = viewMode === 'week' ? buildWeekDays(currentDate ?? new Date()) : calendarDays;
 
-  const validFacultyIds = facultiesList.map(f => f.id);
   const filteredEvents = networkEvents.filter((event) => {
-    if (!validFacultyIds.includes(event.facultyId)) return false;
-    return selectedFaculty === 'all' || event.facultyId === selectedFaculty;
+    if (selectedFaculty === 'all') return true;
+    const targetKey = normalizeFacultyKey(selectedFaculty);
+    const eventKey = normalizeFacultyKey(event.facultyId || event.bookingFacultyName);
+    return targetKey === eventKey;
   });
 
   const eventMap = filteredEvents.reduce<Record<string, NetworkCalendarEvent[]>>((result, event) => {
@@ -385,6 +409,8 @@ export default function LandingPage() {
   const dayAgendaEvents = viewMode === 'day' && currentDate
     ? (eventMap[toIsoDay(currentDate)] || []).slice().sort((left, right) => left.start.localeCompare(right.start))
     : [];
+
+  const mobileDayEvents = selectedMobileDate ? (eventMap[selectedMobileDate] || []) : [];
 
   const handleEventClick = (event: NetworkCalendarEvent) => {
     setSelectedEvent(event);
@@ -621,16 +647,16 @@ export default function LandingPage() {
 
           <div className="mt-5">
             <div className="overflow-hidden rounded-[32px] border border-white/60 bg-white/70 backdrop-blur-xl shadow-[0_20px_60px_rgba(49,17,113,0.15)]">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/50 bg-white/40 px-6 py-5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" aria-label="ช่วงก่อนหน้า" title="ช่วงก่อนหน้า" onClick={goToPrevious} className="rounded-full p-2.5 text-slate-700 transition hover:bg-white/80"><ChevronLeft size={20} /></button>
-                  <button type="button" aria-label="ช่วงถัดไป" title="ช่วงถัดไป" onClick={goToNext} className="rounded-full p-2.5 text-slate-700 transition hover:bg-white/80"><ChevronRight size={20} /></button>
-                  <button type="button" onClick={goToToday} className="ml-1 rounded-xl bg-white/80 px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white">วันนี้</button>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/50 bg-white/40 px-4 py-4 md:px-6 md:py-5">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <button type="button" aria-label="ช่วงก่อนหน้า" title="ช่วงก่อนหน้า" onClick={goToPrevious} className="rounded-full p-2 text-slate-700 transition hover:bg-white/80"><ChevronLeft size={20} /></button>
+                  <button type="button" aria-label="ช่วงถัดไป" title="ช่วงถัดไป" onClick={goToNext} className="rounded-full p-2 text-slate-700 transition hover:bg-white/80"><ChevronRight size={20} /></button>
+                  <button type="button" onClick={goToToday} className="rounded-xl bg-white/80 px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white">วันนี้</button>
 
-                  <h3 className="ml-3 text-lg md:text-xl font-black text-slate-950 drop-shadow-sm">{getCalendarTitle(viewMode, currentDate)}</h3>
+                  <h3 className="ml-1 sm:ml-3 text-base sm:text-lg md:text-xl font-black text-slate-950 drop-shadow-sm">{getCalendarTitle(viewMode, currentDate)}</h3>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-4">
                   <div className="hidden md:flex items-center gap-4 text-xs font-bold text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <span className="w-3.5 h-3.5 rounded-full border-2 border-amber-400 bg-amber-400/20"></span>
@@ -642,45 +668,249 @@ export default function LandingPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 rounded-full bg-black/5 p-1.5 text-sm font-bold text-slate-600 backdrop-blur-md">
-                    <button type="button" onClick={() => setViewMode('month')} className={`rounded-full px-4 py-2 transition shadow-sm ${viewMode === 'month' ? 'bg-violet-700 text-white shadow-violet-700/20' : 'hover:bg-white/80 hover:text-slate-900'}`}>เดือน</button>
-                    <button type="button" onClick={() => setViewMode('week')} className={`rounded-full px-4 py-2 transition shadow-sm ${viewMode === 'week' ? 'bg-violet-700 text-white shadow-violet-700/20' : 'hover:bg-white/80 hover:text-slate-900'}`}>สัปดาห์</button>
+                  <div className="flex items-center gap-1 rounded-full bg-black/5 p-1 text-xs sm:text-sm font-bold text-slate-600 backdrop-blur-md">
+                    <button type="button" onClick={() => setViewMode('month')} className={`rounded-full px-3 py-1.5 sm:px-4 sm:py-2 transition shadow-sm ${viewMode === 'month' ? 'bg-violet-700 text-white shadow-violet-700/20' : 'hover:bg-white/80 hover:text-slate-900'}`}>เดือน</button>
+                    <button type="button" onClick={() => setViewMode('week')} className={`rounded-full px-3 py-1.5 sm:px-4 sm:py-2 transition shadow-sm ${viewMode === 'week' ? 'bg-violet-700 text-white shadow-violet-700/20' : 'hover:bg-white/80 hover:text-slate-900'}`}>สัปดาห์</button>
                   </div>
                 </div>
               </div>
 
-              <div className="overflow-x-auto p-5">
+              <div className="p-3 sm:p-5">
                 {viewMode === 'day' ? (
                   <DayAgenda events={dayAgendaEvents} isLoading={isLoading} />
                 ) : (
-                  <div className="min-w-[760px]">
-                    <div className="grid grid-cols-7 border-b border-white/40 pb-2">
-                      {weekDays.map((day) => (
-                        <div key={day} className="px-2 py-2 text-center text-sm font-black text-slate-500">{day}</div>
-                      ))}
+                  <>
+                    {/* Mobile Calendar View (< md screens): Fits 100% width, shows full 30 days & selectable agenda */}
+                    <div className="block md:hidden">
+                      {/* Weekday headers */}
+                      <div className="grid grid-cols-7 gap-1 border-b border-white/40 pb-2 text-center">
+                        {weekDays.map((day, idx) => (
+                          <div
+                            key={day}
+                            className={`text-xs font-black py-1 ${
+                              idx === 0 ? 'text-rose-600' : idx === 6 ? 'text-purple-700' : 'text-slate-600'
+                            }`}
+                          >
+                            {day}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 30-Day Grid */}
+                      <div className="grid grid-cols-7 gap-1 pt-2">
+                        {displayedDays.map((day) => {
+                          const dayEvents = eventMap[day.isoDate] || [];
+                          const isToday = Boolean(today) && day.isoDate === toIsoDay(today as Date);
+                          const isSelected = selectedMobileDate === day.isoDate;
+                          const hasEvents = dayEvents.length > 0;
+
+                          return (
+                            <button
+                              key={day.isoDate}
+                              type="button"
+                              onClick={() => setSelectedMobileDate(day.isoDate)}
+                              className={`relative min-h-[50px] rounded-xl p-1 flex flex-col items-center justify-between transition-all text-center ${
+                                isSelected
+                                  ? 'bg-violet-100/95 text-violet-950 font-black border-2 border-violet-600 ring-2 ring-violet-400/40 shadow-sm scale-[1.03]'
+                                  : isToday
+                                  ? 'bg-violet-50 text-violet-800 font-bold border border-violet-300'
+                                  : day.isCurrentMonth
+                                  ? 'bg-white/60 hover:bg-white/90 text-slate-800'
+                                  : 'bg-black/[0.02] text-slate-300'
+                              }`}
+                            >
+                              <span className={`text-xs font-black ${isSelected ? 'text-violet-950' : isToday ? 'text-violet-700' : ''}`}>
+                                {day.dayLabel}
+                              </span>
+
+                              {/* Dot Indicators */}
+                              <div className="flex items-center justify-center gap-0.5 min-h-[14px]">
+                                {isLoading ? (
+                                  <div className="h-1 w-3 rounded-full bg-slate-200 animate-pulse" />
+                                ) : hasEvents ? (
+                                  dayEvents.length <= 4 ? (
+                                    <div className="flex items-center gap-0.5">
+                                      {dayEvents.map((ev, i) => {
+                                        const fac = getFacultyById(ev.facultyId);
+                                        const ownerId = ev.ownerFacultyName ? inferFacultyId(ev.ownerFacultyName) : null;
+                                        const ownerFaculty = ownerId && ownerId !== 'network' ? getFacultyById(ownerId) : null;
+                                        const dotFaculty = ownerFaculty || fac;
+                                        const dotColor = dotFaculty?.palette.accentRgb || fac?.palette.accentRgb || '#8B5CF6';
+                                        return (
+                                          <span
+                                            key={ev.id || i}
+                                            className="h-1.5 w-1.5 rounded-full shrink-0 ring-0.5 ring-black/15 shadow-2xs"
+                                            style={{ backgroundColor: dotColor }}
+                                            title={dotFaculty?.name || fac?.name}
+                                          />
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-0.5">
+                                      {dayEvents.slice(0, 2).map((ev, i) => {
+                                        const fac = getFacultyById(ev.facultyId);
+                                        const ownerId = ev.ownerFacultyName ? inferFacultyId(ev.ownerFacultyName) : null;
+                                        const ownerFaculty = ownerId && ownerId !== 'network' ? getFacultyById(ownerId) : null;
+                                        const dotFaculty = ownerFaculty || fac;
+                                        const dotColor = dotFaculty?.palette.accentRgb || fac?.palette.accentRgb || '#8B5CF6';
+                                        return (
+                                          <span
+                                            key={ev.id || i}
+                                            className="h-1.5 w-1.5 rounded-full shrink-0 ring-0.5 ring-black/15 shadow-2xs"
+                                            style={{ backgroundColor: dotColor }}
+                                            title={dotFaculty?.name || fac?.name}
+                                          />
+                                        );
+                                      })}
+                                      <span
+                                        className="text-[9px] font-black leading-none px-1 py-0.5 rounded-full bg-violet-200/90 text-violet-900 border border-violet-300"
+                                      >
+                                        +{dayEvents.length - 2}
+                                      </span>
+                                    </div>
+                                  )
+                                ) : null}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selected Day Agenda for Mobile */}
+                      <div className="mt-4 rounded-2xl border border-white/60 bg-white/80 backdrop-blur-md p-4 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                          <div>
+                            <p className="text-[11px] font-bold text-violet-600">รายการคิวรถประจำวัน</p>
+                            <h4 className="text-sm sm:text-base font-black text-slate-900">
+                              {selectedMobileDate ? formatThaiDateFromIso(selectedMobileDate) : 'เลือกวันที่'}
+                            </h4>
+                          </div>
+                          <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-black text-violet-800">
+                            {mobileDayEvents.length} คิว
+                          </span>
+                        </div>
+
+                        {isLoading ? (
+                          <div className="space-y-2">
+                            <div className="h-14 w-full animate-pulse rounded-xl bg-slate-100" />
+                            <div className="h-14 w-full animate-pulse rounded-xl bg-slate-100" />
+                          </div>
+                        ) : mobileDayEvents.length === 0 ? (
+                          <div className="py-6 text-center text-xs sm:text-sm font-semibold text-slate-400">
+                            ไม่มีรายการคิวรถในวันนี้
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                            {mobileDayEvents.map((event) => {
+                              const faculty = getFacultyById(event.facultyId);
+                              const facultyColor = faculty?.palette.accentRgb ?? 'rgba(148, 163, 184, 0.5)';
+                              const ownerId = event.ownerFacultyName ? inferFacultyId(event.ownerFacultyName) : null;
+                              const ownerFaculty = ownerId && ownerId !== 'network' ? getFacultyById(ownerId) : null;
+                              const isBorrowed = ownerFaculty && ownerFaculty.id !== faculty?.id;
+
+                              return (
+                                <button
+                                  key={event.id}
+                                  type="button"
+                                  onClick={() => handleEventClick(event)}
+                                  className="w-full text-left rounded-xl border-l-4 bg-white p-3 shadow-sm hover:shadow-md transition-all flex flex-col gap-1.5"
+                                  style={{ borderLeftColor: facultyColor }}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <div
+                                        className={`w-2 h-2 rounded-full shrink-0 ${
+                                          event.status === 'approved' || event.status === 'on-trip'
+                                            ? 'bg-emerald-500'
+                                            : 'bg-amber-400'
+                                        }`}
+                                      />
+                                      <span
+                                        className={`text-xs font-black truncate ${
+                                          faculty?.palette.accent ?? 'text-slate-800'
+                                        }`}
+                                      >
+                                        {event.bookingFacultyName || faculty?.name || 'คณะ'}
+                                      </span>
+                                    </div>
+                                    {isBorrowed ? (
+                                      <div className="flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 shrink-0">
+                                        <span className="text-[10px] font-bold text-gray-500">ยืม</span>
+                                        <span
+                                          className="h-1.5 w-1.5 rounded-full shrink-0"
+                                          style={{ backgroundColor: ownerFaculty.palette.accentRgb || '#94a3b8' }}
+                                        />
+                                        <span className="text-[10px] font-bold text-slate-700">
+                                          {ownerFaculty.shortName}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md shrink-0">
+                                        รถคณะ
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                                    <span className="font-bold text-slate-800 truncate">
+                                      {event.destination}
+                                    </span>
+                                    <span className="shrink-0 text-[11px] font-semibold text-slate-500">
+                                      {new Date(event.start).toLocaleTimeString('th-TH', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}{' '}
+                                      น.
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                                    <span>ทะเบียน: {event.vanPlate || event.vanCode || '-'}</span>
+                                    <span className="text-violet-600 font-bold">ดูรายละเอียด</span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-7">
-                      {displayedDays.map((day) => {
-                        const dayEvents = eventMap[day.isoDate] || [];
-                        const isToday = Boolean(today) && day.isoDate === toIsoDay(today as Date);
+                    {/* Desktop Calendar View (md+ screens): Spacious grid */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <div className="min-w-[760px]">
+                        <div className="grid grid-cols-7 border-b border-white/40 pb-2">
+                          {weekDays.map((day) => (
+                            <div key={day} className="px-2 py-2 text-center text-sm font-black text-slate-500">
+                              {day}
+                            </div>
+                          ))}
+                        </div>
 
-                        return (
-                          <CalendarMonthCell
-                            key={day.isoDate}
-                            day={day}
-                            events={dayEvents}
-                            isToday={isToday}
-                            isLoading={isLoading}
-                            maxVisible={viewMode === 'week' ? 8 : 2}
-                            minHeightClass={viewMode === 'week' ? 'min-h-[160px]' : 'min-h-[88px]'}
-                            onEventClick={handleEventClick}
-                            onShowMore={(day, events) => setSelectedDayEvents({ day, events })}
-                          />
-                        );
-                      })}
+                        <div className="grid grid-cols-7">
+                          {displayedDays.map((day) => {
+                            const dayEvents = eventMap[day.isoDate] || [];
+                            const isToday = Boolean(today) && day.isoDate === toIsoDay(today as Date);
+
+                            return (
+                              <CalendarMonthCell
+                                key={day.isoDate}
+                                day={day}
+                                events={dayEvents}
+                                isToday={isToday}
+                                isLoading={isLoading}
+                                maxVisible={viewMode === 'week' ? 8 : 2}
+                                minHeightClass={viewMode === 'week' ? 'min-h-[160px]' : 'min-h-[88px]'}
+                                onEventClick={handleEventClick}
+                                onShowMore={(day, events) => setSelectedDayEvents({ day, events })}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
 
@@ -705,33 +935,28 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, amount: 0.2 }}
           >
-            {visibleFaculties.map((faculty) => {
-              const status = getFleetStatus(faculty.availableVans, faculty.totalVans);
-
-              return (
-                <motion.a
-                  key={faculty.id}
-                  href={faculty.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex flex-col rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-shadow duration-300 hover:shadow-[0_18px_40px_rgba(15,23,42,0.1)]"
-                  variants={itemVariants}
-                >
-                  <div className="flex-grow">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className={`inline-flex rounded-xl p-2.5 ${faculty.palette.surface}`}>
-                        <FacultyGlyph iconKey={faculty.iconKey} className={`h-6 w-6 ${faculty.palette.accent}`} />
-                      </div>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black ${status.badge}`}>{status.label}</span>
+            {visibleFaculties.map((faculty) => (
+              <motion.a
+                key={faculty.id}
+                href={faculty.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex flex-col rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-shadow duration-300 hover:shadow-[0_18px_40px_rgba(15,23,42,0.1)]"
+                variants={itemVariants}
+              >
+                <div className="flex-grow">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className={`inline-flex rounded-xl p-2.5 ${faculty.palette.surface}`}>
+                      <FacultyGlyph iconKey={faculty.iconKey} className={`h-6 w-6 ${faculty.palette.accent}`} />
                     </div>
-                    <h4 className="mt-4 text-base font-black leading-snug text-slate-950">{faculty.name}</h4>
                   </div>
+                  <h4 className="mt-4 text-base font-black leading-snug text-slate-950">{faculty.name}</h4>
+                </div>
                   <div className="mt-4 inline-flex items-center gap-1 text-sm font-black text-violet-700 group-hover:underline">
                     ดูตารางของคณะ <ArrowUpRight size={14} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                   </div>
                 </motion.a>
-              );
-            })}
+            ))}
           </motion.div>
         </section>
       </main>
@@ -842,6 +1067,26 @@ function CalendarMonthCell({
   onShowMore?: (day: DayCell, events: NetworkCalendarEvent[]) => void;
 }) {  
 
+  // ตรวจสอบว่าในวันนั้นมีรายการยืมรถคณะอื่นหรือไม่
+  const hasBorrowedVans = events.some(e => {
+    const ownerId = e.ownerFacultyName ? inferFacultyId(e.ownerFacultyName) : null;
+    return (ownerId && ownerId !== 'network' && ownerId !== e.facultyId) || e.status === 'shared';
+  });
+
+  // รวบรวมคณะที่ถูกยืมทั้งหมดในวันนั้น
+  const borrowedFaculties = Array.from(
+    new Set(
+      events.flatMap(e => {
+        const ownerId = e.ownerFacultyName ? inferFacultyId(e.ownerFacultyName) : null;
+        if (ownerId && ownerId !== 'network' && ownerId !== e.facultyId) {
+          const fac = getFacultyById(ownerId);
+          return fac ? [fac] : [];
+        }
+        return [];
+      })
+    )
+  ).filter((f, idx, arr) => arr.findIndex(x => x.id === f.id) === idx);
+
   const renderEvent = (event: NetworkCalendarEvent) => {
     const eventDate = new Date(event.start);
     const todayDate = new Date();
@@ -899,7 +1144,7 @@ function CalendarMonthCell({
         <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-black shadow-sm ${isToday ? 'bg-violet-700 text-white shadow-violet-700/30 scale-110' : 'bg-white/80 text-slate-700'}`}>
           {day.dayLabel}
         </span>
-        {!isLoading && events.length > maxVisible && (
+        {!isLoading && !hasBorrowedVans && events.length > maxVisible && (
           <button 
             type="button" 
             onClick={() => onShowMore && onShowMore(day, events)}
@@ -914,9 +1159,84 @@ function CalendarMonthCell({
         {isLoading && day.isCurrentMonth && <div className="h-6 w-[95%] animate-pulse rounded-lg bg-slate-100" />}
         
         {!isLoading && (
-          <>
-            {events.slice(0, maxVisible).map(renderEvent)}
-          </>
+          hasBorrowedVans ? (
+            /* กรณีมีการยืมรถข้ามคณะ: แสดง 1 การ์ดประหยัดพื้นที่ พร้อม ยืม ● [คณะ] + ป้ายวงกลม +X ทางขวา เหมือนหน้าแอดมิน */
+            (() => {
+              const b = events[0];
+              const faculty = getFacultyById(b.facultyId);
+              const facultyColor = faculty?.palette.accentRgb ?? 'rgba(148, 163, 184, 0.5)';
+              const extraCount = events.length - 1;
+
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => {
+                    if (extraCount > 0 && onShowMore) {
+                      onShowMore(day, events);
+                    } else {
+                      onEventClick(b);
+                    }
+                  }}
+                  className="w-[95%] text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md rounded-lg border-l-4 px-1.5 py-1 bg-white/80 backdrop-blur-sm border-white shrink-0 mx-auto cursor-pointer"
+                  style={{ borderLeftColor: facultyColor }}
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center justify-between gap-1">
+                      {/* ฝั่งซ้าย: คณะผู้ขอจองเสมอ (เช่น ICT) */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${(b.status === 'approved' || b.status === 'on-trip') ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                        <span className={`font-bold truncate text-[9px] 2xl:text-[10px] ${faculty?.palette.accent ?? 'text-slate-800'}`}>
+                          {faculty?.shortName ?? 'อื่นๆ'}
+                        </span>
+                      </div>
+
+                      {/* ฝั่งขวา: คำว่า ยืม ● คณะที่ถูกยืม (แสดงแค่คณะเดียว เช่น ยืม ● วิทย์) + ป้ายคิววงกลม +X */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {borrowedFaculties.length > 0 && (
+                          <div 
+                            className="flex items-center gap-1 shrink-0 bg-transparent pl-0.5" 
+                            title={`ยืมรถตู้จากคณะ: ${borrowedFaculties.map(f => f.shortName).join(', ')}`}
+                          >
+                            <span className="text-[8px] 2xl:text-[9px] font-bold text-gray-500">ยืม</span>
+                            {(() => {
+                              const bf = borrowedFaculties[0];
+                              const shortName = bf.shortName === 'วิทยาศาสตร์' ? 'วิทย์' : bf.shortName;
+                              return (
+                                <>
+                                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: bf.palette.accentRgb || '#94a3b8' }} />
+                                  <span className="text-[8px] 2xl:text-[9px] font-bold text-slate-600">
+                                    {shortName}
+                                  </span>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                        {extraCount > 0 && (
+                          <span 
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              if (onShowMore) {
+                                onShowMore(day, events);
+                              }
+                            }}
+                            className="inline-flex items-center justify-center font-black text-violet-700 hover:text-violet-900 text-[9px] 2xl:text-[10px] transition-colors cursor-pointer shrink-0 ml-0.5"
+                            title={`มีคิวรถอีก +${extraCount} คิวในวันนี้ (คลิกเพื่อดูทั้งหมด)`}
+                          >
+                            +{extraCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-slate-500 truncate mt-0.5">{b.destination}</span>
+                  </div>
+                </button>
+              );
+            })()
+          ) : (
+            events.slice(0, maxVisible).map(renderEvent)
+          )
         )}
       </div>
     </div>
@@ -1020,9 +1340,6 @@ function EventDetailModal({ event, onClose }: { event: NetworkCalendarEvent | nu
               </div>
             ))}
           </div>
-          <button type="button" className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">
-            <Paperclip size={14} /> ดูเอกสารแนบ (ถ้ามี)
-          </button>
         </div>
       </div>
     </div>
@@ -1055,30 +1372,40 @@ function DayEventsModal({
         <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto px-1 pb-1">
           {events.map((event) => {
             const faculty = getFacultyById(event.facultyId);
-            const eventDate = new Date(event.start);
-            const todayDate = new Date();
-            const isTodayEvent = eventDate.toDateString() === todayDate.toDateString();
-            const dynamicStatus = isTodayEvent ? 'on-trip' : 'approved';
-            const meta = statusMeta[dynamicStatus];
-            if (!meta) return null;
             const facultyColor = faculty?.palette.accentRgb ?? 'rgba(148, 163, 184, 0.5)';
+            const ownerId = event.ownerFacultyName ? inferFacultyId(event.ownerFacultyName) : null;
+            const ownerFaculty = ownerId && ownerId !== 'network' ? getFacultyById(ownerId) : null;
+            const isBorrowed = ownerFaculty && ownerFaculty.id !== faculty?.id;
 
             return (
               <button
                 key={event.id}
                 type="button"
                 onClick={() => onEventClick(event)}
-                className="w-full text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md rounded-xl border-l-4 px-4 py-3 bg-white/80 backdrop-blur-sm border-white shrink-0"
+                className="w-full text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md rounded-xl border-l-4 px-3 py-2.5 bg-white/90 border-white shrink-0 shadow-2xs cursor-pointer"
                 style={{ borderLeftColor: facultyColor }}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`font-black truncate text-sm ${faculty?.palette.accent ?? 'text-slate-800'}`}>
-                    {faculty?.name ?? 'อื่นๆ'}
-                  </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className={`h-2.5 w-2.5 rounded-full ${meta.chip}`} />
-                    <span className="text-[11px] font-bold text-slate-500">{meta.label}</span>
+                  <div className="flex flex-col truncate pr-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${(event.status === 'approved' || event.status === 'on-trip') ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                      <span className={`font-black truncate text-xs ${faculty?.palette.accent ?? 'text-slate-800'}`}>
+                        {faculty?.name ?? 'อื่นๆ'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium truncate mt-0.5">{event.destination}</span>
                   </div>
+                  {isBorrowed ? (
+                    <div className="flex items-center gap-1 shrink-0 bg-transparent pl-0.5">
+                      <span className="text-[9px] font-bold text-gray-500">ยืม</span>
+                      <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: ownerFaculty.palette.accentRgb || '#94a3b8' }} />
+                      <span className="text-[9px] font-bold text-slate-600">{ownerFaculty.shortName}</span>
+                    </div>
+                  ) : (
+                    <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">
+                      รถคณะ
+                    </span>
+                  )}
                 </div>
               </button>
             );

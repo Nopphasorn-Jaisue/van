@@ -80,7 +80,7 @@ export default function SuperAdminDrivers() {
 }
         const formatted: DriverItem[] = rawDrivers.map((d: RawSuperAdminDriver) => ({
           id: d.id,
-          avatar: d.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
+          avatar: (d.avatar && !d.avatar.includes('unsplash.com')) ? d.avatar : '',
           name: d.name || d.user?.name || 'ไม่ระบุชื่อ',
           employeeId: d.employeeId || `DRV-${String(d.id).padStart(3, '0')}`,
           faculty: d.faculty?.nameTh || d.faculty || 'ส่วนกลาง',
@@ -397,11 +397,17 @@ export default function SuperAdminDrivers() {
             {/* Header Profile */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-3">
-                <img 
-                  src={selectedDriver.avatar} 
-                  alt={selectedDriver.name} 
-                  className="w-12 h-12 rounded-full object-cover border-2 border-purple-200"
-                />
+                {selectedDriver.avatar && selectedDriver.avatar.trim() !== '' ? (
+                  <img 
+                    src={selectedDriver.avatar} 
+                    alt={selectedDriver.name} 
+                    className="w-12 h-12 rounded-full object-cover border-2 border-purple-200"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-[#311171] text-white flex items-center justify-center font-bold text-base border-2 border-purple-200">
+                    {selectedDriver.name.trim().charAt(0) || "ด"}
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-black text-sm text-gray-900">{selectedDriver.name}</h3>

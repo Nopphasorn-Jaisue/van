@@ -139,17 +139,6 @@ function getFacultyInfo(name: string) {
   };
 }
 
-interface RawFacultyRow {
-  id: number;
-  name: string;
-  adminName: string | null;
-  adminEmail: string | null;
-  execName: string | null;
-  execEmail: string | null;
-  totalVans: number | string;
-  mainDrivers: number | string;
-}
-
 interface CachedFacultyItem {
   id: number;
   name: string;
@@ -210,7 +199,7 @@ export async function GET() {
         type: (d.type === 'PRIMARY' ? 'คนขับหลัก' : 'คนขับเสริม') as string,
         status: d.isActive ? 'พร้อมปฏิบัติงาน' : 'ไม่พร้อม',
         assignedVanPlate: d.assignedVan?.plate || 'ไม่มีรถประจำ',
-        avatar: d.user?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'
+        avatar: (d.user?.avatar && !d.user.avatar.includes('unsplash.com')) ? d.user.avatar : ''
       }));
 
       const vansList = f.vans.map(v => ({

@@ -45,6 +45,8 @@ export type SystemBooking = {
   assignedVanPlate?: string;
   tripType?: "ในจังหวัดพะเยา" | "ต่างจังหวัด";
   budgetSource?: string;
+  targetFaculty?: string;
+  inspectorName?: string;
 };
 
 export type SystemDriverLog = {

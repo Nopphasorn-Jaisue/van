@@ -64,7 +64,8 @@ interface BookingData {
   returnDate: string | Date;
   destination: string;
   passengersCount: number;
-  requester?: { name: string, faculty?: { nameTh: string } | null } | null;
+  phone?: string | null;
+  requester?: { name: string, phone?: string | null, faculty?: { nameTh: string } | null } | null;
   objective: string;
   driverLog?: {
     totalDistance: number;
@@ -232,9 +233,9 @@ export default function DriverSchedule() {
               time: `${new Date(b.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(b.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`,
               passengers: b.passengersCount,
               requester: b.requester?.name || "-",
-              phone: "-", 
+              phone: b.phone || b.requester?.phone || "-", 
               pickup: b.requester?.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
-              van: "รถตู้ที่รับผิดชอบ",
+              van: meData.driverData?.plate || meData.driverData?.vanPlate || "รถตู้ประจำคณะ",
               project: b.objective,
               status: b.driverLog ? "COMPLETED" : "ASSIGNED",
               actualData
@@ -294,7 +295,7 @@ export default function DriverSchedule() {
                     requester: e.requester || 'ผู้ขอใช้บริการ',
                     phone: e.phone || '-',
                     pickup: e.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
-                    van: 'รถตู้ประจำคณะ',
+                    van: meData.driverData?.plate || meData.driverData?.vanPlate || 'รถตู้ประจำคณะ',
                     project: e.purpose || 'ภารกิจใช้รถตู้',
                     status: 'ASSIGNED',
                   };
@@ -694,7 +695,18 @@ export default function DriverSchedule() {
                   <div className="flex items-center gap-1.5 text-xs text-gray-500 font-bold mb-1">
                     <Phone size={14} /> เบอร์ติดต่อ
                   </div>
-                  <p className="text-sm font-bold text-gray-900">{selectedTripDetails.phone}</p>
+                  {selectedTripDetails.phone && selectedTripDetails.phone !== '-' ? (
+                    <a 
+                      href={`tel:${selectedTripDetails.phone.replace(/[^0-9+]/g, '')}`}
+                      className="inline-flex items-center gap-1.5 text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                      title="กดเพื่อโทรออก"
+                    >
+                      <span>{selectedTripDetails.phone}</span>
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full font-bold">โทรออก</span>
+                    </a>
+                  ) : (
+                    <p className="text-sm font-bold text-gray-900">-</p>
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 text-xs text-gray-500 font-bold mb-1">

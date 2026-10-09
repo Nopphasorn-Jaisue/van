@@ -68,9 +68,9 @@ export async function getVans() {
       ? v.assignedDrivers[0] 
       : (v.faculty?.drivers && v.faculty.drivers.length > 0 ? v.faculty.drivers[0] : null);
     const driverName = assignedDriver ? assignedDriver.user.name : "ไม่มีคนขับประจำ";
-    const driverAvatar = assignedDriver && assignedDriver.avatar 
+    const driverAvatar = assignedDriver && assignedDriver.avatar && !assignedDriver.avatar.includes('unsplash.com') 
       ? assignedDriver.avatar 
-      : "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150";
+      : "";
 
     return {
       id: v.id,
@@ -122,7 +122,7 @@ export async function getDrivers() {
 
     return {
       id: d.id,
-      avatar: d.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
+      avatar: (d.avatar && !d.avatar.includes('unsplash.com')) ? d.avatar : "",
       name: d.user?.name || "ไม่ระบุชื่อ",
       employeeId: `DRV-${d.id.toString().padStart(3, '0')}`,
       faculty: d.faculty?.nameTh || "ส่วนกลาง",

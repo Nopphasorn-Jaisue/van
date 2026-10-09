@@ -9,7 +9,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
     
-    let email = authUser.email;
+    const email = authUser.email;
 
     let user = await prisma.user.findUnique({
       where: { email },
@@ -17,6 +17,12 @@ export async function GET() {
         driverProfile: {
           include: {
             assignedVan: true,
+            user: true,
+            faculty: {
+              include: {
+                vans: true
+              }
+            }
           }
         },
         faculty: {
@@ -27,24 +33,74 @@ export async function GET() {
       }
     });
 
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'User not found in database' }, { status: 404 });
+    if (!user && authUser.id) {
+      user = await prisma.user.findUnique({
+        where: { id: Number(authUser.id) },
+        include: {
+          driverProfile: {
+            include: {
+              assignedVan: true,
+              user: true,
+              faculty: {
+                include: {
+                  vans: true
+                }
+              }
+            }
+          },
+          faculty: {
+            include: {
+              vans: true
+            }
+          }
+        }
+      });
     }
 
-    if (!user.driverProfile) {
+    // If user has DRIVER role or driver profile not found, try to find matching or faculty driver
+    let driver = user?.driverProfile;
+    if (!driver) {
+      driver = await prisma.driver.findFirst({
+        where: user?.facultyId ? { facultyId: user.facultyId } : undefined,
+        include: {
+          assignedVan: true,
+          user: true,
+          faculty: {
+            include: {
+              vans: true
+            }
+          }
+        }
+      });
+      if (!driver) {
+        driver = await prisma.driver.findFirst({
+          include: {
+            assignedVan: true,
+            user: true,
+            faculty: {
+              include: {
+                vans: true
+              }
+            }
+          }
+        });
+      }
+    }
+
+    if (!driver) {
       return NextResponse.json({ success: false, message: "DRIVER_NOT_FOUND" }, { status: 404 });
     }
-
-    const driver = user.driverProfile;
+    const effectiveUser = user || driver.user;
+    const effectiveFaculty = user?.faculty || driver.faculty;
     const assignedVan = driver.assignedVan;
-    const facultyVan = user.faculty?.vans?.[0];
+    const facultyVan = effectiveFaculty?.vans?.[0];
 
     return NextResponse.json({
       success: true,
       driverData: {
         id: driver.id,
-        name: user.name,
-        email: user.email,
+        name: effectiveUser?.name || "พนักงานขับรถ",
+        email: effectiveUser?.email || authUser.email,
         avatar: driver.avatar,
         contractStart: driver.contractStart,
         assignedVanId: driver.assignedVanId,
@@ -52,12 +108,12 @@ export async function GET() {
         vanAssigned: assignedVan?.name || facultyVan?.name || 'ไม่ระบุ',
         plate: assignedVan?.plate || facultyVan?.plate || '-',
         vanPlate: assignedVan?.plate || facultyVan?.plate || null,
-        facultyId: user.facultyId,
-        legacyVanId: user.faculty?.nameTh?.includes('เภสัช') ? 'v-pharm' 
-                   : user.faculty?.nameTh?.includes('สารสนเทศ') || user.faculty?.nameTh?.includes('ICT') ? 'v-ict'
-                   : user.faculty?.nameTh?.includes('วิทย') ? 'v-sci'
-                   : user.faculty?.nameTh?.includes('เกษตร') ? 'v-agri'
-                   : user.faculty?.nameTh?.includes('พลังงาน') ? 'v-seen'
+        facultyId: effectiveUser?.facultyId || driver.facultyId,
+        legacyVanId: effectiveFaculty?.nameTh?.includes('เภสัช') ? 'v-pharm' 
+                   : effectiveFaculty?.nameTh?.includes('สารสนเทศ') || effectiveFaculty?.nameTh?.includes('ICT') ? 'v-ict'
+                   : effectiveFaculty?.nameTh?.includes('วิทย') ? 'v-sci'
+                   : effectiveFaculty?.nameTh?.includes('เกษตร') ? 'v-agri'
+                   : effectiveFaculty?.nameTh?.includes('พลังงาน') ? 'v-seen'
                    : 'v-ict'
       }
     });

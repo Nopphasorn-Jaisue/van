@@ -110,10 +110,10 @@ export default function SuperAdminVans() {
             faculty: fac,
             status: (v.isActive === false ? 'MAINTENANCE' : (v.status === 'MAINTENANCE' || v.status === 'DISABLED' ? v.status : 'READY')) as 'READY' | 'MAINTENANCE' | 'DISABLED',
             driver: String(v.driver || v.driverName || 'ไม่มีคนขับประจำ'),
-            driverAvatar: String(v.driverAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'),
+            driverAvatar: (v.driverAvatar && !String(v.driverAvatar).includes('unsplash.com')) ? String(v.driverAvatar) : '',
             nextInspection: String(v.nextMaintenance || v.nextInspection || 'ไม่ระบุ'),
             nextService: '-',
-            image: typeof v.image === 'string' ? v.image : (typeof v.imageUrl === 'string' ? v.imageUrl : null),
+            image: (typeof v.image === 'string' && !v.image.includes('unsplash.com')) ? v.image : (typeof v.imageUrl === 'string' && !v.imageUrl.includes('unsplash.com') ? v.imageUrl : null),
             taxExp: typeof v.taxExp === 'string' ? v.taxExp : (typeof v.taxExpiry === 'string' ? v.taxExpiry : null),
             insExp: typeof v.insExp === 'string' ? v.insExp : (typeof v.insuranceExpiry === 'string' ? v.insuranceExpiry : null)
           };
@@ -468,12 +468,19 @@ export default function SuperAdminVans() {
             <h3 className="font-bold text-sm text-gray-900">ข้อมูลรถที่เลือก</h3>
 
             <div className="text-center space-y-2">
-              <div className="w-full h-32 bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden relative border border-gray-200">
-                <img 
-                  src={selectedVan.image || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=400"} 
-                  alt={selectedVan.plate} 
-                  className="w-full h-full object-cover"
-                />
+              <div className="w-full h-32 bg-purple-50 rounded-2xl flex items-center justify-center overflow-hidden relative border border-purple-100">
+                {selectedVan.image && selectedVan.image.trim() !== '' ? (
+                  <img 
+                    src={selectedVan.image} 
+                    alt={selectedVan.plate} 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-[#311171]/40">
+                    <Bus size={36} />
+                    <span className="text-[10px] font-bold mt-1">ไม่มีรูปภาพยานพาหนะ</span>
+                  </div>
+                )}
               </div>
 
               <div>

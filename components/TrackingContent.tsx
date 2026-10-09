@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 
 import { 
   FileText, CheckCircle, Clock, Search, Navigation, 
-  ChevronRight, Calendar, User, Phone, XCircle, Archive, MapPin
+  Calendar, User, Phone, XCircle, Archive, MapPin
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -47,7 +47,7 @@ export function TrackingContent() {
         const d = await res.json();
         alert(d.error || 'เกิดข้อผิดพลาดในการยกเลิก');
       }
-    } catch (e) {
+    } catch {
       alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
     }
   };

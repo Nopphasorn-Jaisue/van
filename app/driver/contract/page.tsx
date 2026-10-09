@@ -88,7 +88,7 @@ export default function DriverContract() {
           {/* Driver Profile */}
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden shadow-sm border border-indigo-100/60">
-              {driverData.avatar ? (
+              {driverData.avatar && driverData.avatar.trim() !== '' ? (
                 <img src={driverData.avatar} alt={driverData.name} className="w-full h-full object-cover" />
               ) : (
                 <User size={32} />

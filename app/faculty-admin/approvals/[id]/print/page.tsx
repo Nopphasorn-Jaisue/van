@@ -49,6 +49,8 @@ function PrintBookingFormContent() {
     return <div className="p-10 text-center">กำลังโหลดข้อมูล...</div>;
   }
 
+  const facultyName = booking.targetFaculty || booking.requesterFaculty || "ประจำคณะ";
+
   return (
     <div className="min-h-screen bg-white text-black font-sans print:p-0 p-8">
       {/* A4 Container */}
@@ -57,7 +59,7 @@ function PrintBookingFormContent() {
         {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-[18px] font-bold mb-4">
-            ใบขออนุญาตใช้รถยนต์ตู้คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ มหาวิทยาลัยพะเยา
+            ใบขออนุญาตใช้รถยนต์ตู้{facultyName} มหาวิทยาลัยพะเยา
           </h1>
           <div className="flex justify-center gap-12 text-[16px]">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -97,7 +99,7 @@ function PrintBookingFormContent() {
                 <span className="w-16 border-b border-dotted border-black text-center">{new Date().getFullYear() + 543}</span>
               </div>
               <div className="mb-2">
-                เรียน คณบดีคณะเกษตรศาสตร์และทรัพยากรธรรมชาติ
+                เรียน คณบดี{facultyName}
               </div>
               <div className="flex gap-2 mb-2">
                 <span>ด้วย</span>
@@ -202,7 +204,7 @@ function PrintBookingFormContent() {
             <div className="p-4 border-b-2 border-black flex-1">
               <div className="font-bold mb-2">ส่วนที่ 2</div>
               <div className="mb-2">
-                เรียน คณบดีคณะเกษตรศาสตร์และทรัพยากรธรรมชาติ
+                เรียน คณบดี{facultyName}
               </div>
               <div className="ml-4 mb-2">หน่วยยานพาหนะ ได้จัดรถยนต์ตู้</div>
               
@@ -239,7 +241,7 @@ function PrintBookingFormContent() {
                 </div>
                 <div className="flex gap-2 justify-center">
                   <span>(</span>
-                  <span className="w-48 border-b border-dotted border-black text-center">นายสมเกียรติ ยานยนต์</span>
+                  <span className="w-48 border-b border-dotted border-black text-center">.....................................................</span>
                   <span>)</span>
                 </div>
               </div>
@@ -273,7 +275,7 @@ function PrintBookingFormContent() {
                   <span className="w-64 border-b border-dotted border-black text-center"></span>
                 </div>
                 <div className="text-center">
-                  คณบดีคณะเกษตรศาสตร์และทรัพยากรธรรมชาติ<br/>
+                  คณบดี{facultyName}<br/>
                   มหาวิทยาลัยพะเยา
                 </div>
               </div>
@@ -286,10 +288,10 @@ function PrintBookingFormContent() {
         <div className="mt-6 text-[12px] leading-relaxed">
           <div className="font-bold mb-1">รายละเอียดเพิ่มเติม หมายเหตุ ให้แนบสำเนาบันทึกข้อความขออนุมัติไปปฏิบัติงานด้วย</div>
           <ol className="list-decimal pl-4 space-y-1">
-            <li>เมื่อเกิดความเสียหายขึ้น เป็นหน้าที่ของผู้ขออนุญาตใช้รถยนต์ตู้ ที่จะต้องติดตามดำเนินเรื่องและเสนอคณะเกษตรฯ ทราบโดยด่วน</li>
+            <li>เมื่อเกิดความเสียหายขึ้น เป็นหน้าที่ของผู้ขออนุญาตใช้รถยนต์ตู้ ที่จะต้องติดตามดำเนินเรื่องและเสนอ{facultyName} ทราบโดยด่วน</li>
             <li>การเดินทางนอกเส้นทางที่ไปปฏิบัติงานโดยไม่มีเหตุอันควร ถ้าเกิดความเสียหายขึ้น ผู้ขออนุญาตใช้รถยนต์ตู้ต้องรับผิดชอบ</li>
             <li>เมื่อปฏิบัติงานเสร็จแล้วต้องรีบนำรถยนต์ตู้กลับโดยด่วน</li>
-            <li>ส่งเอกสารการขอใช้รถยนต์ตู้ที่งานยานพาหนะ คณะเกษตรศาสตร์ ล่วงหน้าอย่างน้อย 3 วันทำการ</li>
+            <li>ส่งเอกสารการขอใช้รถยนต์ตู้ที่งานยานพาหนะ {facultyName} ล่วงหน้าอย่างน้อย 3 วันทำการ</li>
             <li>กรณีการขอใช้ในการเดินทางที่ไม่ได้อยู่ในโครงการหรือไม่มีงบประมาณของคณะฯ รองรับ ให้ผู้ขอใช้รถเป็นผู้รับผิดชอบในการจ่ายค่าเบี้ยเลี้ยงแก่พนักงานขับรถ</li>
           </ol>
         </div>

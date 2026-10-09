@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   FileText, Search,
-  CheckCircle2, XCircle, Info, Calendar,
+  CheckCircle2, XCircle, Calendar,
   MapPin, User, Clock, 
-  X, Edit, Trash2, Printer, ArrowUpRight, ArrowDownLeft, History, Check, ShieldAlert
+  X, Edit, Trash2, Printer, ArrowUpRight, ArrowDownLeft, History
 } from 'lucide-react';
 
 interface ApiRawBookingItem {
@@ -46,7 +46,7 @@ interface MappedRequest {
   destination: string;
   passengers: number;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'need_info';
+  status: 'pending' | 'waiting_exec' | 'approved' | 'rejected' | 'need_info';
   rawStatus: string;
   rejectReason?: string | null;
   files: number;
@@ -71,7 +71,7 @@ interface MappedRequest {
 }
 
 export default function ApprovalsPage() {
-  const [activeTab, setActiveTab] = useState<'pending' | 'incoming' | 'outgoing' | 'history'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'waiting_exec' | 'incoming' | 'outgoing' | 'history'>('pending');
   const [historyFilter, setHistoryFilter] = useState<'all' | 'approved' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
@@ -121,8 +121,9 @@ export default function ApprovalsPage() {
         const meRes = await fetch('/api/me');
         if (meRes.ok) {
           const meData = await meRes.json();
-          if (meData?.user?.facultyId) {
-            myFacultyId = Number(meData.user.facultyId);
+          const detectedFacId = meData?.facultyId || meData?.user?.facultyId;
+          if (detectedFacId) {
+            myFacultyId = Number(detectedFacId);
             setCurrentAdminFacultyId(myFacultyId);
           }
         }
@@ -148,12 +149,14 @@ export default function ApprovalsPage() {
           const isOutgoing = (reqFacId === myFacultyId && tgtFacId !== myFacultyId);
           const isOwner = (tgtFacId === myFacultyId);
 
-          let statusLabel: 'pending' | 'approved' | 'rejected' | 'need_info' = 'pending';
+          let statusLabel: 'pending' | 'waiting_exec' | 'approved' | 'rejected' | 'need_info' = 'pending';
           if (b.status === 'APPROVED' || b.status === 'COMPLETED') {
             statusLabel = 'approved';
           } else if (b.status === 'REJECTED') {
             statusLabel = 'rejected';
-          } else if (b.status === 'WAITING_ADMIN' || b.status === 'WAITING_EXEC') {
+          } else if (b.status === 'WAITING_EXEC') {
+            statusLabel = 'waiting_exec';
+          } else if (b.status === 'WAITING_ADMIN') {
             statusLabel = 'pending';
           }
           
@@ -237,8 +240,9 @@ export default function ApprovalsPage() {
     const { id, type: actionType } = pendingAction;
     
     let dbStatus = '';
-    if (actionType === 'อนุมัติ' || actionType === 'อนุญาตให้ยืม') dbStatus = 'APPROVED';
-    if (actionType === 'ปฏิเสธ') dbStatus = 'REJECTED';
+    if (actionType === 'อนุมัติ' || actionType === 'อนุมัติส่งคณบดี') dbStatus = 'WAITING_EXEC';
+    else if (actionType === 'อนุญาตให้ยืม') dbStatus = 'APPROVED';
+    else if (actionType === 'ปฏิเสธ') dbStatus = 'REJECTED';
 
     if (dbStatus) {
       try {
@@ -248,7 +252,10 @@ export default function ApprovalsPage() {
           body: JSON.stringify({ status: dbStatus, rejectReason: infoReason || actionType })
         });
         await loadRequests(true);
-        setAlertMessage(`ดำเนินการ ${actionType} คำขอ ${id} สำเร็จเรียบร้อยแล้ว`);
+        const successMsg = (actionType === 'อนุมัติ' || actionType === 'อนุมัติส่งคณบดี')
+          ? `อนุมัติคำขอ ${id} และส่งเรื่องไปยังคณบดีเรียบร้อยแล้ว`
+          : `ดำเนินการ ${actionType} คำขอ ${id} สำเร็จเรียบร้อยแล้ว`;
+        setAlertMessage(successMsg);
         if (selectedRequestId === id) setSelectedRequestId(null);
       } catch (err) {
         console.error(err);
@@ -369,6 +376,7 @@ export default function ApprovalsPage() {
 
   // Counts for Tabs
   const pendingCount = requests.filter(r => r.isOwnerOfVan && r.status === 'pending').length;
+  const execCount = requests.filter(r => r.status === 'waiting_exec').length;
   const incomingCount = requests.filter(r => r.isIncomingBorrow && r.status === 'pending').length;
   const outgoingCount = requests.filter(r => r.isOutgoingBorrow).length;
   const historyList = requests.filter(r => r.status === 'approved' || r.status === 'rejected');
@@ -381,6 +389,8 @@ export default function ApprovalsPage() {
     let matchesTab = false;
     if (activeTab === 'pending') {
       matchesTab = req.isOwnerOfVan && req.status === 'pending';
+    } else if (activeTab === 'waiting_exec') {
+      matchesTab = req.status === 'waiting_exec';
     } else if (activeTab === 'incoming') {
       matchesTab = req.isIncomingBorrow && req.status === 'pending';
     } else if (activeTab === 'outgoing') {
@@ -419,6 +429,9 @@ export default function ApprovalsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-yellow-200 bg-yellow-50 text-yellow-800 text-xs font-bold shadow-2xs">
               <Clock size={15} className="text-yellow-600" /> รอเราพิจารณา: {pendingCount}
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800 text-xs font-bold shadow-2xs">
+              <Clock size={15} className="text-amber-600" /> รอคณบดีอนุมัติ: {execCount}
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-purple-200 bg-purple-50 text-purple-800 text-xs font-bold shadow-2xs">
               <ArrowDownLeft size={15} className="text-purple-600" /> เขามายืมเรา: {incomingCount}
@@ -460,6 +473,16 @@ export default function ApprovalsPage() {
                   }`}
                 >
                   รอการพิจารณา <span className="ml-1 opacity-75">({pendingCount})</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('waiting_exec')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
+                    activeTab === 'waiting_exec'
+                      ? 'bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs'
+                      : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  รอคณบดีอนุมัติ <span className="ml-1 opacity-75">({execCount})</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('incoming')}
@@ -629,6 +652,10 @@ export default function ApprovalsPage() {
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200 flex items-center justify-center gap-1 w-fit mx-auto">
                             <XCircle size={12} /> ปฏิเสธ
                           </span>
+                        ) : req.status === 'waiting_exec' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center gap-1 w-fit mx-auto">
+                            <Clock size={12} className="text-amber-600" /> รอคณบดีอนุมัติ
+                          </span>
                         ) : req.isIncomingBorrow ? (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 animate-pulse">
                             ขอยืมรถเรา (รออนุมัติ)
@@ -685,6 +712,7 @@ export default function ApprovalsPage() {
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                     selectedRequest.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
                     selectedRequest.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                    selectedRequest.status === 'waiting_exec' ? 'bg-amber-100 text-amber-700' :
                     selectedRequest.isIncomingBorrow ? 'bg-purple-100 text-purple-700' : 'bg-yellow-100 text-yellow-800'
                   }`}>
                     <FileText size={20} />
@@ -695,11 +723,13 @@ export default function ApprovalsPage() {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                         selectedRequest.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                         selectedRequest.status === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' :
+                        selectedRequest.status === 'waiting_exec' ? 'bg-amber-50 text-amber-800 border-amber-200' :
                         selectedRequest.isIncomingBorrow ? 'bg-purple-50 text-purple-700 border-purple-200' :
                         'bg-yellow-50 text-yellow-800 border-yellow-200'
                       }`}>
                         {selectedRequest.status === 'approved' ? 'อนุมัติแล้ว' :
                          selectedRequest.status === 'rejected' ? 'ปฏิเสธ' :
+                         selectedRequest.status === 'waiting_exec' ? 'รอคณบดีอนุมัติ' :
                          selectedRequest.isIncomingBorrow ? 'ยืมรถเรา' :
                          selectedRequest.isOutgoingBorrow ? 'เราไปยืมเขา' : 'ภายในคณะ'}
                       </span>
@@ -709,6 +739,27 @@ export default function ApprovalsPage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Status Notice for Waiting Executive (Dean) Approval */}
+                {selectedRequest.status === 'waiting_exec' && (
+                  <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
+                    <div className="flex items-center gap-2 text-amber-950 font-black text-xs">
+                      <Clock size={16} className="text-amber-600" />
+                      <span>สถานะ: ส่งเรื่องให้คณบดีพิจารณาอนุมัติแล้ว</span>
+                    </div>
+                    
+                    <div className="space-y-2 text-xs pt-1">
+                      <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                        <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        <span>1. แอดมินคณะพิจารณา / จองคำขอเรียบร้อยแล้ว</span>
+                      </div>
+                      <div className="flex items-center gap-2 font-bold text-amber-700 animate-pulse">
+                        <Clock size={15} className="text-amber-600 shrink-0" />
+                        <span>2. รอคณบดีลงนามอนุมัติ (สำนักงานคณบดี)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Status Notice for Rejected */}
                 {selectedRequest.status === 'rejected' && (
@@ -765,7 +816,7 @@ export default function ApprovalsPage() {
                       <span>{selectedRequest.department} ขอยืมรถตู้คณะเรา</span>
                     </div>
                     <p className="text-[11px] text-purple-700 font-medium leading-relaxed">
-                      คุณในฐานะแอดมินคณะเจ้าของรถ สามารถกด <strong>"อนุมัติให้ยืม"</strong> หรือ <strong>"ปฏิเสธ"</strong> ได้ทันทีที่ปุ่มด้านล่าง
+                      คุณในฐานะแอดมินคณะเจ้าของรถ สามารถกด <strong>&quot;อนุมัติให้ยืม&quot;</strong> หรือ <strong>&quot;ปฏิเสธ&quot;</strong> ได้ทันทีที่ปุ่มด้านล่าง
                     </p>
                   </div>
                 )}
@@ -833,14 +884,14 @@ export default function ApprovalsPage() {
               {/* Action Buttons Panel */}
               <div className="p-4 border-t border-gray-100 bg-white shrink-0 space-y-2">
                 {selectedRequest.status === 'pending' && selectedRequest.isOwnerOfVan ? (
-                  /* เจ้าของรถ: เมื่อรอพิจารณา มีปุ่มอนุมัติให้ยืม, ปฏิเสธ */
+                  /* เจ้าของรถ: เมื่อรอพิจารณา มีปุ่มอนุมัติให้ยืม / อนุมัติส่งคณบดี, ปฏิเสธ */
                   <div>
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <button
-                        onClick={() => confirmAction(selectedRequest.id, selectedRequest.isIncomingBorrow ? 'อนุญาตให้ยืม' : 'อนุมัติ')}
+                        onClick={() => confirmAction(selectedRequest.id, selectedRequest.isIncomingBorrow ? 'อนุญาตให้ยืม' : 'อนุมัติส่งคณบดี')}
                         className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs"
                       >
-                        <CheckCircle2 size={16} /> {selectedRequest.isIncomingBorrow ? 'อนุมัติให้ยืม' : 'อนุมัติคำขอ'}
+                        <CheckCircle2 size={16} /> {selectedRequest.isIncomingBorrow ? 'อนุมัติให้ยืม' : 'อนุมัติส่งคณบดี'}
                       </button>
                       <button
                         onClick={() => confirmAction(selectedRequest.id, 'ปฏิเสธ')}
@@ -873,7 +924,7 @@ export default function ApprovalsPage() {
                     </div>
                   </div>
                 ) : (
-                  /* รายการในประวัติ หรือคำขอออก: มีปุ่มแก้ไข, พิมพ์, ลบ/ยกเลิก */
+                  /* รายการรอคณบดีอนุมัติ หรือในประวัติ หรือคำขอออก: มีปุ่มแก้ไข, พิมพ์, ลบ/ยกเลิก */
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={() => handleOpenEditModal(selectedRequest)}

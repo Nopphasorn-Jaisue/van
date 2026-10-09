@@ -21,6 +21,8 @@ interface ReportRow {
   totalDistance: number;
   driverName: string;
   remark: string;
+  rawDeptMonth?: string;
+  rawDeptYear?: string;
 }
 
 interface DriverLogItem {
@@ -56,9 +58,8 @@ export default function FacultyUsageReportPage() {
 
   // ตั้งค่าเริ่มต้นเดือนและปีปัจจุบันหลังจาก component mount เพื่อแก้ปัญหา hydration error
   useEffect(() => {
-    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-    setSelectedMonth(thaiMonths[new Date().getMonth()]);
-    setSelectedYear((new Date().getFullYear() + 543).toString());
+    setSelectedMonth("ทั้งหมด");
+    setSelectedYear("ทั้งหมด");
   }, []);
 
   useEffect(() => {
@@ -85,6 +86,7 @@ export default function FacultyUsageReportPage() {
           );
           
           if (loggedBookings.length > 0) {
+            const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
             const mapped: ReportRow[] = loggedBookings.map((b, index) => {
               const log = b.driverLog;
               const deptD = b.departureDate ? new Date(b.departureDate) : null;
@@ -92,6 +94,8 @@ export default function FacultyUsageReportPage() {
 
               const isValidDept = deptD && !isNaN(deptD.getTime());
               const isValidRet = retD && !isNaN(retD.getTime());
+              const rawDeptMonth = isValidDept ? thaiMonths[deptD.getMonth()] : "";
+              const rawDeptYear = isValidDept ? (deptD.getFullYear() + 543).toString() : "";
 
               return {
                 id: b.id,
@@ -106,7 +110,9 @@ export default function FacultyUsageReportPage() {
                 endMileage: log?.mileageEnd != null ? log.mileageEnd.toLocaleString() : "-",
                 totalDistance: log?.totalDistance || 0,
                 driverName: b.assignedDriver?.user?.name || "-",
-                remark: log?.fuelRemark || "-"
+                remark: log?.fuelRemark || "-",
+                rawDeptMonth,
+                rawDeptYear
               };
             });
 
@@ -130,7 +136,21 @@ export default function FacultyUsageReportPage() {
     }
 
     loadData();
+
+    return () => clearTimeout(safetyTimer);
   }, []);
+
+  const filteredRows = reportRows.filter(r => {
+    const matchesSearch = 
+      (r.user?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (r.destination?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (r.driverName?.toLowerCase() || "").includes(searchQuery.toLowerCase());
+
+    const matchesMonth = selectedMonth === "ทั้งหมด" || !selectedMonth || r.rawDeptMonth === selectedMonth;
+    const matchesYear = selectedYear === "ทั้งหมด" || !selectedYear || r.rawDeptYear === selectedYear;
+
+    return matchesSearch && matchesMonth && matchesYear;
+  });
 
   const handleExportCSV = () => {
     const headers = [
@@ -139,8 +159,8 @@ export default function FacultyUsageReportPage() {
       "ระยะกม.เมื่อรถกลับ", "รวมระยะทาง(กม.)", "พนักงานขับรถ", "หมายเหตุ"
     ];
 
-    const rows = reportRows.map(r => [
-      r.seq,
+    const rows = filteredRows.map((r, idx) => [
+      idx + 1,
       `"${r.deptDate}"`,
       `"${r.deptTime}"`,
       `"${r.user}"`,
@@ -159,32 +179,32 @@ export default function FacultyUsageReportPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `รายงานการใช้งานรถตู้_${selectedMonth}_${selectedYear}.csv`);
+    const monthSuffix = selectedMonth === "ทั้งหมด" ? "ทุกเดือน" : selectedMonth;
+    const yearSuffix = selectedYear === "ทั้งหมด" ? "ทุกปี" : selectedYear;
+    link.setAttribute("download", `รายงานการใช้งานรถตู้_${monthSuffix}_${yearSuffix}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const filteredRows = reportRows.filter(r => 
-    (r.user?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
-    (r.destination?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
-    (r.driverName?.toLowerCase() || "").includes(searchQuery.toLowerCase())
-  );
-
   return (
     <AppShell>
-      <div className="w-full flex-1 flex flex-col space-y-4 animate-in fade-in">
+      <div className="max-w-[1400px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0 space-y-4">
         
-        {/* 🌟 Section Header: ประวัติการเดินทาง & Export Button */}
-        <div className="flex justify-between items-center pt-2">
-
+        {/* Section Header: ประวัติการเดินทาง & Export Button */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-4 pt-2">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">รายงานการใช้งานรถตู้</h1>
+            <p className="text-xs text-slate-500 mt-0.5">สรุปประวัติการเดินทาง บันทึกเลขไมล์ และระยะทางการใช้งานจริงจากคนขับ</p>
+          </div>
 
           <div className="flex items-center gap-2">
             <select 
               value={selectedMonth} 
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-white border border-slate-200 text-sm font-bold text-slate-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              className="bg-white border border-slate-200 text-sm font-bold text-slate-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm cursor-pointer"
             >
+              <option value="ทั้งหมด">ทุกเดือน</option>
               <option value="มกราคม">มกราคม</option>
               <option value="กุมภาพันธ์">กุมภาพันธ์</option>
               <option value="มีนาคม">มีนาคม</option>
@@ -202,8 +222,9 @@ export default function FacultyUsageReportPage() {
             <select 
               value={selectedYear} 
               onChange={(e) => setSelectedYear(e.target.value)}
-              className="bg-white border border-slate-200 text-sm font-bold text-slate-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              className="bg-white border border-slate-200 text-sm font-bold text-slate-700 py-2 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm cursor-pointer"
             >
+              <option value="ทั้งหมด">ทุกปี</option>
               <option value="2567">2567</option>
               <option value="2568">2568</option>
               <option value="2569">2569</option>

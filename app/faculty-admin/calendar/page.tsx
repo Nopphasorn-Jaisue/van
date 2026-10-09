@@ -1,14 +1,15 @@
 "use client";
-import CalendarBookingModal from '@/components/CalendarBookingModal';
+import CalendarBookingModal, { AttachmentItem } from '@/components/CalendarBookingModal';
 import React, { useState, useEffect, Suspense } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   ChevronLeft, ChevronRight, 
   Search, RotateCcw, Plus,
   MapPin, Calendar, Clock, User, Phone, FileText, 
-  X, Edit, Trash2, Compass, Check, AlertTriangle, Users } from "lucide-react";
+  X, Edit, Trash2, Compass, Check, AlertTriangle, Users,
+  Paperclip, ExternalLink } from "lucide-react";
 import { facultiesList, isFacultyMatch, normalizeFacultyKey } from '@/Frontend/data/faculties';
-import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
+import { UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
 
 
 type RawCalendarEventItem = {
@@ -31,6 +32,10 @@ type RawCalendarEventItem = {
   statusText?: string;
   statusTime?: string;
   tripType?: string;
+  assignedVans?: SelectedVanItem[];
+  targetFaculty?: string;
+  selectedVans?: SelectedVanItem[];
+  attachments?: AttachmentItem[];
 };
 
 type CalendarBookingEvent = {
@@ -56,6 +61,23 @@ type CalendarBookingEvent = {
   assignedVans?: SelectedVanItem[];
   targetFaculty?: string;
   selectedVans?: SelectedVanItem[];
+  attachments?: AttachmentItem[];
+};
+
+const getFileBadge = (name: string) => {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'pdf') return { label: 'PDF', bg: 'bg-red-50 text-red-600 border-red-200' };
+  if (['doc', 'docx'].includes(ext)) return { label: 'WORD', bg: 'bg-blue-50 text-blue-600 border-blue-200' };
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return { label: 'EXCEL', bg: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return { label: 'IMG', bg: 'bg-amber-50 text-amber-600 border-amber-200' };
+  return { label: ext.toUpperCase() || 'FILE', bg: 'bg-purple-50 text-purple-600 border-purple-200' };
+};
+
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 function CalendarContent() {
@@ -69,6 +91,11 @@ function CalendarContent() {
   const [todayDate, setTodayDate] = useState(new Date(2026, 6, 19));
   const [selectedEvent, setSelectedEvent] = useState<CalendarBookingEvent | null>(null);
   const [showMoreEventsDate, setShowMoreEventsDate] = useState<Date | null>(null);
+  const [mobileSelectedDate, setMobileSelectedDate] = useState<Date>(new Date(2026, 6, 19));
+
+  useEffect(() => {
+    setMobileSelectedDate(baseDate);
+  }, [baseDate]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -94,21 +121,11 @@ function CalendarContent() {
     vanId: 'v-ict',
     vanType: 'OWN' as 'OWN' | 'BORROW',
     tripType: 'ในจังหวัดพะเยา' as 'ในจังหวัดพะเยา' | 'ต่างจังหวัด',
-    selectedVans: [
-      {
-        id: 'van-1',
-        vanId: 'v-ict',
-        facultyName: 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
-        isBorrow: false,
-        plate: '1นช3009 กรุงเทพมหานคร',
-        driverName: 'นายสมชาย ใจดี',
-        phone: '081-234-5678'
-      }
-    ] as SelectedVanItem[],
+    selectedVans: [] as SelectedVanItem[],
   });
 
   const [bookingsData, setBookingsData] = useState<CalendarBookingEvent[]>([]);
-  const [vansList, setVansList] = useState<UnifiedVanInfo[]>(facultyVansList);
+  const [vansList, setVansList] = useState<UnifiedVanInfo[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -172,6 +189,7 @@ function CalendarContent() {
                   passengers: Number(e.passengers || 10),
                   status: e.status || 'approved',
                   bookingFaculty: e.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+                  targetFaculty: e.targetFaculty,
                   requester: e.requester || '',
                   phone: e.phone || '',
                   department: e.department || 'สำนักงานคณบดี',
@@ -179,7 +197,10 @@ function CalendarContent() {
                   routeDetail: e.routeDetail || `พะเยา -> ${e.destination}`,
                   statusText: e.statusText || 'อนุมัติแล้ว',
                   statusTime: e.statusTime || 'บันทึกในระบบ',
-                  tripType: (e.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || 'ในจังหวัดพะเยา'
+                  tripType: (e.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || 'ในจังหวัดพะเยา',
+                  assignedVans: e.assignedVans,
+                  selectedVans: e.selectedVans,
+                  attachments: e.attachments || []
                 };
               });
               setBookingsData(mapped);
@@ -229,6 +250,7 @@ function CalendarContent() {
               passengers: Number(e.passengers || 10),
               status: e.status || 'approved',
               bookingFaculty: e.bookingFaculty || 'คณะเทคโนโลยีสารสนเทศและการสื่อสาร',
+              targetFaculty: e.targetFaculty,
               requester: e.requester || '',
               phone: e.phone || '',
               department: e.department || 'สำนักงานคณบดี',
@@ -236,7 +258,10 @@ function CalendarContent() {
               routeDetail: e.routeDetail || 'พะเยา',
               statusText: e.statusText || 'อนุมัติแล้ว',
               statusTime: e.statusTime || 'บันทึกในระบบ',
-              tripType: (e.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || 'ในจังหวัดพะเยา'
+              tripType: (e.tripType as "ในจังหวัดพะเยา" | "ต่างจังหวัด") || 'ในจังหวัดพะเยา',
+              assignedVans: e.assignedVans,
+              selectedVans: e.selectedVans,
+              attachments: e.attachments || []
             };
           });
           setBookingsData(mapped);
@@ -249,9 +274,6 @@ function CalendarContent() {
     } catch {}
 
     fetchEvents(true);
-
-    const safetyTimer = setTimeout(() => setIsLoading(false), 1200);
-    return () => clearTimeout(safetyTimer);
 
     const fetchUser = async () => {
       try {
@@ -271,6 +293,9 @@ function CalendarContent() {
       }
     };
     fetchUser();
+
+    const safetyTimer = setTimeout(() => setIsLoading(false), 1200);
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const handlePrevDateRange = () => {
@@ -507,9 +532,35 @@ function CalendarContent() {
   };
 
   const confirmDelete = async (id: string) => {
-    // 1. Optimistically remove immediately from UI in 0ms
-    setBookingsData(prev => prev.filter(b => b.id !== id));
-    if (selectedEvent && selectedEvent.id === id) {
+    const targetEvent = bookingsData.find(b => b.id === id);
+    const targetSubIds = new Set((targetEvent?.assignedVans || targetEvent?.selectedVans || []).map(v => v.id).filter(Boolean));
+    const hasBorrow = (targetEvent?.assignedVans && targetEvent.assignedVans.some(v => v.isBorrow)) ||
+                      (targetEvent?.selectedVans && targetEvent.selectedVans.some(v => v.isBorrow)) ||
+                      targetEvent?.status === 'pending_cross_faculty' ||
+                      targetEvent?.statusText?.includes('ยืม') ||
+                      targetEvent?.purpose?.includes('ยืมรถ') ||
+                      targetEvent?.purpose?.includes('คันที่ ');
+
+    const isFleet = (targetEvent?.assignedVans && targetEvent.assignedVans.length > 1) ||
+                    (targetEvent?.selectedVans && targetEvent.selectedVans.length > 1) ||
+                    hasBorrow;
+
+    const cleanTargetPurpose = (targetEvent?.purpose || '').replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+    const siblingIds = isFleet && targetEvent ? bookingsData.filter(b => {
+      if (b.id === id) return true;
+      if (targetSubIds.size > 0 && (b.assignedVans || b.selectedVans || []).some(v => targetSubIds.has(v.id))) return true;
+      const bDateStr = b.date instanceof Date ? b.date.toISOString().slice(0, 10) : String(b.date).slice(0, 10);
+      const tDateStr = targetEvent.date instanceof Date ? targetEvent.date.toISOString().slice(0, 10) : String(targetEvent.date).slice(0, 10);
+      if (b.requester === targetEvent.requester && bDateStr === tDateStr && b.destination === targetEvent.destination) {
+        const cleanBPurpose = (b.purpose || '').replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+        if (cleanBPurpose === cleanTargetPurpose) return true;
+      }
+      return false;
+    }).map(b => b.id) : [id];
+
+    // 1. Optimistically remove immediately from UI in 0ms (all linked fleet events)
+    setBookingsData(prev => prev.filter(b => !siblingIds.includes(b.id)));
+    if (selectedEvent && siblingIds.includes(selectedEvent.id)) {
       setSelectedEvent(null);
     }
     setDeleteConfirmId(null);
@@ -522,7 +573,13 @@ function CalendarContent() {
         fetchEvents();
         return;
       }
-      showToast("ลบข้อมูลสำเร็จ", "รายการจองถูกลบออกจากปฏิทินเรียบร้อยแล้ว", "delete");
+      const data = await res.json().catch(() => ({}));
+      const deletedCount = data.deletedCount || siblingIds.length;
+      if (deletedCount > 1 || isFleet) {
+        showToast("ลบข้อมูลสำเร็จ", `ลบรายการขบวนรถตู้/คำขอยืมรถทั้งหมด (${deletedCount} คัน) เรียบร้อยแล้ว (สามารถยื่นคำขอใหม่ได้)`, "delete");
+      } else {
+        showToast("ลบข้อมูลสำเร็จ", "รายการจองถูกลบออกจากปฏิทินเรียบร้อยแล้ว", "delete");
+      }
       fetchEvents(true);
     } catch (err) {
       console.error(err);
@@ -549,9 +606,9 @@ function CalendarContent() {
         textColor: "text-[#51621F]"
       };
     }
-    if (name.includes("วิทยาศาสตร์") && !name.includes("สารสนเทศ")) {
+    if ((name.includes("วิทยาศาสตร์") || name.includes("วิทย์")) && !name.includes("สารสนเทศ")) {
       return {
-        shortName: "วิทยาศาสตร์",
+        shortName: "วิทย์",
         colorClass: "text-[#FBBC39] bg-[#FBBC39]/10 border-[#FBBC39]/30",
         dotColor: "bg-[#FBBC39]",
         barColor: "bg-[#FBBC39]",
@@ -885,7 +942,13 @@ function CalendarContent() {
                           <p className="text-xs font-black text-gray-900 mb-0.5">{van.vanName}</p>
                           <p className="text-[10px] text-[#311171] font-bold mb-2">{van.plate}</p>
                           <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                            <img src={van.driverImage} className="w-6 h-6 rounded-full object-cover shrink-0" alt="driver" />
+                            {van.driverImage && van.driverImage.trim() !== '' ? (
+                              <img src={van.driverImage} className="w-6 h-6 rounded-full object-cover shrink-0" alt="driver" />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-[#311171]/10 text-[#311171] flex items-center justify-center font-bold text-[9px] shrink-0">
+                                {van.driverName ? van.driverName.trim().charAt(0) : <User size={10} />}
+                              </div>
+                            )}
                             <div>
                               <p className="text-[10px] font-bold text-gray-800">{van.driverName}</p>
                               <p className="text-[9px] text-gray-500">{van.driverPhone}</p>
@@ -954,15 +1017,182 @@ function CalendarContent() {
                 </table>
               </div>
             ) : (
-              /* Month View: Cute Rounded Day Cards */
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="grid grid-cols-7 text-center mb-2">
-                  {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map((day, i) => (
-                    <div key={i} className="py-2 text-xs font-bold text-gray-400">
-                      {day}
+              /* Month View */
+              <div className="flex-1 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+                {/* Mobile View: 100% full-width 7-column calendar, shows all 30 days & selectable day agenda */}
+                <div className="block md:hidden p-2 overflow-y-auto">
+                  {/* 7 Days of the Week header */}
+                  <div className="grid grid-cols-7 gap-1 border-b border-gray-100 pb-2 text-center">
+                    {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map((day, i) => (
+                      <div key={i} className={`text-xs font-black py-1 ${i === 0 ? 'text-rose-500' : i === 6 ? 'text-purple-600' : 'text-gray-500'}`}>
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 30-Day Grid */}
+                  <div className="grid grid-cols-7 gap-1 pt-2">
+                    {getCalendarDays(baseDate).map((cell) => {
+                      const dayBookings = filteredBookings.filter(b => isBookingActiveOnDate(b, cell.dateObj));
+                      const isToday = isSameDate(cell.dateObj, todayDate);
+                      const isSelected = isSameDate(cell.dateObj, mobileSelectedDate);
+                      const hasEvents = dayBookings.length > 0;
+
+                      return (
+                        <button
+                          key={cell.key}
+                          type="button"
+                          onClick={() => setMobileSelectedDate(cell.dateObj)}
+                          className={`relative min-h-[48px] rounded-xl p-1 flex flex-col items-center justify-between transition-all text-center ${
+                            isSelected
+                              ? 'bg-violet-100/95 text-violet-950 font-black border-2 border-violet-600 ring-2 ring-violet-400/40 shadow-sm scale-[1.03]'
+                              : isToday
+                              ? 'bg-violet-50 text-violet-800 font-bold border border-violet-300'
+                              : cell.isCurrent
+                              ? 'bg-gray-50 hover:bg-gray-100 text-gray-800'
+                              : 'bg-transparent text-gray-300'
+                          }`}
+                        >
+                          <span className={`text-xs font-black ${isSelected ? 'text-violet-950' : isToday ? 'text-violet-700' : ''}`}>
+                            {cell.day}
+                          </span>
+
+                          <div className="flex items-center justify-center gap-0.5 min-h-[12px]">
+                            {hasEvents && (
+                              dayBookings.length <= 4 ? (
+                                <div className="flex items-center gap-0.5">
+                                  {dayBookings.map((b, i) => {
+                                    const vanOwner = vansMap[b.vanId];
+                                    const ownerFaculty = vanOwner ? vanOwner.facultyName : b.bookingFaculty;
+                                    const isBorrowed = b.status === 'pending_cross_faculty' || (ownerFaculty && !isFacultyMatch(ownerFaculty, b.bookingFaculty));
+                                    const displayFaculty = isBorrowed && ownerFaculty ? ownerFaculty : b.bookingFaculty;
+                                    const style = getFacultyStyle(displayFaculty);
+                                    return (
+                                      <span
+                                        key={b.id || i}
+                                        className={`h-1.5 w-1.5 rounded-full shrink-0 ring-0.5 ring-black/15 shadow-2xs ${style.dotColor || 'bg-violet-600'}`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-0.5">
+                                  {dayBookings.slice(0, 2).map((b, i) => {
+                                    const vanOwner = vansMap[b.vanId];
+                                    const ownerFaculty = vanOwner ? vanOwner.facultyName : b.bookingFaculty;
+                                    const isBorrowed = b.status === 'pending_cross_faculty' || (ownerFaculty && !isFacultyMatch(ownerFaculty, b.bookingFaculty));
+                                    const displayFaculty = isBorrowed && ownerFaculty ? ownerFaculty : b.bookingFaculty;
+                                    const style = getFacultyStyle(displayFaculty);
+                                    return (
+                                      <span
+                                        key={b.id || i}
+                                        className={`h-1.5 w-1.5 rounded-full shrink-0 ring-0.5 ring-black/15 shadow-2xs ${style.dotColor || 'bg-violet-600'}`}
+                                      />
+                                    );
+                                  })}
+                                  <span className="text-[9px] font-black leading-none px-1 py-0.5 rounded-full bg-violet-200/90 text-violet-900 border border-violet-300">
+                                    +{dayBookings.length - 2}
+                                  </span>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected Day Agenda */}
+                  <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50/70 p-3 shadow-sm">
+                    <div className="flex items-center justify-between border-b border-gray-200/60 pb-2 mb-2">
+                      <div>
+                        <p className="text-[10px] font-bold text-violet-600">รายการคิวรถประจำวัน</p>
+                        <h4 className="text-sm font-black text-gray-900">
+                          {mobileSelectedDate.getDate()} {getThaiMonthFull(mobileSelectedDate.getMonth())} {mobileSelectedDate.getFullYear() + 543}
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-black text-violet-800">
+                          {filteredBookings.filter(b => isBookingActiveOnDate(b, mobileSelectedDate)).length} คิว
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const y = mobileSelectedDate.getFullYear();
+                            const m = String(mobileSelectedDate.getMonth() + 1).padStart(2, '0');
+                            const day = String(mobileSelectedDate.getDate()).padStart(2, '0');
+                            handleOpenAddModal(`${y}-${m}-${day}`);
+                          }}
+                          className="rounded-lg bg-violet-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-violet-800"
+                        >
+                          + เพิ่มคิวรถ
+                        </button>
+                      </div>
                     </div>
-                  ))}
+
+                    {(() => {
+                      const selectedDayBookings = filteredBookings.filter(b => isBookingActiveOnDate(b, mobileSelectedDate));
+                      if (selectedDayBookings.length === 0) {
+                        return (
+                          <div className="py-6 text-center text-xs font-semibold text-gray-400">
+                            ไม่มีรายการคิวรถในวันนี้
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                          {selectedDayBookings.map((b) => {
+                            const primaryStyle = getFacultyStyle(b.bookingFaculty);
+                            const borderLeftColor = primaryStyle.borderHex || '#8B5CF6';
+
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => setSelectedEvent({ ...b, vanId: b.vanId })}
+                                className="w-full text-left rounded-xl border-l-4 bg-white p-2.5 shadow-2xs hover:shadow-xs transition-all flex flex-col gap-1"
+                                style={{ borderLeftColor }}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className={`w-2 h-2 rounded-full shrink-0 ${(b.status === 'APPROVED' || b.status === 'approved' || b.status === 'COMPLETED' || b.status === 'completed') ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                    <span className={`text-xs font-black truncate ${primaryStyle.textColor || 'text-gray-800'}`}>
+                                      {primaryStyle.shortName}
+                                    </span>
+                                  </div>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getStatusBadgeColor(b.status, b.statusText)}`}>
+                                    {b.statusText || b.status}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center justify-between text-xs text-gray-700">
+                                  <span className="font-bold truncate">{b.destination || b.purpose}</span>
+                                  <span className="shrink-0 text-[11px] font-semibold text-gray-500">{b.time} น.</span>
+                                </div>
+
+                                <div className="flex items-center justify-between text-[11px] text-gray-400 pt-1 border-t border-gray-100">
+                                  <span>ผู้ขอ: {b.requester}</span>
+                                  <span className="text-violet-600 font-bold">ดูรายละเอียด &rarr;</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
+
+                {/* Desktop View: min-w-[800px] table */}
+                <div className="hidden md:flex flex-col min-w-[800px] h-full min-h-[600px] p-2 overflow-x-auto">
+                  <div className="grid grid-cols-7 text-center mb-2">
+                    {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map((day, i) => (
+                      <div key={i} className="py-2 text-xs font-bold text-gray-400">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
                 
                 <div className="grid grid-cols-7 gap-1 flex-1 min-h-0 overflow-y-auto p-1 auto-rows-fr">
                   {getCalendarDays(baseDate).map((cell) => {
@@ -992,7 +1222,7 @@ function CalendarContent() {
 
                     // ตรวจสอบว่าในวันนั้นมีรายการยืมรถคณะอื่นหรือไม่
                     const hasBorrowedVans = dayBookings.some(b => {
-                      const vOwner = vansMap[b.vanId]?.facultyName;
+                      const vOwner = b.targetFaculty || vansMap[b.vanId]?.facultyName;
                       return b.status === 'pending_cross_faculty' || (vOwner && !isFacultyMatch(vOwner, b.bookingFaculty)) || (b.assignedVans && b.assignedVans.some(v => v.isBorrow || !isFacultyMatch(v.facultyName, b.bookingFaculty)));
                     });
 
@@ -1062,16 +1292,29 @@ function CalendarContent() {
                             (() => {
                               const b = dayBookings[0];
                               const isSelected = selectedEvent?.id === b.id;
-                              const vanOwner = vansMap[b.vanId];
-                              const ownerFaculty = vanOwner ? vanOwner.facultyName : b.bookingFaculty;
-                              const isBorrowed = b.status === 'pending_cross_faculty' || (ownerFaculty && !isFacultyMatch(ownerFaculty, b.bookingFaculty));
 
                               const primaryFacultyName = b.bookingFaculty;
                               const primaryStyle = getFacultyStyle(primaryFacultyName);
                               const borderLeftColor = primaryStyle.borderHex || '#D97706';
 
-                              const borrowedFacultyName = ownerFaculty;
-                              const borrowedFacultyStyle = getFacultyStyle(borrowedFacultyName);
+                              // รวบรวมคณะที่ถูกยืมทั้งหมดในวันนั้น
+                              const borrowedFaculties = Array.from(
+                                new Set(
+                                  dayBookings.flatMap(db => {
+                                    const dbOwner = db.targetFaculty || vansMap[db.vanId]?.facultyName;
+                                    const isDbBorrowed = db.status === 'pending_cross_faculty' || (dbOwner && !isFacultyMatch(dbOwner, db.bookingFaculty));
+                                    if (isDbBorrowed && dbOwner) {
+                                      return [getFacultyStyle(dbOwner)];
+                                    }
+                                    if (db.assignedVans && db.assignedVans.length > 0) {
+                                      return db.assignedVans
+                                        .filter(av => av.isBorrow || !isFacultyMatch(av.facultyName, db.bookingFaculty))
+                                        .map(av => getFacultyStyle(av.facultyName));
+                                    }
+                                    return [];
+                                  })
+                                )
+                              ).filter((f, idx, arr) => arr.findIndex(x => x.shortName === f.shortName) === idx);
 
                               const subText = b.destination || b.purpose || (b.vanId ? b.vanId.replace('v-', '').toUpperCase() : '');
                               const extraCount = dayBookings.length - 1;
@@ -1105,18 +1348,26 @@ function CalendarContent() {
                                         </span>
                                       </div>
                                       
-                                      {/* ฝั่งขวา: คำว่า ยืม ● คณะที่ถูกยืม + ป้ายคิววงกลม +1, +2 */}
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        {isBorrowed && (
+                                      {/* ฝั่งขวา: คำว่า ยืม ● คณะที่ถูกยืม (แสดงแค่คณะเดียว เช่น ยืม ● วิทย์) + ป้ายคิววงกลม +1, +2 */}
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {borrowedFaculties.length > 0 && (
                                           <div 
                                             className="flex items-center gap-1 shrink-0 bg-transparent pl-0.5" 
-                                            title={`ยืมรถตู้ ${borrowedFacultyStyle.shortName}`}
+                                            title={`ยืมรถตู้จากคณะ: ${borrowedFaculties.map(f => f.shortName).join(', ')}`}
                                           >
                                             <span className="text-[8px] 2xl:text-[9px] font-bold text-gray-500">ยืม</span>
-                                            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${borrowedFacultyStyle.dotColor || 'bg-amber-500'}`} />
-                                            <span className={`text-[8px] 2xl:text-[9px] font-bold ${borrowedFacultyStyle.textColor || 'text-slate-600'}`}>
-                                              {borrowedFacultyStyle.shortName}
-                                            </span>
+                                            {(() => {
+                                              const bf = borrowedFaculties[0];
+                                              const shortName = bf.shortName === 'วิทยาศาสตร์' ? 'วิทย์' : bf.shortName;
+                                              return (
+                                                <>
+                                                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${bf.dotColor || 'bg-amber-500'}`} />
+                                                  <span className={`text-[8px] 2xl:text-[9px] font-bold ${bf.textColor || 'text-slate-600'}`}>
+                                                    {shortName}
+                                                  </span>
+                                                </>
+                                              );
+                                            })()}
                                           </div>
                                         )}
                                         {extraCount > 0 && (
@@ -1125,7 +1376,7 @@ function CalendarContent() {
                                               ev.stopPropagation();
                                               setShowMoreEventsDate(cell.dateObj);
                                             }}
-                                            className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-violet-100/90 hover:bg-violet-200 text-[8px] 2xl:text-[9px] font-black text-violet-800 border border-violet-200/80 shadow-2xs transition-all cursor-pointer shrink-0"
+                                            className="inline-flex items-center justify-center font-black text-violet-700 hover:text-violet-900 text-[9px] 2xl:text-[10px] transition-colors cursor-pointer shrink-0 ml-0.5"
                                             title={`มีคิวรถอีก +${extraCount} คิวในวันนี้ (คลิกเพื่อดูทั้งหมด)`}
                                           >
                                             +{extraCount}
@@ -1231,6 +1482,7 @@ function CalendarContent() {
                   </div>
                 </div>
 
+                </div>
               </div>
             )}
 
@@ -1276,10 +1528,27 @@ function CalendarContent() {
                               const fDriver = fv.driverName || fVan?.driverName || 'พนักงานขับรถ';
                               const fPhone = fv.phone || fVan?.driverPhone || '-';
 
+                              const fDriverImg = (fv.driverImage && fv.driverImage.trim() !== '' && !fv.driverImage.includes('unsplash.com'))
+                                ? fv.driverImage
+                                : (fVan?.driverImage && fVan.driverImage.trim() !== '' && !fVan.driverImage.includes('unsplash.com'))
+                                  ? fVan.driverImage
+                                  : null;
+
                               return (
                                 <div key={`fleet-item-${fv.id || fIdx}-${fIdx}`} className="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between gap-2 shadow-2xs">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className={`w-2 h-2 rounded-full shrink-0 ${fv.isBorrow ? 'bg-purple-500' : 'bg-emerald-500'}`} />
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    {fDriverImg ? (
+                                      <div className="relative shrink-0">
+                                        <img 
+                                          src={fDriverImg} 
+                                          className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs" 
+                                          alt="driver" 
+                                        />
+                                        <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${fv.isBorrow ? 'bg-purple-500' : 'bg-emerald-500'}`} />
+                                      </div>
+                                    ) : (
+                                      <span className={`w-2 h-2 rounded-full shrink-0 ${fv.isBorrow ? 'bg-purple-500' : 'bg-emerald-500'}`} />
+                                    )}
                                     <div className="truncate">
                                       <p className="text-[11px] font-bold text-gray-900 truncate">
                                         {fv.isBorrow ? `[ยืม] ${fv.facultyName}` : fv.facultyName} ({fPlate})
@@ -1300,13 +1569,19 @@ function CalendarContent() {
                       }
 
                       const currentVan = vansMap[selectedEvent.vanId] || vansList.find(v => v.facultyName === selectedEvent.bookingFaculty) || vansList[0];
-                      const dAvatar = currentVan?.driverImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150';
+                      const dAvatar = (currentVan?.driverImage && currentVan.driverImage.trim() !== '' && !currentVan.driverImage.includes('unsplash.com')) ? currentVan.driverImage.trim() : '';
                       const dName = currentVan?.driverName || 'ยังไม่ระบุคนขับ';
                       const vInfo = currentVan ? `${currentVan.vanName} (${currentVan.plate})` : 'ยังไม่ระบุรถตู้';
 
                       return (
                         <div className="bg-white p-2.5 rounded-xl border border-gray-100 flex items-center gap-3">
-                          <img src={dAvatar} className="w-10 h-10 rounded-full object-cover border border-gray-100" alt="driver" />
+                          {dAvatar ? (
+                            <img src={dAvatar} className="w-10 h-10 rounded-full object-cover border border-gray-100" alt="driver" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-[#311171] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                              {dName ? dName.trim().charAt(0) : <User size={16} />}
+                            </div>
+                          )}
                           <div>
                             <p className="text-xs font-black text-gray-900 leading-tight">คนขับประจำรถ: {dName}</p>
                             <p className="text-[10px] text-[#311171] font-bold mt-0.5">{vInfo}</p>
@@ -1397,6 +1672,52 @@ function CalendarContent() {
                       </div>
                     </div>
                   </div>
+
+                  {selectedEvent.attachments && selectedEvent.attachments.length > 0 && (
+                    <div className="pt-3 border-t border-gray-100">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Paperclip size={14} className="text-[#311171]" />
+                        <span className="text-[11px] font-bold text-gray-800">
+                          เอกสารแนบ ({selectedEvent.attachments.length} ไฟล์):
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {selectedEvent.attachments.map((att, aIdx) => {
+                          const badge = getFileBadge(att.name);
+                          return (
+                            <a
+                              key={aIdx}
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/40 hover:bg-purple-100/60 border border-purple-100 hover:border-purple-200 text-gray-800 transition-all group shadow-2xs"
+                              title={`เปิดเอกสาร: ${att.name}`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 pr-2">
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 ${badge.bg}`}>
+                                  {badge.label}
+                                </span>
+                                <div className="truncate">
+                                  <p className="text-[11px] font-bold text-gray-900 group-hover:text-[#311171] truncate leading-tight transition-colors">
+                                    {att.name}
+                                  </p>
+                                  {att.size && (
+                                    <p className="text-[9px] text-gray-400 font-medium">
+                                      {formatFileSize(att.size)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 text-[#311171] bg-white group-hover:bg-[#311171] group-hover:text-white px-2 py-1 rounded-lg border border-purple-200 text-[10px] font-bold shrink-0 shadow-2xs transition-all">
+                                <span>เปิดดู</span>
+                                <ExternalLink size={10} />
+                              </div>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1440,31 +1761,88 @@ function CalendarContent() {
       />
 
       {/* Modal: ยืนยันการลบ */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-               <Trash2 size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">ลบรายการจอง?</h3>
-            <p className="text-sm text-gray-500 mb-6">คุณแน่ใจหรือไม่ว่าต้องการลบกิจกรรมในปฏิทินนี้?<br/>การกระทำนี้ไม่สามารถกู้คืนได้</p>
-            <div className="flex gap-3 w-full">
-              <button 
-                onClick={() => setDeleteConfirmId(null)} 
-                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors"
-              >
-                ยกเลิก
-              </button>
-              <button 
-                onClick={() => confirmDelete(deleteConfirmId)} 
-                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-sm shadow-red-200"
-              >
-                ยืนยันการลบ
-              </button>
+      {deleteConfirmId && (() => {
+        const confirmTargetEvent = bookingsData.find(b => b.id === deleteConfirmId);
+        const confirmTargetSubIds = new Set((confirmTargetEvent?.assignedVans || confirmTargetEvent?.selectedVans || []).map(v => v.id).filter(Boolean));
+        const hasBorrow = (confirmTargetEvent?.assignedVans && confirmTargetEvent.assignedVans.some(v => v.isBorrow)) ||
+                          (confirmTargetEvent?.selectedVans && confirmTargetEvent.selectedVans.some(v => v.isBorrow)) ||
+                          confirmTargetEvent?.status === 'pending_cross_faculty' ||
+                          confirmTargetEvent?.statusText?.includes('ยืม') ||
+                          confirmTargetEvent?.purpose?.includes('ยืมรถ') ||
+                          confirmTargetEvent?.purpose?.includes('คันที่ ');
+
+        const isFleet = (confirmTargetEvent?.assignedVans && confirmTargetEvent.assignedVans.length > 1) ||
+                        (confirmTargetEvent?.selectedVans && confirmTargetEvent.selectedVans.length > 1) ||
+                        hasBorrow;
+
+        const cleanTargetPurpose = (confirmTargetEvent?.purpose || '').replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+        const relatedEvents = isFleet && confirmTargetEvent ? bookingsData.filter(b => {
+          if (b.id === deleteConfirmId) return true;
+          if (confirmTargetSubIds.size > 0 && (b.assignedVans || b.selectedVans || []).some(v => confirmTargetSubIds.has(v.id))) return true;
+          const bDateStr = b.date instanceof Date ? b.date.toISOString().slice(0, 10) : String(b.date).slice(0, 10);
+          const tDateStr = confirmTargetEvent.date instanceof Date ? confirmTargetEvent.date.toISOString().slice(0, 10) : String(confirmTargetEvent.date).slice(0, 10);
+          if (b.requester === confirmTargetEvent.requester && bDateStr === tDateStr && b.destination === confirmTargetEvent.destination) {
+            const cleanBPurpose = (b.purpose || '').replace(/\s*\(คันที่\s*\d+\/\d+[^)]*\)/g, '').trim();
+            if (cleanBPurpose === cleanTargetPurpose) return true;
+          }
+          return false;
+        }) : (confirmTargetEvent ? [confirmTargetEvent] : []);
+
+        const fleetCount = Math.max(relatedEvents.length, confirmTargetEvent?.assignedVans?.length || 1);
+
+        return (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                 <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {isFleet ? `ลบขบวนรถตู้และคำขอยืมรถ (${fleetCount} คัน)?` : 'ลบรายการจอง?'}
+              </h3>
+
+              {isFleet ? (
+                <div className="text-xs text-gray-600 space-y-2 mb-6 text-left bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5">
+                  <p className="font-bold text-amber-900 flex items-center gap-1.5">
+                    <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+                    ข้อกำหนดการยกเลิก/ลบคำขอยืมรถ:
+                  </p>
+                  <p className="text-amber-800 leading-relaxed">
+                    คำขอนี้เป็นขบวนรถตู้หรือมีการยืมรถจากคณะอื่น <b>({fleetCount} คัน)</b> ตามระเบียบหากต้องการยกเลิกหรือลบรถที่ยืมคณะอื่นออกไป <b>การลบ 1 คันจะทำการลบคำขอทั้งขบวนออกทั้งหมด</b> และผู้ขอใช้บริการต้องทำการยื่นคำขอจองใหม่อีกครั้ง
+                  </p>
+                  {confirmTargetEvent?.assignedVans && confirmTargetEvent.assignedVans.length > 0 && (
+                    <div className="pt-2 border-t border-amber-200/60 space-y-1">
+                      <p className="text-[10px] font-bold text-amber-900">รถที่จะถูกลบออกทั้งหมดในคำขอนี้:</p>
+                      {confirmTargetEvent.assignedVans.map((v, vIdx) => (
+                        <div key={vIdx} className="flex items-center justify-between text-[11px] text-gray-700 bg-white/80 px-2 py-1 rounded-lg">
+                          <span>{v.isBorrow ? `[ยืม] ${v.facultyName}` : v.facultyName}</span>
+                          <span className="font-mono text-[10px] text-gray-500">{v.plate || '-'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 mb-6">คุณแน่ใจหรือไม่ว่าต้องการลบกิจกรรมในปฏิทินนี้?<br/>การกระทำนี้ไม่สามารถกู้คืนได้</p>
+              )}
+
+              <div className="flex gap-3 w-full">
+                <button 
+                  onClick={() => setDeleteConfirmId(null)} 
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button 
+                  onClick={() => confirmDelete(deleteConfirmId)} 
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-sm shadow-red-200 cursor-pointer"
+                >
+                  {isFleet ? 'ยืนยันลบทั้งขบวน' : 'ยืนยันการลบ'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal: Show More Events */}
       {showMoreEventsDate && (
@@ -1488,7 +1866,7 @@ function CalendarContent() {
                 })
                 .map((b, bIdx) => {
                 const vanOwner = vansMap[b.vanId];
-                const ownerFaculty = vanOwner ? vanOwner.facultyName : b.bookingFaculty;
+                const ownerFaculty = b.targetFaculty || (vanOwner ? vanOwner.facultyName : b.bookingFaculty);
                 const isBorrowed = b.status === 'pending_cross_faculty' || (ownerFaculty && !isFacultyMatch(ownerFaculty, b.bookingFaculty));
                 
                 // ฝั่งซ้ายเป็นคณะผู้ขอจองเสมอ (เช่น ICT)
@@ -1520,12 +1898,16 @@ function CalendarContent() {
                       </div>
                       <span className="text-[10px] text-slate-500 font-medium truncate mt-0.5">{subText}</span>
                     </div>
-                    {isBorrowed && (
+                    {isBorrowed ? (
                       <div className="flex items-center gap-1 shrink-0 bg-transparent pl-0.5">
                         <span className="text-[9px] font-bold text-gray-500">ยืม</span>
                         <span className={`h-1.5 w-1.5 rounded-full ${borrowedFacultyStyle.dotColor || 'bg-sky-500'}`} />
                         <span className={`text-[9px] font-bold ${borrowedFacultyStyle.textColor || 'text-slate-600'}`}>{borrowedFacultyStyle.shortName}</span>
                       </div>
+                    ) : (
+                      <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">
+                        รถคณะ
+                      </span>
                     )}
                   </button>
                 );
@@ -1547,6 +1929,8 @@ export interface SelectedVanItem {
   plate?: string;
   driverName?: string;
   phone?: string;
+  driverImage?: string;
+  vanImage?: string;
 }
 
 export default function FacultyCalendarPage() {

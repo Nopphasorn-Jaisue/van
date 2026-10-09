@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  Building2, Users, Bus, UserCheck, X,
+  Building2, Users, Bus, UserCheck, X, User,
   Phone, Mail, History, ChevronLeft, ChevronRight,
   CheckCircle2, Trash2
 } from "lucide-react";
@@ -327,11 +327,9 @@ export default function SuperAdminFaculties() {
               <h5 className="font-bold text-gray-900 text-xs">ผู้อนุมัติผู้บริหาร</h5>
               {selectedFaculty.executiveName && selectedFaculty.executiveName !== "-" ? (
                 <div className="flex items-center gap-3 pt-1">
-                  <img 
-                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150" 
-                    alt={selectedFaculty.executiveName}
-                    className="w-10 h-10 rounded-full object-cover border border-purple-100" 
-                  />
+                  <div className="w-10 h-10 rounded-full bg-purple-100 text-[#311171] flex items-center justify-center font-bold text-sm border border-purple-200 shrink-0">
+                    {selectedFaculty.executiveName.trim().charAt(0) || <User size={16} />}
+                  </div>
                   <div>
                     <p className="font-bold text-gray-900">{selectedFaculty.executiveName}</p>
                     <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.executiveTitle || "คณบดี / รองคณบดีฝ่ายบริหาร"}</p>
@@ -361,11 +359,9 @@ export default function SuperAdminFaculties() {
               <h5 className="font-bold text-gray-900 text-xs">ผู้ดูแลคณะ (ปัจจุบัน)</h5>
               {selectedFaculty.adminName && selectedFaculty.adminName !== "-" ? (
                 <div className="flex items-center gap-3 pt-1">
-                  <img 
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
-                    alt={selectedFaculty.adminName}
-                    className="w-10 h-10 rounded-full object-cover border border-purple-100" 
-                  />
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm border border-emerald-200 shrink-0">
+                    {selectedFaculty.adminName.trim().charAt(0) || <User size={16} />}
+                  </div>
                   <div>
                     <p className="font-bold text-gray-900">{selectedFaculty.adminName}</p>
                     <p className="text-[11px] text-gray-500 font-medium">{selectedFaculty.adminTitle || "ผู้ดูแลระบบคณะ (Faculty Admin)"}</p>
@@ -404,11 +400,17 @@ export default function SuperAdminFaculties() {
                   {selectedFaculty.driversList.map((drv, drvIdx) => (
                     <div key={`fac-drv-${drv.id || drvIdx}`} className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50/80 transition-colors">
                       <div className="flex items-center gap-2.5">
-                        <img 
-                          src={drv.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150"} 
-                          alt={drv.name}
-                          className="w-9 h-9 rounded-full object-cover border border-purple-100 shrink-0" 
-                        />
+                        {drv.avatar && drv.avatar.trim() !== '' && !drv.avatar.includes('unsplash.com') ? (
+                          <img 
+                            src={drv.avatar} 
+                            alt={drv.name}
+                            className="w-9 h-9 rounded-full object-cover border border-purple-100 shrink-0" 
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-[#311171] text-white flex items-center justify-center font-bold text-xs border border-purple-200 shrink-0">
+                            {drv.name.trim().charAt(0) || <User size={14} />}
+                          </div>
+                        )}
                         <div>
                           <div className="flex items-center gap-1.5">
                             <p className="font-bold text-gray-900 text-xs">{drv.name}</p>

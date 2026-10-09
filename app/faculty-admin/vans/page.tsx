@@ -80,6 +80,7 @@ export default function VansPage() {
     fuelType: "ดีเซล",
     status: "ready",
     image: "",
+    isShared: true,
     taxExp: "",
     insExp: ""
   });
@@ -104,7 +105,13 @@ export default function VansPage() {
   const loadVans = async (silent = false) => {
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch('/api/vans');
+      const res = await fetch(`/api/vans?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
       if (res.ok) {
         const text = await res.text();
         const data = JSON.parse(text);
@@ -142,9 +149,9 @@ export default function VansPage() {
             fuelType: v.fuelType || "ดีเซล",
             status: v.status || "ready",
             isShared: v.isShared !== undefined ? v.isShared : true,
-            image: (v.image && !v.image.includes('Foto01') && !v.image.includes('LOGO') && (v.image.startsWith('http') || v.image.startsWith('data:image') || v.image.startsWith('/')))
+            image: (v.image && !v.image.includes('Foto01') && !v.image.includes('LOGO') && !v.image.includes('unsplash.com') && (v.image.startsWith('http') || v.image.startsWith('data:image') || v.image.startsWith('/')))
             ? v.image
-            : (v.imageUrl && (v.imageUrl.startsWith('http') || v.imageUrl.startsWith('data:image') || v.imageUrl.startsWith('/')) ? v.imageUrl : "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80"),
+            : (v.imageUrl && !v.imageUrl.includes('unsplash.com') && (v.imageUrl.startsWith('http') || v.imageUrl.startsWith('data:image') || v.imageUrl.startsWith('/')) ? v.imageUrl : ""),
             taxExp: v.taxExp || v.taxExpiry || "",
             insExp: v.insExp || v.insuranceExpiry || ""
           }));
@@ -186,7 +193,8 @@ export default function VansPage() {
       capacity: 12,
       fuelType: "ดีเซล",
       status: "ready",
-      image: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=300&q=80",
+      isShared: true,
+      image: "",
       taxExp: "",
       insExp: ""
     });
@@ -201,6 +209,7 @@ export default function VansPage() {
       capacity: van.capacity,
       fuelType: van.fuelType,
       status: van.status,
+      isShared: van.isShared !== undefined ? van.isShared : true,
       image: van.image,
       taxExp: van.taxExp || "",
       insExp: van.insExp || ""
@@ -235,10 +244,13 @@ export default function VansPage() {
 
       const data = await res.json();
       if (data.success) {
+        if (editingId) {
+          setVans(prev => prev.map(v => v.id === editingId ? { ...v, ...formData, image: formData.image } : v));
+        }
+        try { sessionStorage.removeItem('cached_faculty_vans'); } catch {}
         showToast('บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
         setIsModalOpen(false);
-        try { sessionStorage.removeItem('cached_faculty_vans'); } catch {}
-        loadVans(true);
+        await loadVans(true);
       } else {
         showToast('เกิดข้อผิดพลาด: ' + (data.error || 'Unknown error'), 'error');
         loadVans(true);
@@ -352,7 +364,17 @@ export default function VansPage() {
                 <div key={van.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
                   {/* Image */}
                   <div className="h-40 relative overflow-hidden bg-gray-100">
-                    <img src={van.image} alt={van.vanName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    {van.image && van.image.trim() !== '' ? (
+                      <img src={van.image} alt={van.vanName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#311171]/10 via-purple-50 to-[#e4a11b]/10 flex flex-col items-center justify-center p-4">
+                        <div className="w-14 h-14 rounded-2xl bg-white/90 border border-purple-100 flex items-center justify-center text-[#311171] shadow-sm mb-2">
+                          <Fuel size={28} />
+                        </div>
+                        <span className="text-xs font-bold text-gray-700">{van.plate || van.vanName}</span>
+                        <span className="text-[10px] text-gray-400 font-medium">ยังไม่มีรูปภาพ</span>
+                      </div>
+                    )}
                     
                     {/* Status Badge */}
                     <div className="absolute top-3 left-3">
@@ -485,7 +507,7 @@ export default function VansPage() {
                 <label className="block text-sm font-bold text-gray-700 mb-2">รูปภาพรถ</label>
                 <div className="flex gap-4 items-start">
                   <div className="w-24 h-24 rounded-xl overflow-hidden bg-gray-100 border border-gray-200 shrink-0 flex items-center justify-center">
-                    {formData.image ? (
+                    {formData.image && formData.image.trim() !== '' ? (
                       <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
                     ) : (
                       <ImageIcon className="text-gray-400" size={32} />
@@ -495,52 +517,71 @@ export default function VansPage() {
                     <input 
                       type="file" 
                       accept="image/*"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const rawData = event.target?.result as string;
-                            if (!rawData) return;
-                            
-                            const img = new window.Image();
-                            img.onload = () => {
-                              const canvas = document.createElement('canvas');
-                              const MAX_WIDTH = 1200;
-                              const MAX_HEIGHT = 800;
-                              let width = img.width;
-                              let height = img.height;
+                        if (!file) return;
 
-                              if (width > height) {
-                                if (width > MAX_WIDTH) {
-                                  height = Math.round(height * (MAX_WIDTH / width));
-                                  width = MAX_WIDTH;
-                                }
-                              } else {
-                                if (height > MAX_HEIGHT) {
-                                  width = Math.round(width * (MAX_HEIGHT / height));
-                                  height = MAX_HEIGHT;
-                                }
-                              }
-
-                              canvas.width = width;
-                              canvas.height = height;
-                              const ctx = canvas.getContext('2d');
-                              if (ctx) {
-                                ctx.drawImage(img, 0, 0, width, height);
-                                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
-                                setFormData(prev => ({ ...prev, image: compressedBase64 }));
-                              } else {
-                                setFormData(prev => ({ ...prev, image: rawData }));
-                              }
-                            };
-                            img.onerror = () => {
-                              setFormData(prev => ({ ...prev, image: rawData }));
-                            };
-                            img.src = rawData;
-                          };
-                          reader.readAsDataURL(file);
+                        // Try real upload to /api/upload
+                        try {
+                          const uploadForm = new FormData();
+                          uploadForm.append('file', file);
+                          uploadForm.append('type', 'vans');
+                          const res = await fetch('/api/upload', {
+                            method: 'POST',
+                            body: uploadForm
+                          });
+                          const data = await res.json();
+                          if (data.success && data.url) {
+                            setFormData(prev => ({ ...prev, image: data.url }));
+                            return;
+                          }
+                        } catch (err) {
+                          console.warn("Server upload failed, falling back to base64 compression", err);
                         }
+
+                        // Fallback: client-side base64 compression
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const rawData = event.target?.result as string;
+                          if (!rawData) return;
+                          
+                          const img = new window.Image();
+                          img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 1200;
+                            const MAX_HEIGHT = 800;
+                            let width = img.width;
+                            let height = img.height;
+
+                            if (width > height) {
+                              if (width > MAX_WIDTH) {
+                                height = Math.round(height * (MAX_WIDTH / width));
+                                width = MAX_WIDTH;
+                              }
+                            } else {
+                              if (height > MAX_HEIGHT) {
+                                width = Math.round(width * (MAX_HEIGHT / height));
+                                height = MAX_HEIGHT;
+                              }
+                            }
+
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            if (ctx) {
+                              ctx.drawImage(img, 0, 0, width, height);
+                              const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                              setFormData(prev => ({ ...prev, image: compressedBase64 }));
+                            } else {
+                              setFormData(prev => ({ ...prev, image: rawData }));
+                            }
+                          };
+                          img.onerror = () => {
+                            setFormData(prev => ({ ...prev, image: rawData }));
+                          };
+                          img.src = rawData;
+                        };
+                        reader.readAsDataURL(file);
                       }}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-[#311171]/10 file:text-[#311171] hover:file:bg-[#311171]/20 file:transition-colors file:cursor-pointer cursor-pointer border border-gray-200 rounded-xl p-1"
                     />

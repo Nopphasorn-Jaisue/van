@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { facultyVansList, UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
+import { UnifiedVanInfo } from '@/Frontend/data/faculty-vans';
 
 export type { UnifiedVanInfo };
-export { facultyVansList };
+
 
 export type CalendarEventRecord = {
   id: string;
@@ -11,6 +11,7 @@ export type CalendarEventRecord = {
   vanId: string;
   facultyId: string;
   bookingFaculty: string;
+  targetFaculty?: string;
   destination: string;
   purpose: string;
   purposeDetail?: string;
@@ -42,7 +43,15 @@ export type CalendarEventRecord = {
     plate?: string;
     driverName?: string;
     phone?: string;
+    driverImage?: string;
+    vanImage?: string;
     isBorrow: boolean;
+  }>;
+  attachments?: Array<{
+    name: string;
+    url: string;
+    size?: number;
+    type?: string;
   }>;
   createdAt: string;
 };

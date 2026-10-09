@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import AppShell from '@/components/AppShell';
-import { Clock, Users, Phone, AlertTriangle, CheckCircle, Gauge, X, FileText, CalendarDays, Loader2, ChevronRight, CarFront } from 'lucide-react';
+import { Clock, Users, Phone, AlertTriangle, CheckCircle, Gauge, X, FileText, CalendarDays, Loader2, ChevronRight, CarFront, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import { getDriverDashboardData } from '@/app/actions/driver';
 import { requestAvailabilityChange } from '@/app/actions/driver-availability';
@@ -115,8 +115,15 @@ export default function DriverDashboard() {
               
               const now = new Date();
               const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+              const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-              calTotalTrips = activeEvents.length;
+              // กรองเฉพาะงานในเดือนและปีปัจจุบันเท่านั้น (ไม่นับทริปทั้งปี)
+              const thisMonthEvents = activeEvents.filter((e: RawCalendarEvent) => {
+                const sDate = e.date ? String(e.date).slice(0, 7) : '';
+                return sDate === currentYearMonth;
+              });
+
+              calTotalTrips = thisMonthEvents.length;
 
               const foundToday = activeEvents.find((e: RawCalendarEvent) => {
                 const sDate = e.date ? String(e.date).slice(0, 10) : '';
@@ -147,7 +154,7 @@ export default function DriverDashboard() {
             todaysTrip: res.data.todaysTrip || calTodaysTrip,
             stats: {
               ...res.data.stats,
-              totalTrips: (res.data.stats?.totalTrips || 0) + calTotalTrips,
+              totalTrips: res.data.stats?.totalTrips || 0,
               totalDistance: res.data.stats?.totalDistance || 0
             }
           };
@@ -155,7 +162,7 @@ export default function DriverDashboard() {
         } else {
           setDashboardData({
             todaysTrip: calTodaysTrip,
-            stats: { totalTrips: calTotalTrips, totalDistance: 0 }
+            stats: { totalTrips: 0, totalDistance: 0 }
           });
         }
       } catch (err) {
@@ -265,25 +272,31 @@ export default function DriverDashboard() {
 
         {/* KPI Cards (4 กล่องสไตล์ Faculty Admin แบบ 3D มิติ) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-          {/* Card 1 - จำนวนทริปเดือนนี้ */}
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#311171]/20 hover:shadow-md transition-all">
+          {/* Card 1 - จำนวนทริปจบงานเดือนนี้ */}
+          <Link
+            href="/driver/schedule"
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#311171]/20 hover:shadow-md transition-all cursor-pointer"
+          >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full bg-[#311171] flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-[#311171]/30">
                 <CarFront size={28} strokeWidth={2.5} />
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-600 mb-0.5">ทริปทั้งหมดเดือนนี้</p>
+                <p className="text-sm font-bold text-gray-600 mb-0.5">ทริปจบงานเดือนนี้</p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-black text-gray-900">{stats?.totalTrips || 0} ทริป</span>
                 </div>
-                <p className="text-xs font-bold text-purple-600 mt-0.5">สถิติสะสมในระบบ</p>
+                <p className="text-xs font-bold text-purple-600 mt-0.5">กดจบงานในเดือนนี้</p>
               </div>
             </div>
             <ChevronRight size={20} className="text-gray-300 group-hover:text-[#311171] transition-colors" />
-          </div>
+          </Link>
 
           {/* Card 2 - ระยะทางรวม */}
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-green-200 hover:shadow-md transition-all">
+          <Link
+            href="/driver/usage-report"
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-green-200 hover:shadow-md transition-all cursor-pointer"
+          >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-green-200">
                 <Gauge size={28} strokeWidth={2.5} />
@@ -297,7 +310,7 @@ export default function DriverDashboard() {
               </div>
             </div>
             <ChevronRight size={20} className="text-gray-300 group-hover:text-green-500 transition-colors" />
-          </div>
+          </Link>
 
           {/* Card 3 - สมุดบันทึกรถ */}
           <Link 
@@ -319,7 +332,25 @@ export default function DriverDashboard() {
             <ChevronRight size={20} className="text-gray-300 group-hover:text-[#C39B22] transition-colors" />
           </Link>
 
-
+          {/* Card 4 - รายงานการใช้งานรถตู้ */}
+          <Link 
+            href="/driver/usage-report"
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-blue-200 hover:shadow-md transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md shadow-blue-200">
+                <FileSpreadsheet size={28} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-600 mb-0.5">รายงานการใช้งานรถตู้</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-black text-gray-900">สรุปรายงาน</span>
+                </div>
+                <p className="text-xs font-bold text-blue-600 mt-0.5">ดูบันทึกและสถิติรายเดือน</p>
+              </div>
+            </div>
+            <ChevronRight size={20} className="text-gray-300 group-hover:text-blue-600 transition-colors" />
+          </Link>
         </div>
 
         {/* Today's Trip Card */}

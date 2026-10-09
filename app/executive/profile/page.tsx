@@ -27,16 +27,16 @@ export default function ExecutiveProfilePage() {
             email: dbUser.email || "ไม่มีอีเมล",
             faculty: dbUser.faculty?.nameTh || "ไม่ระบุคณะ",
             role: dbUser.role === 'EXECUTIVE' ? "คณบดี (Executive)" : dbUser.role,
-            avatar: dbUser.avatar || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150"
+            avatar: (dbUser.avatar && !dbUser.avatar.includes('unsplash.com')) ? dbUser.avatar : ""
           });
         } else {
-          // 🌟 FALLBACK สำหรับโหมด Bypass / ทดสอบระบบ
+          // Fallback สำหรับโหมด Bypass / ทดสอบระบบ
           setUser({
             name: "รศ.ดร. ฐิติรัตน์ เชี่ยวสุวรรณ (โหมดทดสอบ)",
             email: "thitirat.ch@up.ac.th",
             faculty: "คณะเทคโนโลยีสารสนเทศและการสื่อสาร",
             role: "คณบดี (Executive)",
-            avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150"
+            avatar: ""
           });
         }
       } catch (err) {
@@ -79,38 +79,8 @@ export default function ExecutiveProfilePage() {
         {/* Profile Card */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden p-6">
           
-          {/* Header Banner - Minimalist */}
-          <div className="relative rounded-2xl bg-gray-50/50 border border-gray-100 overflow-hidden flex flex-col sm:flex-row items-center sm:items-start p-8 gap-6">
-            
-            {/* Avatar */}
-            <div className="relative z-10 shrink-0">
-              <div className="w-32 h-32 rounded-2xl overflow-hidden border-4 border-white shadow-sm bg-white">
-                <img 
-                  src={user.avatar} 
-                  alt={user.name} 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            </div>
-
-            {/* User Info (Banner) */}
-            <div className="relative z-10 flex-1 flex flex-col items-center sm:items-start pt-2">
-              <h2 className="text-2xl sm:text-3xl font-black mb-3 text-gray-900 text-center sm:text-left tracking-tight">{user.name}</h2>
-              <div className="inline-flex items-center gap-2 bg-[#311171]/10 text-[#311171] px-4 py-1.5 rounded-full border border-[#311171]/20 font-bold text-sm">
-                <ShieldCheck size={16} />
-                {user.role}
-              </div>
-            </div>
-
-            {/* University Tag */}
-            <div className="relative z-10 shrink-0 mt-2 sm:mt-0 bg-blue-50 border border-blue-100 rounded-full px-4 py-1.5 flex items-center gap-2 text-xs font-bold text-blue-700">
-              <ShieldCheck size={14} />
-              ข้อมูลผูกกับบัญชีมหาวิทยาลัย
-            </div>
-          </div>
-
           {/* Info Section */}
-          <div className="mt-8 rounded-2xl bg-transparent p-2 border-transparent">
+          <div className="rounded-2xl bg-transparent p-2 border-transparent">
             <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-100">
               
               {/* Name */}
@@ -137,15 +107,26 @@ export default function ExecutiveProfilePage() {
 
             </div>
 
-            <div className="border-t border-gray-100">
+            <div className="border-t border-gray-100 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-100">
               {/* Faculty */}
-              <div className="flex items-center gap-4 p-4 hover:bg-gray-50/50 transition-colors rounded-b-xl">
+              <div className="flex-1 flex items-center gap-4 p-4 hover:bg-gray-50/50 transition-colors rounded-b-xl md:rounded-bl-xl md:rounded-br-none">
                 <div className="w-12 h-12 rounded-full bg-white border border-gray-100 flex items-center justify-center text-[#5b2fb6] shrink-0 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.1)]">
                   <Building2 size={20} strokeWidth={2.5} />
                 </div>
                 <div>
                   <p className="text-[12px] font-bold text-gray-500 mb-0.5">สังกัดคณะ</p>
                   <p className="text-[16px] font-black text-[#401b8e]">{user.faculty}</p>
+                </div>
+              </div>
+
+              {/* Role */}
+              <div className="flex-1 flex items-center gap-4 p-4 hover:bg-gray-50/50 transition-colors rounded-b-xl md:rounded-br-xl md:rounded-bl-none">
+                <div className="w-12 h-12 rounded-full bg-white border border-gray-100 flex items-center justify-center text-emerald-600 shrink-0 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.1)]">
+                  <ShieldCheck size={20} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <p className="text-[12px] font-bold text-gray-500 mb-0.5">สิทธิ์การใช้งาน / บทบาท</p>
+                  <p className="text-[16px] font-black text-gray-900">{user.role}</p>
                 </div>
               </div>
             </div>

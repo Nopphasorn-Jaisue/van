@@ -4,7 +4,7 @@ import AppShell from '@/components/AppShell';
 import { 
   CalendarDays, MapPin, Clock, ArrowUpRight,
   Users, FileText, CheckCircle, XCircle, Ban, ArrowLeftRight, Building2,
-  Navigation
+  Navigation, RefreshCw
 } from 'lucide-react';
 
 type RecentTrip = {
@@ -25,6 +25,31 @@ type DriverSummary = {
   status: string;
   initials: string;
 };
+
+interface ReportsResponse {
+  success: boolean;
+  kpis?: Array<{
+    title: string;
+    value: string;
+    unit: string;
+    trend: string;
+  }>;
+  bookingStatusSummary?: {
+    total: number;
+    approved: number;
+    rejected: number;
+    cancelled: number;
+    pending: number;
+  };
+  topBorrowingFaculties?: Array<{ facultyName: string; count: number }>;
+  topLentFaculties?: Array<{ facultyName: string; count: number }>;
+  topProvinces?: Array<{ name: string; count: number }>;
+  popularDays?: Array<{ date: string; count: number }>;
+  topDestinations?: Array<{ name: string; count: number; percentage: number }>;
+  driverSummary?: DriverSummary[];
+  recentTrips?: RecentTrip[];
+  error?: string;
+}
 
 export default function Page() {
   const [bookingStatusSummary, setBookingStatusSummary] = useState({
@@ -47,47 +72,70 @@ export default function Page() {
   ]);
 
   const [topDestinations, setTopDestinations] = useState<{name: string, count: number, percentage: number}[]>([]);
-  const [recentTrips, setRecentTrips] = useState<RecentTrip[]>([]);
   const [driverSummary, setDriverSummary] = useState<DriverSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const applyData = (data: ReportsResponse | null | undefined) => {
+    if (!data || !data.success) return;
+    if (data.kpis && data.kpis.length >= 3) {
+      setKpis([
+        { title: data.kpis[0].title, value: data.kpis[0].value, unit: data.kpis[0].unit, trend: data.kpis[0].trend, trendUp: true, icon: CalendarDays, color: "bg-indigo-50", iconColor: "text-indigo-600", valueColor: "text-slate-900" },
+        { title: data.kpis[1].title, value: data.kpis[1].value, unit: data.kpis[1].unit, trend: data.kpis[1].trend, trendUp: true, icon: MapPin, color: "bg-emerald-50", iconColor: "text-emerald-600", valueColor: "text-slate-900" },
+        { title: data.kpis[2].title, value: data.kpis[2].value, unit: data.kpis[2].unit, trend: data.kpis[2].trend, trendUp: true, icon: Clock, color: "bg-purple-50", iconColor: "text-purple-600", valueColor: "text-slate-900" },
+      ]);
+    }
+
+    if (data.bookingStatusSummary) setBookingStatusSummary(data.bookingStatusSummary);
+    if (data.topBorrowingFaculties) setTopBorrowingFaculties(data.topBorrowingFaculties);
+    if (data.topLentFaculties) setTopLentFaculties(data.topLentFaculties);
+    if (data.topProvinces) setTopProvinces(data.topProvinces);
+    if (data.popularDays) setPopularDays(data.popularDays);
+    if (data.topDestinations) setTopDestinations(data.topDestinations);
+    if (data.driverSummary) setDriverSummary(data.driverSummary);
+  };
+
+  const loadData = async (forceBypass = false) => {
+    try {
+      if (forceBypass) setIsRefreshing(true);
+      const url = forceBypass ? `/api/reports?_t=${Date.now()}` : '/api/reports';
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (data.success) {
+        applyData(data);
+        try {
+          sessionStorage.setItem('cached_faculty_reports', JSON.stringify(data));
+        } catch {}
+      }
+    } catch (err) {
+      console.error("Error loading real reports data:", err);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        const res = await fetch('/api/reports', { cache: 'no-store' });
-        const data = await res.json();
-        
-        if (data.success) {
-          if (data.kpis && data.kpis.length >= 3) {
-            setKpis([
-              { title: data.kpis[0].title, value: data.kpis[0].value, unit: data.kpis[0].unit, trend: data.kpis[0].trend, trendUp: true, icon: CalendarDays, color: "bg-indigo-50", iconColor: "text-indigo-600", valueColor: "text-slate-900" },
-              { title: data.kpis[1].title, value: data.kpis[1].value, unit: data.kpis[1].unit, trend: data.kpis[1].trend, trendUp: true, icon: MapPin, color: "bg-emerald-50", iconColor: "text-emerald-600", valueColor: "text-slate-900" },
-              { title: data.kpis[2].title, value: data.kpis[2].value, unit: data.kpis[2].unit, trend: data.kpis[2].trend, trendUp: true, icon: Clock, color: "bg-purple-50", iconColor: "text-purple-600", valueColor: "text-slate-900" },
-            ]);
-          }
-
-          if (data.bookingStatusSummary) setBookingStatusSummary(data.bookingStatusSummary);
-          if (data.topBorrowingFaculties) setTopBorrowingFaculties(data.topBorrowingFaculties);
-          if (data.topLentFaculties) setTopLentFaculties(data.topLentFaculties);
-          if (data.topProvinces) setTopProvinces(data.topProvinces);
-          if (data.popularDays) setPopularDays(data.popularDays);
-          if (data.topDestinations) setTopDestinations(data.topDestinations);
-          if (data.driverSummary) setDriverSummary(data.driverSummary);
-          if (data.recentTrips) setRecentTrips(data.recentTrips);
+    // 1. Instant display from sessionStorage cache if available (0ms load)
+    try {
+      const cached = sessionStorage.getItem('cached_faculty_reports');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.success) {
+          applyData(parsed);
+          setIsLoading(false);
         }
-      } catch (err) {
-        console.error("Error loading real reports data:", err);
-      } finally {
-        setIsLoading(false);
       }
-    };
+    } catch {}
+
+    // 2. Background fresh load
     loadData();
   }, []);
 
   return (
     <AppShell>
-      <div className="h-full flex flex-col space-y-4 pb-12 animate-in fade-in">
+      <div className="max-w-[1400px] w-full mx-auto animate-in fade-in flex-1 flex flex-col min-h-0 space-y-4 pb-12">
         
         {/* Page Title */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
@@ -95,11 +143,22 @@ export default function Page() {
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">รายงานและสถิติการใช้งานรถตู้ (ข้อมูลจริง)</h1>
             <p className="text-xs text-slate-500 mt-0.5">ภาพรวมการใช้งานรถตู้ประจำคณะ สถิติสำคัญ และประวัติการเดินทางจริงจากฐานข้อมูล</p>
           </div>
-          {isLoading && (
-            <div className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full flex items-center gap-1.5 self-start md:self-auto animate-pulse">
-              <span>กำลังดึงข้อมูลล่าสุดจากระบบ...</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            {isLoading && (
+              <div className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full flex items-center gap-1.5 animate-pulse">
+                <span>กำลังดึงข้อมูล...</span>
+              </div>
+            )}
+            <button
+              onClick={() => loadData(true)}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
+              title="รีเฟรชข้อมูลสดจากฐานข้อมูล"
+            >
+              <RefreshCw size={13} className={isRefreshing ? "animate-spin text-indigo-600" : "text-slate-500"} />
+              <span>{isRefreshing ? "กำลังอัปเดต..." : "รีเฟรชข้อมูล"}</span>
+            </button>
+          </div>
         </div>
 
         {/* 1. สรุปคำสั่งจองทั้งหมด 4 สถานะ */}
