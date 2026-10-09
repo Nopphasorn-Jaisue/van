@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import AppShell from '@/components/AppShell';
 import { 
   Camera, FileText, UploadCloud, MapPin, CheckCircle, 
-  Plus, Trash2, Car, AlertTriangle, X, ChevronRight, Receipt, Edit
+  Plus, Trash2, Car, AlertTriangle, X, ChevronRight, Receipt
 } from 'lucide-react';
-import { getAssignedBookings, submitDriverLog, updateDriverLog, createAdhocBooking } from '@/app/actions/driver';
+import { getAssignedBookings, submitDriverLog, createAdhocBooking } from '@/app/actions/driver';
 import { uploadImage } from '@/app/actions/upload';
 import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ThaiTimePicker from '@/components/ThaiTimePicker';
