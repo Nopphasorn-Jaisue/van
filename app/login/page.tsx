@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { setMockSession, getRoleByEmail } from '@/app/actions/auth';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -13,6 +13,13 @@ function LoginForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(
     rawError ? decodeURIComponent(rawError) : null
   );
+
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err) {
+      setErrorMessage(decodeURIComponent(err));
+    }
+  }, [searchParams]);
 
     const handleMicrosoftLogin = (role: 'EXECUTIVE' | 'SUPER_ADMIN' | 'DRIVER' | 'ADMIN' | 'GUEST' = 'GUEST') => {
     setLoadingRole(role);

@@ -5,7 +5,10 @@ import { cookies } from "next/headers";
 import { Role } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
+  const proto = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+  const origin = `${proto}://${host}`;
   const code = searchParams.get("code");
   const error = searchParams.get("error");
   const errorDescription = searchParams.get("error_description");
