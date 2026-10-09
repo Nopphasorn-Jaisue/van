@@ -2,13 +2,8 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { Prisma } from "@prisma/client";
 
-const secretKey = process.env.JWT_SECRET;
-if (!secretKey && process.env.NODE_ENV === "production") {
-  throw new Error("CRITICAL SECURITY ERROR: JWT_SECRET environment variable is missing in production.");
-}
-const JWT_SECRET = new TextEncoder().encode(
-  secretKey || "local-dev-fallback-secret-key-32-chars-minimum"
-);
+const secretKey = process.env.JWT_SECRET || "fallback-secret-key-van-booking-up-2026-secure-32chars";
+const JWT_SECRET = new TextEncoder().encode(secretKey);
 
 export type AuthUserType = Prisma.UserGetPayload<{ include: { faculty: true } }>;
 

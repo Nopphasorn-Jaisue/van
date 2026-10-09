@@ -9,8 +9,9 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [loadingRole, setLoadingRole] = useState<'ADMIN' | 'DRIVER' | 'SUPER_ADMIN' | 'EXECUTIVE' | 'GUEST' | null>(null);
   const [emailInput, setEmailInput] = useState('');
+  const rawError = searchParams.get('error');
   const [errorMessage, setErrorMessage] = useState<string | null>(
-    searchParams.get('error') ? 'การยืนยันตัวตนล้มเหลว กรุณาลองใหม่อีกครั้ง' : null
+    rawError ? decodeURIComponent(rawError) : null
   );
 
     const handleMicrosoftLogin = (role: 'EXECUTIVE' | 'SUPER_ADMIN' | 'DRIVER' | 'ADMIN' | 'GUEST' = 'GUEST') => {

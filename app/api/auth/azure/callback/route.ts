@@ -151,9 +151,22 @@ export async function GET(request: NextRequest) {
       faculty: dbUser.faculty,
     });
 
-    // 6. Set session cookie
-    const cookieStore = await cookies();
-    cookieStore.set("auth_token", token, {
+    // 6. Determine redirect path based on role
+    let targetPath = "/user/calendar";
+    if (dbUser.role === "SUPER_ADMIN") {
+      targetPath = "/super-admin/dashboard";
+    } else if (dbUser.role === "FACULTY_ADMIN") {
+      targetPath = "/faculty-admin/dashboard";
+    } else if (dbUser.role === "DRIVER") {
+      targetPath = "/driver/dashboard";
+    } else if (dbUser.role === "EXECUTIVE") {
+      targetPath = "/executive/dashboard";
+    }
+
+    const response = NextResponse.redirect(`${origin}${targetPath}`);
+
+    // Set cookies directly on NextResponse so Set-Cookie header is sent in 307/302 response
+    response.cookies.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -161,19 +174,26 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24, // 1 day
     });
 
-    cookieStore.set("mock_role", dbUser.role, { path: "/", maxAge: 60 * 60 * 24 });
-    cookieStore.set("mock_email", dbUser.email, { path: "/", maxAge: 60 * 60 * 24 });
+    response.cookies.set("mock_role", dbUser.role, { path: "/", maxAge: 60 * 60 * 24 });
+    response.cookies.set("mock_email", dbUser.email, { path: "/", maxAge: 60 * 60 * 24 });
 
-    // 7. Redirect to dashboard based on role
-    if (dbUser.role === "SUPER_ADMIN") {
-      return NextResponse.redirect(`${origin}/super-admin/dashboard`);
-    } else if (dbUser.role === "FACULTY_ADMIN") {
-      return NextResponse.redirect(`${origin}/faculty-admin/dashboard`);
-    } else if (dbUser.role === "DRIVER") {
-      return NextResponse.redirect(`${origin}/driver/dashboard`);
-    } else {
-      return NextResponse.redirect(`${origin}/user/calendar`);
+    // Also attempt cookieStore for internal Next server context
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set("auth_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24,
+      });
+      cookieStore.set("mock_role", dbUser.role, { path: "/", maxAge: 60 * 60 * 24 });
+      cookieStore.set("mock_email", dbUser.email, { path: "/", maxAge: 60 * 60 * 24 });
+    } catch {
+      // Ignore if in route handler context
     }
+
+    return response;
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "An error occurred";
     console.error("Azure callback error:", err);
