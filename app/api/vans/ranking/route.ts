@@ -9,7 +9,8 @@ export async function POST(request: Request) {
       endAt: body.endAt,
       requestedCount: body.requestedCount ? Number(body.requestedCount) : 1,
       passengerCount: body.passengerCount ? Number(body.passengerCount) : 1,
-      preferredFaculty: body.preferredFaculty || undefined
+      preferredFaculty: body.preferredFaculty || undefined,
+      userFaculty: body.userFaculty || undefined
     });
     return NextResponse.json(result);
   } catch (error) {

@@ -325,6 +325,22 @@ export async function handleCreateSystemBooking(request: Request) {
           }
         });
 
+        if (Array.isArray(body.attachments) && body.attachments.length > 0) {
+          for (const att of body.attachments) {
+            if (att.url && att.name) {
+              const fSize = typeof att.size === 'number' ? Number((att.size / (1024 * 1024)).toFixed(2)) : (typeof att.fileSize === 'number' ? att.fileSize : 0);
+              await tx.attachment.create({
+                data: {
+                  bookingId: bookingId,
+                  fileName: att.name || att.fileName,
+                  fileUrl: att.url || att.fileUrl,
+                  fileSize: fSize
+                }
+              }).catch(e => console.warn("Prisma attachment note:", e));
+            }
+          }
+        }
+
         itemsCreated.push({
           created,
           item,
@@ -373,7 +389,8 @@ export async function handleCreateSystemBooking(request: Request) {
         passengerNames: body.passengerNames || "",
         requestedVehicleCount: Number(body.requestedVehicleCount || body.vehiclesCount || facultiesToBook.length),
         requestTimestamp: requestTimestamp,
-        destinations: record.destinationsList
+        destinations: record.destinationsList,
+        attachments: Array.isArray(body.attachments) ? body.attachments : []
       });
 
       createdBookings.push(record.created);

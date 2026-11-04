@@ -14,7 +14,8 @@ import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ThaiTimePicker from '@/components/ThaiTimePicker';
 import { thaiProvinces } from '@/Frontend/data/provinces';
 import { facultiesList } from '@/Frontend/data/faculties';
-import { OptimizationRecommendationResult } from '@/Backend/services/van-ranking';
+import type { OptimizationRecommendationResult } from '@/Backend/services/van-ranking';
+import { checkMultiDayTrip } from '@/lib/trip-calculation';
 
 interface DestinationItem {
   id: string;
@@ -28,6 +29,8 @@ function BookingFormContent() {
   const prefilledVanId = searchParams?.get('vanId');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSamePersonCoordinator, setIsSamePersonCoordinator] = useState(true);
+  const [isSamePickupDropoff, setIsSamePickupDropoff] = useState(true);
   const [successResult, setSuccessResult] = useState<{
     bookingId: string;
     requestTimestamp: string;
@@ -131,7 +134,8 @@ function BookingFormContent() {
         endAt: endIso,
         requestedCount: form.requestedVehicleCount,
         passengerCount: form.passengerCount,
-        preferredFaculty: form.preferredFaculty === 'own' ? userProfile.faculty : (form.preferredFaculty !== 'all' ? form.preferredFaculty : undefined)
+        preferredFaculty: form.preferredFaculty === 'own' ? userProfile.faculty : (form.preferredFaculty !== 'all' ? form.preferredFaculty : undefined),
+        userFaculty: userProfile.faculty
       })
     })
       .then(res => res.json())
@@ -223,8 +227,9 @@ function BookingFormContent() {
       alert("กรุณาระบุจำนวนผู้โดยสารอย่างน้อย 1 คน");
       return;
     }
-    if (!form.passengerNames.trim()) {
-      alert("กรุณาระบุชื่อ-นามสกุลของผู้โดยสาร");
+    // 5. ตรวจสอบรายชื่อผู้โดยสาร (ถ้าไม่ได้พิมพ์ ให้ตรวจสอบว่ามีการแนบไฟล์หรือไม่)
+    if (!form.passengerNames.trim() && attachments.length === 0) {
+      alert("กรุณาระบุรายชื่อผู้โดยสาร หรือแนบไฟล์เอกสารโครงการ/หนังสือขออนุมัติ");
       return;
     }
 
@@ -235,16 +240,67 @@ function BookingFormContent() {
       return;
     }
 
-    if (form.coordinatorPhone) {
-      const cleanCoordPhone = form.coordinatorPhone.replace(/\D/g, '');
-      if (cleanCoordPhone.length !== 10 || !cleanCoordPhone.startsWith('0')) {
+    const finalCoordName = isSamePersonCoordinator ? userProfile.name : form.coordinatorName.trim();
+    const finalCoordPhone = isSamePersonCoordinator ? cleanRequesterPhone : (form.coordinatorPhone || '').replace(/\D/g, '');
+
+    if (!isSamePersonCoordinator && finalCoordPhone) {
+      if (finalCoordPhone.length !== 10 || !finalCoordPhone.startsWith('0')) {
         alert("เบอร์โทรศัพท์ผู้ประสานงานต้องครบ 10 หลัก (ขึ้นต้นด้วย 0)");
         return;
       }
     }
 
+    const finalDropoff = isSamePickupDropoff ? form.pickupLocation : (form.dropoffLocation || form.pickupLocation);
+
     setIsSubmitting(true);
     try {
+      // อัปโหลดไฟล์เอกสารแนบ (ถ้ามี)
+      const uploadedAttachments: Array<{ id: string; name: string; url: string; size: number; type: string }> = [];
+      for (const file of attachments) {
+        let uploaded = false;
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('type', 'documents');
+          const upRes = await fetch('/api/upload', { method: 'POST', body: fd });
+          if (upRes.ok) {
+            const upData = await upRes.json();
+            if (upData.success && upData.url) {
+              uploadedAttachments.push({
+                id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                name: upData.fileName || file.name,
+                url: upData.url,
+                size: upData.fileSize || file.size,
+                type: upData.fileType || file.type
+              });
+              uploaded = true;
+            }
+          }
+        } catch (e) {
+          console.warn("Upload error, using fallback:", e);
+        }
+
+        if (!uploaded) {
+          try {
+            const b64 = await new Promise<string>((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = () => resolve(r.result as string);
+              r.onerror = reject;
+              r.readAsDataURL(file);
+            });
+            uploadedAttachments.push({
+              id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+              name: file.name,
+              url: b64,
+              size: file.size,
+              type: file.type
+            });
+          } catch (err) {
+            console.error("FileReader fallback error:", err);
+          }
+        }
+      }
+
       const requestTimestamp = new Date().toISOString();
       const primaryDest = form.destinations.map(d => `${d.place} (${d.province})`).join(' -> ');
 
@@ -256,8 +312,8 @@ function BookingFormContent() {
           requester: userProfile.name,
           requesterFaculty: userProfile.faculty,
           phone: cleanRequesterPhone,
-          coordinatorName: form.coordinatorName,
-          coordinatorPhone: form.coordinatorPhone,
+          coordinatorName: finalCoordName,
+          coordinatorPhone: finalCoordPhone,
           passengerCount: Number(form.passengerCount),
           passengerNames: form.passengerNames,
           requestedVehicleCount: Number(form.requestedVehicleCount),
@@ -268,7 +324,7 @@ function BookingFormContent() {
           destinations: form.destinations,
           destination: primaryDest,
           pickupLocation: form.pickupLocation,
-          dropoffLocation: form.dropoffLocation || form.destinations[form.destinations.length - 1]?.place || primaryDest,
+          dropoffLocation: finalDropoff,
           startDate: form.startDate,
           startTime: form.startTime,
           endDate: form.endDate,
@@ -278,6 +334,7 @@ function BookingFormContent() {
           budgetSource: form.budgetSource,
           preferredFaculty: form.preferredFaculty,
           selectedVanIds: form.selectedVanIds,
+          attachments: uploadedAttachments,
           requestTimestamp: requestTimestamp
         })
       });
@@ -439,60 +496,100 @@ function BookingFormContent() {
             </div>
           </div>
 
-          {/* เบอร์โทรผู้ขอจอง & ข้อมูลผู้ประสานงาน */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                เบอร์โทรศัพท์ผู้ขอใช้บริการ <span className="text-rose-500">*</span>
-              </label>
-              <input 
-                type="tel"
-                required
-                maxLength={10}
-                placeholder="เช่น 0812345678"
-                value={form.requesterPhone}
-                onChange={e => setForm({ ...form, requesterPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50"
-              />
-            </div>
+          {/* เบอร์โทรผู้ขอจอง */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              เบอร์โทรศัพท์ผู้ขอใช้บริการ (10 หลัก) <span className="text-rose-500">*</span>
+            </label>
+            <input 
+              type="tel"
+              required
+              maxLength={10}
+              placeholder="เช่น 0812345678"
+              value={form.requesterPhone}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                setForm(prev => ({
+                  ...prev,
+                  requesterPhone: val,
+                  coordinatorPhone: isSamePersonCoordinator ? val : prev.coordinatorPhone
+                }));
+              }}
+              className="w-full sm:w-1/2 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50"
+            />
+          </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                ชื่อ-สกุล ผู้ประสานงานการเดินทาง <span className="text-slate-400 font-normal">(ถ้ามี)</span>
-              </label>
-              <input 
-                type="text"
-                placeholder="เช่น นายประสาน งานดี"
-                value={form.coordinatorName}
-                onChange={e => setForm({ ...form, coordinatorName: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50"
+          {/* Checkbox: ผู้ประสานงานเป็นคนเดียวกับผู้ขอใช้บริการ */}
+          <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
+            <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-800 select-none">
+              <input
+                type="checkbox"
+                checked={isSamePersonCoordinator}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setIsSamePersonCoordinator(checked);
+                  if (checked) {
+                    setForm(prev => ({
+                      ...prev,
+                      coordinatorName: userProfile.name,
+                      coordinatorPhone: prev.requesterPhone
+                    }));
+                  }
+                }}
+                className="w-4 h-4 rounded text-[#311171] focus:ring-[#311171] accent-[#311171] cursor-pointer"
               />
-            </div>
+              <span>ผู้ประสานงานเป็นคนเดียวกับผู้ขอใช้บริการ</span>
+              <span className="text-[11px] font-normal text-slate-500">(ใช้ข้อมูลเดียวกับผู้ขอจอง)</span>
+            </label>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                เบอร์โทรศัพท์ผู้ประสานงาน <span className="text-slate-400 font-normal">(ถ้ามี)</span>
-              </label>
-              <input 
-                type="tel"
-                maxLength={10}
-                placeholder="เช่น 0898765432"
-                value={form.coordinatorPhone}
-                onChange={e => setForm({ ...form, coordinatorPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50"
-              />
-            </div>
+            {!isSamePersonCoordinator ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-200/70 animate-in fade-in slide-in-from-top-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ชื่อ-สกุล ผู้ประสานงานการเดินทาง <span className="text-rose-500">*</span>
+                  </label>
+                  <input 
+                    type="text"
+                    placeholder="เช่น นายประสาน งานดี"
+                    value={form.coordinatorName}
+                    onChange={e => setForm({ ...form, coordinatorName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    เบอร์โทรศัพท์ผู้ประสานงาน (10 หลัก) <span className="text-rose-500">*</span>
+                  </label>
+                  <input 
+                    type="tel"
+                    maxLength={10}
+                    placeholder="เช่น 0898765432"
+                    value={form.coordinatorPhone}
+                    onChange={e => setForm({ ...form, coordinatorPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-white"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50/80 px-2.5 py-1.5 rounded-lg border border-emerald-100 flex items-center gap-1.5">
+                <Check size={13} className="text-emerald-600 shrink-0" />
+                <span>ระบบบันทึกข้อมูลผู้ประสานงานให้ตรงกับผู้ขอใช้บริการเรียบร้อย ไม่ต้องกรอกซ้ำ</span>
+              </div>
+            )}
           </div>
 
           {/* รายชื่อผู้โดยสารทั้งหมด */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              รายชื่อผู้โดยสารทั้งหมด <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700">
+                รายชื่อผู้โดยสารทั้งหมด <span className="text-slate-400 font-normal">(ไม่บังคับ - สามารถแนบเอกสารโครงการในข้อ 6 แทนได้)</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-medium">ไม่รวมคนขับ</span>
+            </div>
             <textarea 
               rows={2}
-              required
-              placeholder="ระบุชื่อ-นามสกุล และตำแหน่งของผู้โดยสาร เช่น 1. รศ.ดร.สมชาย (อาจารย์), 2. นางสาวสมหญิง (นิสิต)..."
+              placeholder="ระบุชื่อ-นามสกุล หรือแนบเป็นไฟล์เอกสารโครงการ/หนังสือขออนุมัติเดินทางด้านล่างในข้อ 6"
               value={form.passengerNames}
               onChange={e => setForm({ ...form, passengerNames: e.target.value })}
               className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50 resize-none leading-relaxed"
@@ -529,7 +626,11 @@ function BookingFormContent() {
                     name="tripScope" 
                     value="ในจังหวัดพะเยา" 
                     checked={form.tripScope === 'ในจังหวัดพะเยา'}
-                    onChange={() => setForm({ ...form, tripScope: 'ในจังหวัดพะเยา' })}
+                    onChange={() => setForm(prev => ({ 
+                      ...prev, 
+                      tripScope: 'ในจังหวัดพะเยา',
+                      destinations: prev.destinations.map(d => ({ ...d, province: 'พะเยา' }))
+                    }))}
                     className="accent-[#311171] w-4 h-4"
                   />
                   <span>ภายในจังหวัด (พะเยา)</span>
@@ -592,6 +693,32 @@ function BookingFormContent() {
               </div>
             </div>
           </div>
+          {/* Trip Duration & Multi-Day Cutoff Badge */}
+          {(() => {
+            const mStatus = checkMultiDayTrip(`${form.startDate}T${form.startTime}:00`, `${form.endDate}T${form.endTime}:00`);
+            return (
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs ${
+                  mStatus.isMultiDay 
+                    ? 'bg-amber-50 text-amber-900 border-amber-200' 
+                    : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                }`}>
+                  {mStatus.isMultiDay ? (
+                    <>
+                      <Calendar size={12} className="text-amber-700" />
+                      <span>ทริปข้ามวัน ({mStatus.daysCount} วันปฏิบัติงาน - รอบละ 14 ชม. พัก 10 ชม. ตามจุดตัด 08:00 น.)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Clock size={12} className="text-emerald-700" />
+                      <span>ทริปวันเดียว (ไป - กลับ สิ้นสุดก่อน 08:00 น. วันถัดไป)</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           <p className="text-[10px] text-slate-400 font-medium">
             * รองรับการเดินทางภายในวันเดียว, ข้ามเที่ยงคืน, ค้างคืน และทริปหลายวัน รถและคนขับจะถูกบล็อกคิวตลอดช่วงเวลาดังกล่าว
           </p>
@@ -614,15 +741,42 @@ function BookingFormContent() {
               </label>
               <input 
                 type="number" 
-                min={1}
+                min={0}
                 required
-                value={form.passengerCount}
-                onChange={e => setForm({ ...form, passengerCount: Math.max(1, Number(e.target.value)) })}
+                value={form.passengerCount === 0 || form.passengerCount ? form.passengerCount : ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setForm(prev => ({ ...prev, passengerCount: '' as unknown as number }));
+                    return;
+                  }
+                  const num = parseInt(val, 10);
+                  if (!isNaN(num)) {
+                    const cleanNum = Math.max(0, num);
+                    const autoVans = cleanNum > 11 ? Math.max(2, Math.ceil(cleanNum / 11)) : form.requestedVehicleCount;
+                    setForm(prev => ({
+                      ...prev,
+                      passengerCount: cleanNum,
+                      requestedVehicleCount: cleanNum > 11 ? Math.max(prev.requestedVehicleCount, autoVans) : prev.requestedVehicleCount
+                    }));
+                  }
+                }}
+                onBlur={() => {
+                  if (!form.passengerCount || Number(form.passengerCount) < 1) {
+                    setForm(prev => ({ ...prev, passengerCount: 1 }));
+                  }
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-black text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50"
               />
-              <span className="text-[10px] text-slate-400 mt-1 block">
-                จำนวนผู้โดยสารรวมทั้งภารกิจ (ไม่รวมคนขับ)
-              </span>
+              {Number(form.passengerCount) > 11 ? (
+                <span className="text-[10px] text-purple-700 font-bold block bg-purple-50 px-2 py-0.5 rounded border border-purple-200 mt-1">
+                  ผู้โดยสาร {form.passengerCount} คน (ระบบแนะนำ {Math.ceil(Number(form.passengerCount) / 11)} คันตามระเบียบ 11 ที่นั่ง/คัน)
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  จำนวนผู้โดยสารรวมทั้งภารกิจ (ไม่รวมคนขับ)
+                </span>
+              )}
             </div>
 
             <div>
@@ -631,11 +785,26 @@ function BookingFormContent() {
               </label>
               <input 
                 type="number" 
-                min={1}
+                min={0}
                 max={5}
                 required
-                value={form.requestedVehicleCount}
-                onChange={e => setForm({ ...form, requestedVehicleCount: Math.max(1, Number(e.target.value)) })}
+                value={form.requestedVehicleCount === 0 || form.requestedVehicleCount ? form.requestedVehicleCount : ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setForm(prev => ({ ...prev, requestedVehicleCount: '' as unknown as number }));
+                    return;
+                  }
+                  const num = parseInt(val, 10);
+                  if (!isNaN(num)) {
+                    setForm(prev => ({ ...prev, requestedVehicleCount: Math.max(0, num) }));
+                  }
+                }}
+                onBlur={() => {
+                  if (!form.requestedVehicleCount || Number(form.requestedVehicleCount) < 1) {
+                    setForm(prev => ({ ...prev, requestedVehicleCount: 1 }));
+                  }
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-black text-[#311171] focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-purple-50/40"
               />
               <span className="text-[10px] text-slate-400 mt-1 block">
@@ -669,7 +838,8 @@ function BookingFormContent() {
           </div>
 
           {/* จุดรับ และ จุดส่ง */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* จุดรับ และ จุดส่ง */}
+          <div className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 จุดรับผู้โดยสาร (Pickup Location) <span className="text-rose-500">*</span>
@@ -679,22 +849,56 @@ function BookingFormContent() {
                 required
                 placeholder="เช่น หน้าอาคาร ICT, ลานจอดรถหน้ามหาวิทยาลัยพะเยา"
                 value={form.pickupLocation}
-                onChange={e => setForm({ ...form, pickupLocation: e.target.value })}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm(prev => ({
+                    ...prev,
+                    pickupLocation: val,
+                    dropoffLocation: isSamePickupDropoff ? val : prev.dropoffLocation
+                  }));
+                }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                จุดส่งผู้โดยสารขากลับ (Dropoff Location) <span className="text-slate-400 font-normal">(ถ้ามี)</span>
+            {/* Checkbox: ส่งกลับที่จุดรับเดิม */}
+            <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
+              <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-800 select-none">
+                <input
+                  type="checkbox"
+                  checked={isSamePickupDropoff}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    setIsSamePickupDropoff(checked);
+                    if (checked) {
+                      setForm(prev => ({ ...prev, dropoffLocation: prev.pickupLocation }));
+                    }
+                  }}
+                  className="w-4 h-4 rounded text-[#311171] focus:ring-[#311171] accent-[#311171] cursor-pointer"
+                />
+                <span>ส่งกลับที่จุดรับเดิม</span>
+                <span className="text-[11px] font-normal text-slate-500 truncate">({form.pickupLocation || 'มหาวิทยาลัยพะเยา'})</span>
               </label>
-              <input 
-                type="text"
-                placeholder="เช่น มหาวิทยาลัยพะเยา, หรือส่งตามจุดรับ"
-                value={form.dropoffLocation}
-                onChange={e => setForm({ ...form, dropoffLocation: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-slate-50/50"
-              />
+
+              {!isSamePickupDropoff ? (
+                <div className="mt-3 pt-3 border-t border-slate-200/70 animate-in fade-in slide-in-from-top-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    จุดส่งผู้โดยสารขากลับ (Dropoff Location) <span className="text-rose-500">*</span>
+                  </label>
+                  <input 
+                    type="text"
+                    placeholder="เช่น มหาวิทยาลัยพะเยา, หรือส่งตามจุดรับ"
+                    value={form.dropoffLocation}
+                    onChange={e => setForm({ ...form, dropoffLocation: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all bg-white"
+                  />
+                </div>
+              ) : (
+                <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50/80 px-2.5 py-1.5 rounded-lg border border-emerald-100 flex items-center gap-1.5">
+                  <Check size={13} className="text-emerald-600 shrink-0" />
+                  <span>ขากลับจะเดินทางมาส่ง ณ จุดรับเดิม ({form.pickupLocation || 'มหาวิทยาลัยพะเยา'})</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -725,24 +929,36 @@ function BookingFormContent() {
                   <input 
                     type="text"
                     required
-                    placeholder="ระบุสถานที่ปลายทาง เช่น ศูนย์ประชุมนานาชาติ, รพ.สต.บ้านต๊ำ"
+                    placeholder={form.tripScope === 'ในจังหวัดพะเยา' 
+                      ? "ระบุสถานที่ปลายทาง เช่น รพ.พะเยา, เทศบาลเมืองพะเยา, กว๊านพะเยา, รพ.สต.บ้านต๊ำ" 
+                      : "ระบุสถานที่ปลายทาง เช่น ศูนย์ประชุมนานาชาติเชียงใหม่, มหาวิทยาลัยเชียงใหม่"}
                     value={dest.place}
                     onChange={e => updateDestination(dest.id, 'place', e.target.value)}
                     className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-[#311171]"
                   />
 
-                  {/* Dropdown จังหวัดมาตรฐาน 77 จังหวัด (ข้อ 8) */}
-                  <select
-                    value={dest.province}
-                    onChange={e => updateDestination(dest.id, 'province', e.target.value)}
-                    className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:outline-none focus:border-[#311171] cursor-pointer"
-                  >
-                    {thaiProvinces.map(p => (
-                      <option key={p.id} value={p.nameTh}>
-                        {p.nameTh}
-                      </option>
-                    ))}
-                  </select>
+                  {/* ตัวเลือกจังหวัด (ล็อกเป็นพะเยาเมื่อเลือกในจังหวัด) */}
+                  {form.tripScope === 'ในจังหวัดพะเยา' ? (
+                    <div 
+                      className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 bg-slate-100 flex items-center justify-between select-none cursor-not-allowed"
+                      title="ขอบเขตการเดินทางอยู่ในจังหวัดพะเยา (หากต้องการไปต่างจังหวัด กรุณาเลือก 'ภายนอกจังหวัด' ด้านบน)"
+                    >
+                      <span className="truncate">พะเยา</span>
+                      <span className="text-[10px] text-slate-500 font-semibold px-1 rounded bg-slate-200/70 shrink-0">ในเขต</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={dest.province}
+                      onChange={e => updateDestination(dest.id, 'province', e.target.value)}
+                      className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:outline-none focus:border-[#311171] cursor-pointer"
+                    >
+                      {thaiProvinces.map(p => (
+                        <option key={p.id} value={p.nameTh}>
+                          {p.nameTh}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
                   {/* ปุ่มลบ (ถ้ามีมากกว่า 1 แห่ง) */}
                   {form.destinations.length > 1 && (
@@ -825,6 +1041,58 @@ function BookingFormContent() {
               </select>
             </div>
           </div>
+
+          {/* Model v5: Large Group Suggestion (> 11 passengers or multi-vehicle needed) */}
+          {rankingData?.largeGroupSuggestion?.isNeeded && (
+            <div className="p-4 bg-gradient-to-r from-purple-50 via-indigo-50/60 to-purple-50 border border-purple-200/90 rounded-2xl shadow-2xs space-y-2.5 animate-in fade-in">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#311171] text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <Award size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black text-[#311171]">
+                        ข้อเสนอแนะจัดชุดรถตู้สำหรับคณะใหญ่ (&gt; 11 ท่าน)
+                      </span>
+                      <span className="text-[10px] bg-purple-200 text-purple-950 font-bold px-2 py-0.5 rounded-full">
+                        Model v5 Auto-Dispatch
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                      {rankingData.largeGroupSuggestion.message}
+                    </p>
+                  </div>
+                </div>
+
+                {rankingData.largeGroupSuggestion.suggestedVanIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sug = rankingData.largeGroupSuggestion!;
+                      setForm(prev => ({
+                        ...prev,
+                        requestedVehicleCount: Math.max(prev.requestedVehicleCount, sug.suggestedVehicles),
+                        selectedVanIds: sug.suggestedVanIds
+                      }));
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                      rankingData.largeGroupSuggestion.suggestedVanIds.every(id => form.selectedVanIds.includes(id))
+                        ? 'bg-emerald-600 text-white shadow-emerald-200'
+                        : 'bg-[#311171] hover:bg-[#250b57] text-white'
+                    }`}
+                  >
+                    <Check size={14} strokeWidth={2.5} />
+                    <span>
+                      {rankingData.largeGroupSuggestion.suggestedVanIds.every(id => form.selectedVanIds.includes(id))
+                        ? 'เลือกชุด 2 คันนี้แล้ว'
+                        : `เลือกชุด ${rankingData.largeGroupSuggestion.suggestedVehicles} คันนี้พร้อมกัน`}
+                    </span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* แถบสรุปผลลัพธ์การค้นหา & Partial Fulfillment (ข้อ 4 & 14) */}
           {rankingData && (
@@ -936,6 +1204,24 @@ function BookingFormContent() {
                           </span>
                         </div>
                       </div>
+
+                      {/* Driver Safety Badge & Duty Info (Model v5) */}
+                      {van.safety && (
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-1.5 text-[9px]">
+                          <span className={`px-1.5 py-0.5 rounded font-bold ${
+                            van.safety.safetyStatus === 'SAFE'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : van.safety.safetyStatus === 'WARNING'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}>
+                            {van.safety.safetyBadgeText}
+                          </span>
+                          <span className="text-slate-400">
+                            พัก {van.safety.restHours >= 99 ? '>24 ชม.' : `${van.safety.restHours} ชม.`} • วันนี้ {van.safety.dailyHours.toFixed(1)}/14 ชม.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

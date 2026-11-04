@@ -3,6 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+function safeRevalidate(path: string) {
+  try {
+    revalidatePath(path);
+  } catch {
+    // Non-request context fallback
+  }
+}
+
 interface TripLegInput {
   deptDate: string;
   deptTime: string;
@@ -31,6 +39,121 @@ interface ExpenseData {
   remark?: string;
 }
 
+import { 
+  checkMultiDayTrip, 
+  calculateTripWorkProfile, 
+  MAX_DAILY_HOURS, 
+  MAX_WEEKLY_HOURS, 
+  MIN_REST_HOURS 
+} from "@/lib/trip-calculation";
+import { getStoredCalendarEvents, updateStoredCalendarEvent } from "@/Backend/services/calendar-store";
+import { 
+  getTodayInspectionByDriver, 
+  saveDailyInspectionRecord, 
+  saveEmergencyReport 
+} from "@/Backend/services/inspection-store";
+import type { 
+  DailyInspectionItemStatus, 
+  DriverSafetyDutyInfo 
+} from "@/lib/driver-types";
+
+export async function getDriverSafetyDutyMetrics(driverId: number): Promise<{ success: boolean; data?: DriverSafetyDutyInfo; error?: string }> {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 3600 * 1000);
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        assignedDriverId: driverId,
+        OR: [
+          { status: "APPROVED" },
+          { driverLog: { isNot: null } }
+        ]
+      },
+      orderBy: { departureDate: "asc" }
+    });
+
+    let todayDutyHours = 0;
+    let weeklyDutyHours = 0;
+    let lastTripEndDate: Date | null = null;
+
+    for (const b of bookings) {
+      const dep = new Date(b.departureDate);
+      const ret = new Date(b.returnDate);
+      if (isNaN(dep.getTime()) || isNaN(ret.getTime())) continue;
+
+      const profile = calculateTripWorkProfile(dep, ret);
+
+      // Check if touches today
+      if (dep < tomorrow && ret >= today) {
+        const startToday = Math.max(dep.getTime(), today.getTime());
+        const endToday = Math.min(ret.getTime(), tomorrow.getTime());
+        const hoursToday = Math.max(0, (endToday - startToday) / (3600 * 1000));
+        todayDutyHours += hoursToday;
+      }
+
+      // Check rolling 7 days
+      if (ret >= sevenDaysAgo && dep < tomorrow) {
+        weeklyDutyHours += profile.totalWorkHours;
+      }
+
+      // Find last trip that completed before today
+      if (ret < today) {
+        if (!lastTripEndDate || ret > lastTripEndDate) {
+          lastTripEndDate = ret;
+        }
+      }
+    }
+
+    let restHours = 999;
+    if (lastTripEndDate) {
+      restHours = Math.max(0, (Date.now() - lastTripEndDate.getTime()) / (3600 * 1000));
+    }
+
+    let safetyStatus: 'SAFE' | 'WARNING' | 'REST_CONFLICT' | 'OVER_LIMIT' = 'SAFE';
+    let safetyBadgeText = "พร้อมปฏิบัติงาน (พักผ่อนเพียงพอตามเกณฑ์ Model v5)";
+
+    if (restHours < MIN_REST_HOURS) {
+      safetyStatus = 'REST_CONFLICT';
+      safetyBadgeText = `พักผ่อนไม่ถึงเกณฑ์ขั้นต่ำ 10 ชม. (พักไปแล้ว ${restHours.toFixed(1)} ชม.)`;
+    } else if (todayDutyHours > MAX_DAILY_HOURS || weeklyDutyHours > MAX_WEEKLY_HOURS) {
+      safetyStatus = 'OVER_LIMIT';
+      safetyBadgeText = todayDutyHours > MAX_DAILY_HOURS
+        ? `เกินขีดจำกัดชั่วโมงขับขี่รายวัน (${todayDutyHours.toFixed(1)}/14 ชม.)`
+        : `เกินขีดจำกัดสะสม 7 วัน (${weeklyDutyHours.toFixed(1)}/72 ชม.)`;
+    } else if (weeklyDutyHours > 50 || todayDutyHours > 10) {
+      safetyStatus = 'WARNING';
+      safetyBadgeText = `ภาระงานสะสมสูง (${weeklyDutyHours.toFixed(1)}/72 ชม.)`;
+    }
+
+    return {
+      success: true,
+      data: {
+        safetyStatus,
+        safetyBadgeText,
+        todayDutyHours: Number(todayDutyHours.toFixed(1)),
+        weeklyDutyHours: Number(weeklyDutyHours.toFixed(1)),
+        restHours: Number(restHours.toFixed(1)),
+        dailyHoursRemaining: Number(Math.max(0, MAX_DAILY_HOURS - todayDutyHours).toFixed(1)),
+        weeklyHoursRemaining: Number(Math.max(0, MAX_WEEKLY_HOURS - weeklyDutyHours).toFixed(1)),
+        isRestSufficient: restHours >= MIN_REST_HOURS,
+        maxDailyLimit: MAX_DAILY_HOURS,
+        maxWeeklyLimit: MAX_WEEKLY_HOURS,
+        minRestLimit: MIN_REST_HOURS
+      }
+    };
+  } catch (error) {
+    console.error("Error calculating driver safety metrics:", error);
+    return {
+      success: false,
+      error: "Failed to calculate driver safety metrics"
+    };
+  }
+}
+
 export async function getDriverDashboardData(driverId: number) {
   try {
     const driver = await prisma.driver.findUnique({
@@ -46,9 +169,25 @@ export async function getDriverDashboardData(driverId: number) {
       }
     });
 
-    if (!driver) {
+    let activeDriver = driver;
+    if (!activeDriver) {
+      activeDriver = await prisma.driver.findFirst({
+        include: {
+          user: true,
+          assignedVan: true,
+          faculty: {
+            include: {
+              vans: true
+            }
+          }
+        }
+      });
+    }
+
+    if (!activeDriver) {
       return { success: false, error: "Driver not found" };
     }
+    const resolvedDriverId = activeDriver.id;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -68,7 +207,7 @@ export async function getDriverDashboardData(driverId: number) {
 
     const bookings = await prisma.booking.findMany({
       where: {
-        assignedDriverId: driverId,
+        assignedDriverId: resolvedDriverId,
         OR: [
           { status: "APPROVED" },
           { driverLog: { isNot: null } }
@@ -84,17 +223,19 @@ export async function getDriverDashboardData(driverId: number) {
       }
     });
 
-    // Find today's trip
-    const todaysTrip = bookings.find((b) => 
-      new Date(b.departureDate) >= today && new Date(b.departureDate) < tomorrow
-    );
+    // Find today's active or scheduled trip (supports multi-day trip active today)
+    const todaysTrip = bookings.find((b) => {
+      const dep = new Date(b.departureDate);
+      const ret = new Date(b.returnDate);
+      return dep < tomorrow && ret >= today;
+    });
 
-    // Find upcoming trips
+    // Find upcoming trips (departing tomorrow or later)
     const upcomingTrips = bookings.filter((b) => 
       new Date(b.departureDate) >= tomorrow
     );
 
-    // คำนวณจำนวนทริปที่ "กดจบงานแล้ว" (มี driverLog) เฉพาะในเดือนปัจจุบัน
+    // Calculate completed bookings in current month
     const thisMonthCompletedBookings = bookings.filter((b) => {
       if (!b.driverLog) return false;
       const tripDate = b.departureDate ? new Date(b.departureDate) : new Date(b.driverLog.createdAt);
@@ -105,26 +246,70 @@ export async function getDriverDashboardData(driverId: number) {
     const totalTrips = thisMonthCompletedBookings.length;
     const totalAllCompletedTrips = bookings.filter((b) => Boolean(b.driverLog)).length;
 
-    // คำนวณระยะทางขับขี่รวมทั้งหมดจากทริปที่มีบันทึกการเดินทาง (driverLog)
+    // Total distance driven from driver logs
     const totalDistance = bookings.reduce((sum: number, b) => 
       sum + (b.driverLog?.totalDistance || 0), 0
     );
+
+    // Model v5 Safety Metrics Calculation
+    const safetyRes = await getDriverSafetyDutyMetrics(resolvedDriverId);
+    const driverSafety = safetyRes.data || {
+      safetyStatus: 'SAFE' as const,
+      safetyBadgeText: "พร้อมปฏิบัติงาน (พักผ่อนเพียงพอตามเกณฑ์ Model v5)",
+      todayDutyHours: 0,
+      weeklyDutyHours: 0,
+      restHours: 999,
+      dailyHoursRemaining: 14.0,
+      weeklyHoursRemaining: 72.0,
+      isRestSufficient: true,
+      maxDailyLimit: 14.0,
+      maxWeeklyLimit: 72.0,
+      minRestLimit: 10.0
+    };
+
+    // Enrich todaysTrip with calendar store details (coordinator name, phone, pickup, dropoff)
+    const storedEvents = getStoredCalendarEvents();
+    let enrichedTodaysTrip = todaysTrip ? JSON.parse(JSON.stringify(todaysTrip)) : null;
+
+    if (enrichedTodaysTrip) {
+      const matchEv = storedEvents.find(e => 
+        e.id === enrichedTodaysTrip.id || 
+        e.id === `bk-${enrichedTodaysTrip.id}` ||
+        (e as { booking_id?: string }).booking_id === enrichedTodaysTrip.id
+      );
+
+      const mStatus = checkMultiDayTrip(enrichedTodaysTrip.departureDate, enrichedTodaysTrip.returnDate);
+
+      enrichedTodaysTrip = {
+        ...enrichedTodaysTrip,
+        coordinatorName: matchEv?.coordinatorName || enrichedTodaysTrip.requester?.name,
+        coordinatorPhone: matchEv?.coordinatorPhone || enrichedTodaysTrip.phone || enrichedTodaysTrip.requester?.phone,
+        pickupLocation: matchEv?.pickupLocation || "มหาวิทยาลัยพะเยา",
+        dropoffLocation: matchEv?.dropoffLocation || matchEv?.pickupLocation || "มหาวิทยาลัยพะเยา",
+        destinations: matchEv?.destinations || [{ place: enrichedTodaysTrip.destination, province: "พะเยา" }],
+        multiDayInfo: mStatus,
+        time: matchEv?.time || `${new Date(enrichedTodaysTrip.departureDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - ${new Date(enrichedTodaysTrip.returnDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`,
+        tripStatus: matchEv?.status || (enrichedTodaysTrip.driverLog ? 'completed' : 'approved')
+      };
+    }
 
     return { 
       success: true, 
       data: {
         driver: {
-          name: driver.user?.name || "พนักงานขับรถ",
-          faculty: driver.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
-          vanPlate: driver.assignedVan?.plate || driver.faculty?.vans?.[0]?.plate || "ยังไม่ระบุรถตู้"
+          name: activeDriver.user?.name || "พนักงานขับรถ",
+          faculty: activeDriver.faculty?.nameTh || "มหาวิทยาลัยพะเยา",
+          vanPlate: activeDriver.assignedVan?.plate || activeDriver.faculty?.vans?.[0]?.plate || "ยังไม่ระบุรถตู้"
         },
-        todaysTrip: JSON.parse(JSON.stringify(todaysTrip || null)),
+        todaysTrip: enrichedTodaysTrip,
         upcomingTrips: JSON.parse(JSON.stringify(upcomingTrips)),
         stats: {
           totalTrips,
           totalAllCompletedTrips,
           totalDistance
-        }
+        },
+        safety: driverSafety,
+        todayInspection: getTodayInspectionByDriver(resolvedDriverId)
       } 
     };
   } catch (error) {
@@ -177,7 +362,7 @@ export async function getAssignedBookings(driverId: number) {
   }
 }
 
-export interface AdhocFormData {
+interface AdhocFormData {
   destination: string;
   date: string;
   startTime: string;
@@ -731,6 +916,215 @@ export async function lookupUniversityUser(email: string) {
   } catch (err) {
     console.error("Lookup university user error:", err);
     return { found: false, error: (err as Error).message };
+  }
+}
+
+export async function quickStartTrip(
+  bookingId: string, 
+  driverId: number, 
+  startMileage: number, 
+  imgStartUrl?: string
+) {
+  try {
+    let booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) {
+      const driverObj = await prisma.driver.findUnique({ where: { id: driverId } });
+      if (driverObj) {
+        booking = await prisma.booking.create({
+          data: {
+            id: bookingId,
+            requesterId: driverObj.userId,
+            targetFacultyId: driverObj.facultyId,
+            destination: "ภารกิจตามตารางปฏิทิน",
+            objective: "บันทึกการเดินทางตามปฏิทินระบบ",
+            departureDate: new Date(),
+            returnDate: new Date(),
+            passengersCount: 1,
+            budgetSource: "-",
+            status: "APPROVED",
+            assignedDriverId: driverId
+          }
+        });
+      }
+    }
+
+    const existingLog = await prisma.driverLog.findUnique({ where: { bookingId } });
+    if (existingLog) {
+      await prisma.driverLog.update({
+        where: { bookingId },
+        data: {
+          mileageStart: Number(startMileage),
+          imgStartUrl: imgStartUrl || existingLog.imgStartUrl
+        }
+      });
+    } else {
+      await prisma.driverLog.create({
+        data: {
+          bookingId,
+          driverId,
+          mileageStart: Number(startMileage),
+          mileageEnd: Number(startMileage),
+          totalDistance: 0,
+          imgStartUrl: imgStartUrl || null
+        }
+      });
+    }
+
+    updateStoredCalendarEvent(bookingId, {
+      status: "ongoing",
+      statusText: "กำลังเดินทาง"
+    });
+
+    safeRevalidate('/driver/dashboard');
+    safeRevalidate('/driver/records');
+    safeRevalidate('/driver/schedule');
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error quick starting trip:", error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function quickFinishTrip(
+  bookingId: string,
+  driverId: number,
+  endMileage: number,
+  imgEndUrl?: string,
+  fuelRemark?: string,
+  startMileageFallback?: number
+) {
+  try {
+    let booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) {
+      const driverObj = await prisma.driver.findUnique({ where: { id: driverId } });
+      if (driverObj) {
+        booking = await prisma.booking.create({
+          data: {
+            id: bookingId,
+            requesterId: driverObj.userId,
+            targetFacultyId: driverObj.facultyId,
+            destination: "ภารกิจตามตารางปฏิทิน",
+            objective: "บันทึกการเดินทางตามปฏิทินระบบ",
+            departureDate: new Date(),
+            returnDate: new Date(),
+            passengersCount: 1,
+            budgetSource: "-",
+            status: "APPROVED",
+            assignedDriverId: driverId
+          }
+        });
+      }
+    }
+
+    const existingLog = await prisma.driverLog.findUnique({ where: { bookingId } });
+    const sMileage = existingLog ? existingLog.mileageStart : (startMileageFallback || endMileage);
+    const totalDist = Math.max(0, Number(endMileage) - Number(sMileage));
+
+    if (existingLog) {
+      await prisma.driverLog.update({
+        where: { bookingId },
+        data: {
+          mileageEnd: Number(endMileage),
+          totalDistance: totalDist,
+          imgEndUrl: imgEndUrl || existingLog.imgEndUrl,
+          fuelRemark: fuelRemark !== undefined ? fuelRemark : existingLog.fuelRemark
+        }
+      });
+    } else {
+      await prisma.driverLog.create({
+        data: {
+          bookingId,
+          driverId,
+          mileageStart: Number(sMileage),
+          mileageEnd: Number(endMileage),
+          totalDistance: totalDist,
+          imgEndUrl: imgEndUrl || null,
+          fuelRemark: fuelRemark || null
+        }
+      });
+    }
+
+    updateStoredCalendarEvent(bookingId, {
+      status: "completed",
+      statusText: "เสร็จสิ้นภารกิจ"
+    });
+
+    safeRevalidate('/driver/dashboard');
+    safeRevalidate('/driver/records');
+    safeRevalidate('/driver/schedule');
+    safeRevalidate('/driver/usage-report');
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error quick finishing trip:", error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function getDriverDailyInspection(driverId: number) {
+  try {
+    const inspection = getTodayInspectionByDriver(driverId);
+    return { success: true, data: inspection };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function submitDriverDailyInspection(
+  driverId: number,
+  vanPlate: string,
+  items: DailyInspectionItemStatus,
+  notes?: string
+) {
+  try {
+    const passed = items.tires && items.fuel && items.lights && items.brakes && items.cleanliness;
+    const targetDate = new Date().toISOString().slice(0, 10);
+    const record = saveDailyInspectionRecord({
+      driverId,
+      date: targetDate,
+      vanPlate,
+      items,
+      passed,
+      notes
+    });
+
+    safeRevalidate('/driver/dashboard');
+    return { success: true, data: record };
+  } catch (error) {
+    console.error("Error submitting daily inspection:", error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function submitDriverEmergencyReport(
+  driverId: number,
+  bookingId: string | undefined,
+  issueType: string,
+  detail: string,
+  location?: string
+) {
+  try {
+    const report = saveEmergencyReport({
+      driverId,
+      bookingId,
+      issueType,
+      detail,
+      location
+    });
+
+    return { 
+      success: true, 
+      data: report,
+      emergencyContacts: [
+        { name: "ศูนย์บริการยานพาหนะ มพ. (ส่วนกลาง)", phone: "054466666", ext: "1064" },
+        { name: "สายด่วนอุบัติเหตุ / กู้ภัยฉุกเฉิน", phone: "1669", ext: "" },
+        { name: "ตำรวจทางหลวง 24 ชม.", phone: "1193", ext: "" }
+      ]
+    };
+  } catch (error) {
+    console.error("Error reporting emergency:", error);
+    return { success: false, error: (error as Error).message };
   }
 }
 

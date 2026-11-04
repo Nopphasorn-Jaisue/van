@@ -7,11 +7,17 @@ interface ProvinceSelectProps {
   value: string;
   onChange: (province: string) => void;
   className?: string;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }
 
-
-
-export default function ProvinceSelect({ value, onChange, className = '' }: ProvinceSelectProps) {
+export default function ProvinceSelect({ 
+  value, 
+  onChange, 
+  className = '',
+  disabled = false,
+  disabledTooltip
+}: ProvinceSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +60,25 @@ export default function ProvinceSelect({ value, onChange, className = '' }: Prov
     onChange(provinceName);
     setIsOpen(false);
   };
+
+  if (disabled) {
+    return (
+      <div 
+        className={`relative ${className}`}
+        title={disabledTooltip || "ล็อกตามขอบเขตในจังหวัดพะเยา (หากต้องการไปจังหวัดอื่น กรุณาเลือก 'ต่างจังหวัด' ด้านบน)"}
+      >
+        <div className="w-full flex items-center justify-between gap-1.5 px-3 py-2 bg-slate-100/90 border border-slate-200/90 rounded-xl text-xs font-bold text-slate-600 select-none cursor-not-allowed">
+          <span className="flex items-center gap-1.5 truncate">
+            <MapPin size={13} className="text-slate-400 shrink-0" />
+            <span className="truncate">{value || 'พะเยา'}</span>
+          </span>
+          <span className="text-[10px] text-slate-500 font-semibold px-1.5 py-0.5 rounded bg-slate-200/70 shrink-0">
+            ในเขต
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>

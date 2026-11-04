@@ -12,7 +12,8 @@ import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ThaiTimePicker from '@/components/ThaiTimePicker';
 import ProvinceSelect from '@/components/ProvinceSelect';
 import FacultySelect from '@/components/FacultySelect';
-import { OptimizationRecommendationResult } from '@/Backend/services/van-ranking';
+import type { OptimizationRecommendationResult } from '@/Backend/services/van-ranking';
+import { checkMultiDayTrip } from '@/lib/trip-calculation';
 
 export interface SelectedVanItem {
   id: string;
@@ -173,6 +174,10 @@ export default function CalendarBookingModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Redundant form field toggles
+  const [isSamePersonCoordinator, setIsSamePersonCoordinator] = useState(true);
+  const [isSamePickupDropoff, setIsSamePickupDropoff] = useState(true);
+
   // File Attachments State
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -189,6 +194,14 @@ export default function CalendarBookingModal({
       (typeof editingEvent.purpose === 'string' && editingEvent.purpose.includes('คันที่ '))
     )
   );
+
+  // คำนวณระยะเวลาเดินทางและตัดรอบวันทำงานตาม Model v5 (08:00 cutoff)
+  const getMultiDayStatus = () => {
+    if (!form.startDate || !form.endDate) return { isMultiDay: false, description: '', daysCount: 1 };
+    const sIso = `${form.startDate}T${form.startTime || '08:30'}:00`;
+    const eIso = `${form.endDate}T${form.endTime || '16:30'}:00`;
+    return checkMultiDayTrip(sIso, eIso);
+  };
 
   // คำนวณระยะเวลาเดินทางแบบไดนามิก (Trip Duration Summary)
   const getTripDurationText = () => {
@@ -255,11 +268,24 @@ export default function CalendarBookingModal({
       const initialSelectedVanIds = editingEvent.assignedVans?.map(v => v.vanId) || 
         (editingEvent.vanId ? [editingEvent.vanId] : []);
 
+      const reqName = editingEvent.requester || currentUser?.name || "";
+      const reqPhone = formatPhoneNumber(editingEvent.phone || currentUser?.phone || "");
+      const coordName = editingEvent.coordinatorName || "";
+      const coordPhone = formatPhoneNumber(editingEvent.coordinatorPhone || "");
+
+      const isSameCoord = !coordName || (coordName.trim() === reqName.trim());
+      setIsSamePersonCoordinator(isSameCoord);
+
+      const pickupLoc = editingEvent.pickupLocation || "มหาวิทยาลัยพะเยา";
+      const dropoffLoc = editingEvent.dropoffLocation || "";
+      const isSameDrop = !dropoffLoc || (dropoffLoc.trim() === pickupLoc.trim());
+      setIsSamePickupDropoff(isSameDrop);
+
       setForm({
-        requester: editingEvent.requester || currentUser?.name || "",
-        requesterPhone: formatPhoneNumber(editingEvent.phone || currentUser?.phone || ""),
-        coordinatorName: editingEvent.coordinatorName || "",
-        coordinatorPhone: formatPhoneNumber(editingEvent.coordinatorPhone || ""),
+        requester: reqName,
+        requesterPhone: reqPhone,
+        coordinatorName: isSameCoord ? reqName : coordName,
+        coordinatorPhone: isSameCoord ? reqPhone : coordPhone,
         passengerNames: editingEvent.passengerNames || "",
         bookingFaculty: editingEvent.bookingFaculty || userFac,
         startDate: sDate,
@@ -272,8 +298,8 @@ export default function CalendarBookingModal({
         purpose: editingEvent.purpose || "",
         budgetSource: "งบประมาณคณะ",
         destinations: existingDests,
-        pickupLocation: editingEvent.pickupLocation || "มหาวิทยาลัยพะเยา",
-        dropoffLocation: editingEvent.dropoffLocation || "",
+        pickupLocation: pickupLoc,
+        dropoffLocation: isSameDrop ? pickupLoc : dropoffLoc,
         preferredFaculty: "all",
         selectedVanIds: initialSelectedVanIds
       });
@@ -281,11 +307,17 @@ export default function CalendarBookingModal({
     } else {
       // New booking modal
       setAttachments([]);
+      setIsSamePersonCoordinator(true);
+      setIsSamePickupDropoff(true);
+
+      const defaultReq = currentUser?.name || "";
+      const defaultReqPhone = formatPhoneNumber(currentUser?.phone || "");
+
       setForm({
-        requester: currentUser?.name || "",
-        requesterPhone: formatPhoneNumber(currentUser?.phone || ""),
-        coordinatorName: "",
-        coordinatorPhone: "",
+        requester: defaultReq,
+        requesterPhone: defaultReqPhone,
+        coordinatorName: defaultReq,
+        coordinatorPhone: defaultReqPhone,
         passengerNames: "",
         bookingFaculty: userFac,
         startDate: defaultDateStr,
@@ -299,7 +331,7 @@ export default function CalendarBookingModal({
         budgetSource: "งบประมาณคณะ",
         destinations: [{ id: `dest-${Date.now()}`, place: "", province: "พะเยา" }],
         pickupLocation: "มหาวิทยาลัยพะเยา",
-        dropoffLocation: "",
+        dropoffLocation: "มหาวิทยาลัยพะเยา",
         preferredFaculty: "all",
         selectedVanIds: []
       });
@@ -550,6 +582,17 @@ export default function CalendarBookingModal({
     }
 
     // Validation
+    if (!form.passengerCount || Number(form.passengerCount) < 1) {
+      setFormError("กรุณาระบุจำนวนผู้โดยสารอย่างน้อย 1 คน");
+      setIsSubmitting(false);
+      return;
+    }
+    if (!form.requestedVehicleCount || Number(form.requestedVehicleCount) < 1) {
+      setFormError("กรุณาระบุจำนวนรถตู้ที่ต้องการอย่างน้อย 1 คัน");
+      setIsSubmitting(false);
+      return;
+    }
+
     const cleanRequesterPhone = (form.requesterPhone || '').replace(/\D/g, '');
     if (!form.requester.trim()) {
       setFormError("กรุณากรอกชื่อผู้ขอใช้บริการ");
@@ -562,14 +605,20 @@ export default function CalendarBookingModal({
       return;
     }
 
-    if (form.coordinatorPhone) {
-      const cleanCoordPhone = form.coordinatorPhone.replace(/\D/g, '');
-      if (cleanCoordPhone.length !== 10 || !cleanCoordPhone.startsWith('0')) {
+    const finalCoordName = isSamePersonCoordinator ? form.requester.trim() : form.coordinatorName.trim();
+    const finalCoordPhone = isSamePersonCoordinator ? cleanRequesterPhone : (form.coordinatorPhone || '').replace(/\D/g, '');
+
+    if (!isSamePersonCoordinator && finalCoordPhone) {
+      if (finalCoordPhone.length !== 10 || !finalCoordPhone.startsWith('0')) {
         setFormError("เบอร์โทรศัพท์ผู้ประสานงานต้องมี 10 หลักและขึ้นต้นด้วย 0");
         setIsSubmitting(false);
         return;
       }
     }
+
+    const finalDropoff = isSamePickupDropoff
+      ? form.pickupLocation.trim()
+      : (form.dropoffLocation.trim() || form.pickupLocation.trim());
 
     const filledDestinations = form.destinations.filter(d => d.place.trim());
     if (filledDestinations.length === 0) {
@@ -694,11 +743,16 @@ export default function CalendarBookingModal({
       requested_vehicle_count: Number(form.requestedVehicleCount || 1),
       requester: form.requester.trim(),
       phone: cleanRequesterPhone,
-      coordinator_name: form.coordinatorName.trim(),
-      coordinator_phone: form.coordinatorPhone.trim(),
+      coordinator_name: finalCoordName,
+      coordinatorName: finalCoordName,
+      coordinator_phone: finalCoordPhone,
+      coordinatorPhone: finalCoordPhone,
       passenger_names: form.passengerNames.trim(),
+      passengerNames: form.passengerNames.trim(),
       pickup_location: form.pickupLocation.trim(),
-      dropoff_location: form.dropoffLocation.trim(),
+      pickupLocation: form.pickupLocation.trim(),
+      dropoff_location: finalDropoff,
+      dropoffLocation: finalDropoff,
       department: "สำนักงานคณบดี",
       tripType: form.tripScope,
       trip_scope: form.tripScope,
@@ -753,7 +807,6 @@ export default function CalendarBookingModal({
 
   if (!isOpen) return null;
 
-  const isSameDayTrip = form.startDate === form.endDate;
   const durationText = getTripDurationText();
 
   return (
@@ -820,19 +873,28 @@ export default function CalendarBookingModal({
                   </div>
                 )}
                 
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs transition-colors bg-white text-slate-700 border-slate-200">
-                  {isSameDayTrip ? (
-                    <>
-                      <Clock size={12} className="text-[#311171]" />
-                      <span>ทริปวันเดียว (ไป - กลับ)</span>
-                    </>
-                  ) : (
-                    <>
-                      <Calendar size={12} className="text-[#311171]" />
-                      <span>ทริปข้ามคืน / เดินทางหลายวัน</span>
-                    </>
-                  )}
-                </div>
+                {(() => {
+                  const mStatus = getMultiDayStatus();
+                  return (
+                    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs transition-colors ${
+                      mStatus.isMultiDay 
+                        ? 'bg-amber-50 text-amber-900 border-amber-200' 
+                        : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                    }`}>
+                      {mStatus.isMultiDay ? (
+                        <>
+                          <Calendar size={12} className="text-amber-700" />
+                          <span>ทริปข้ามวัน ({mStatus.daysCount} วันปฏิบัติงาน - รอบละ 14 ชม. พัก 10 ชม.)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock size={12} className="text-emerald-700" />
+                          <span>ทริปวันเดียว (ไป - กลับ)</span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -936,7 +998,14 @@ export default function CalendarBookingModal({
                     required
                     type="text"
                     value={form.requester}
-                    onChange={e => setForm({ ...form, requester: e.target.value })}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setForm(prev => ({
+                        ...prev,
+                        requester: val,
+                        coordinatorName: isSamePersonCoordinator ? val : prev.coordinatorName
+                      }));
+                    }}
                     placeholder="เช่น ผศ.ดร.สมชาย ใจดี"
                     className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-bold text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
                   />
@@ -956,60 +1025,103 @@ export default function CalendarBookingModal({
                     type="tel"
                     maxLength={12}
                     value={form.requesterPhone}
-                    onChange={e => setForm({ ...form, requesterPhone: formatPhoneNumber(e.target.value) })}
+                    onChange={e => {
+                      const formatted = formatPhoneNumber(e.target.value);
+                      setForm(prev => ({
+                        ...prev,
+                        requesterPhone: formatted,
+                        coordinatorPhone: isSamePersonCoordinator ? formatted : prev.coordinatorPhone
+                      }));
+                    }}
                     placeholder="เช่น 081-234-5678"
                     className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-bold text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
                   />
                 </div>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ชื่อผู้ประสานงานประจำทริป <span className="text-slate-400 font-normal">(ถ้ามี)</span>
-                </label>
-                <div className="relative flex items-center">
-                  <span className="absolute left-3 text-slate-400">
-                    <User size={14} />
-                  </span>
-                  <input 
-                    type="text"
-                    value={form.coordinatorName}
-                    onChange={e => setForm({ ...form, coordinatorName: e.target.value })}
-                    placeholder="เช่น นายประสาน งานดี"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
-                  />
-                </div>
-              </div>
+            {/* Checkbox: ผู้ประสานงานเป็นคนเดียวกับผู้ขอใช้บริการ */}
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
+              <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-800 select-none">
+                <input
+                  type="checkbox"
+                  checked={isSamePersonCoordinator}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    setIsSamePersonCoordinator(checked);
+                    if (checked) {
+                      setForm(prev => ({
+                        ...prev,
+                        coordinatorName: prev.requester,
+                        coordinatorPhone: prev.requesterPhone
+                      }));
+                    }
+                  }}
+                  className="w-4 h-4 rounded text-[#311171] focus:ring-[#311171] accent-[#311171] cursor-pointer"
+                />
+                <span>ผู้ประสานงานเป็นคนเดียวกับผู้ขอใช้บริการ</span>
+                <span className="text-[11px] font-normal text-slate-500">(ใช้ชื่อและเบอร์โทรเดียวกัน)</span>
+              </label>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  เบอร์โทรผู้ประสานงาน (10 หลัก) <span className="text-slate-400 font-normal">(ถ้ามี)</span>
-                </label>
-                <div className="relative flex items-center">
-                  <span className="absolute left-3 text-slate-400">
-                    <Phone size={14} />
-                  </span>
-                  <input 
-                    type="tel"
-                    maxLength={12}
-                    value={form.coordinatorPhone}
-                    onChange={e => setForm({ ...form, coordinatorPhone: formatPhoneNumber(e.target.value) })}
-                    placeholder="เช่น 089-876-5432"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
-                  />
+              {!isSamePersonCoordinator ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-3 pt-3 border-t border-slate-100 animate-in fade-in slide-in-from-top-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ชื่อผู้ประสานงานประจำทริป <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-slate-400">
+                        <User size={14} />
+                      </span>
+                      <input 
+                        type="text"
+                        value={form.coordinatorName}
+                        onChange={e => setForm({ ...form, coordinatorName: e.target.value })}
+                        placeholder="เช่น นายประสาน งานดี"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      เบอร์โทรผู้ประสานงาน (10 หลัก) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-slate-400">
+                        <Phone size={14} />
+                      </span>
+                      <input 
+                        type="tel"
+                        maxLength={12}
+                        value={form.coordinatorPhone}
+                        onChange={e => setForm({ ...form, coordinatorPhone: formatPhoneNumber(e.target.value) })}
+                        placeholder="เช่น 089-876-5432"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs font-bold"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50/80 px-2.5 py-1.5 rounded-lg border border-emerald-100 flex items-center gap-1.5">
+                  <Check size={13} className="text-emerald-600 shrink-0" />
+                  <span>ระบบบันทึกข้อมูลผู้ประสานงานให้ตรงกับผู้ขอใช้บริการเรียบร้อย ไม่ต้องกรอกซ้ำ</span>
+                </div>
+              )}
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                รายชื่อผู้โดยสารและตำแหน่ง <span className="text-slate-400 font-normal">(ไม่รวมคนขับ)</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  รายชื่อผู้ร่วมเดินทาง <span className="text-slate-400 font-normal">(ไม่บังคับ - สามารถแนบเอกสารโครงการในข้อ 5 แทนได้)</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">ไม่รวมคนขับ</span>
+              </div>
               <textarea 
                 rows={2}
                 value={form.passengerNames}
                 onChange={e => setForm({ ...form, passengerNames: e.target.value })}
-                placeholder="เช่น 1. ดร.สมศักดิ์ (อาจารย์) 2. นายกิตติ (นิสิต) 3. น.ส.วิภา (เจ้าหน้าที่)..."
+                placeholder="ระบุรายชื่อผู้เดินทาง หรือแนบเป็นไฟล์เอกสารโครงการ/หนังสือขออนุมัติเดินทางด้านล่างในข้อ 5"
                 className="w-full p-3 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs resize-none"
               />
             </div>
@@ -1032,7 +1144,11 @@ export default function CalendarBookingModal({
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setForm({ ...form, tripScope: 'ในจังหวัดพะเยา' })}
+                  onClick={() => setForm(prev => ({ 
+                    ...prev, 
+                    tripScope: 'ในจังหวัดพะเยา',
+                    destinations: prev.destinations.map(d => ({ ...d, province: 'พะเยา' }))
+                  }))}
                   className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs ${
                     form.tripScope === 'ในจังหวัดพะเยา'
                       ? 'bg-[#311171] text-white border-[#311171] ring-2 ring-[#311171]/20'
@@ -1058,7 +1174,7 @@ export default function CalendarBookingModal({
             </div>
 
             {/* จุดรับ & จุดส่ง */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   จุดรับผู้โดยสาร <span className="text-rose-500">*</span>
@@ -1071,30 +1187,63 @@ export default function CalendarBookingModal({
                     required
                     type="text"
                     value={form.pickupLocation}
-                    onChange={e => setForm({ ...form, pickupLocation: e.target.value })}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setForm(prev => ({
+                        ...prev,
+                        pickupLocation: val,
+                        dropoffLocation: isSamePickupDropoff ? val : prev.dropoffLocation
+                      }));
+                    }}
                     placeholder="เช่น มหาวิทยาลัยพะเยา, หน้าอาคาร ICT"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
+                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-bold text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
                   />
                 </div>
-
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  จุดส่งผู้โดยสาร <span className="text-slate-400 font-normal">(ถ้ามี)</span>
-                </label>
-                <div className="relative flex items-center">
-                  <span className="absolute left-3 text-slate-400">
-                    <MapPin size={14} />
-                  </span>
-                  <input 
-                    type="text"
-                    value={form.dropoffLocation}
-                    onChange={e => setForm({ ...form, dropoffLocation: e.target.value })}
-                    placeholder="เช่น มหาวิทยาลัยพะเยา"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
+              {/* Checkbox: ส่งกลับที่จุดรับเดิม */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-800 select-none">
+                  <input
+                    type="checkbox"
+                    checked={isSamePickupDropoff}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setIsSamePickupDropoff(checked);
+                      if (checked) {
+                        setForm(prev => ({ ...prev, dropoffLocation: prev.pickupLocation }));
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-[#311171] focus:ring-[#311171] accent-[#311171] cursor-pointer"
                   />
-                </div>
+                  <span>ส่งกลับที่จุดรับเดิม</span>
+                  <span className="text-[11px] font-normal text-slate-500 truncate">({form.pickupLocation || 'มหาวิทยาลัยพะเยา'})</span>
+                </label>
+
+                {!isSamePickupDropoff ? (
+                  <div className="mt-3 pt-3 border-t border-slate-100 animate-in fade-in slide-in-from-top-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      จุดส่งผู้โดยสารขากลับ <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-slate-400">
+                        <MapPin size={14} />
+                      </span>
+                      <input 
+                        type="text"
+                        value={form.dropoffLocation}
+                        onChange={e => setForm({ ...form, dropoffLocation: e.target.value })}
+                        placeholder="ระบุจุดส่งกลับ เช่น บขส.พะเยา, สำนักงานอธิการบดี"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-bold text-slate-800 outline-none focus:border-[#311171] focus:ring-2 focus:ring-[#311171]/10 transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-[11px] text-emerald-700 bg-emerald-50/80 px-2.5 py-1.5 rounded-lg border border-emerald-100 flex items-center gap-1.5">
+                    <Check size={13} className="text-emerald-600 shrink-0" />
+                    <span>ขากลับจะเดินทางมาส่ง ณ จุดรับเดิม ({form.pickupLocation || 'มหาวิทยาลัยพะเยา'})</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1105,7 +1254,11 @@ export default function CalendarBookingModal({
                   <label className="block text-xs font-bold text-slate-700">
                     สถานที่ปลายทาง (ระบุได้หลายแห่ง) <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[10px] text-slate-400 block">สามารถพิมพ์ค้นหาจังหวัดได้ในกล่องตัวเลือก</span>
+                  <span className="text-[10px] text-slate-400 block">
+                    {form.tripScope === 'ในจังหวัดพะเยา'
+                      ? 'เดินทางภายในจังหวัดพะเยา (หากต้องการไปจังหวัดอื่น กรุณากดเลือก "ต่างจังหวัด" ด้านบน)'
+                      : 'สามารถพิมพ์ค้นหาจังหวัดได้ในกล่องตัวเลือก (77 จังหวัดทั่วประเทศ)'}
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -1117,8 +1270,6 @@ export default function CalendarBookingModal({
                 </button>
               </div>
 
-
-
               <div className="space-y-2.5">
                 {form.destinations.map((dest, idx) => (
                   <div key={dest.id} className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs">
@@ -1128,7 +1279,9 @@ export default function CalendarBookingModal({
                     <input 
                       required
                       type="text"
-                      placeholder="ระบุสถานที่ปลายทาง เช่น ศูนย์ประชุมนานาชาติเชียงใหม่"
+                      placeholder={form.tripScope === 'ในจังหวัดพะเยา'
+                        ? "ระบุสถานที่ปลายทาง เช่น รพ.พะเยา, เทศบาลเมืองพะเยา, กว๊านพะเยา"
+                        : "ระบุสถานที่ปลายทาง เช่น ศูนย์ประชุมนานาชาติเชียงใหม่, มหาวิทยาลัยเชียงใหม่"}
                       value={dest.place}
                       onChange={e => updateDestination(dest.id, 'place', e.target.value)}
                       className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#311171] transition-colors"
@@ -1137,6 +1290,8 @@ export default function CalendarBookingModal({
                     {/* Searchable Province Dropdown */}
                     <ProvinceSelect
                       value={dest.province}
+                      disabled={form.tripScope === 'ในจังหวัดพะเยา'}
+                      disabledTooltip="ขอบเขตการเดินทางอยู่ในจังหวัดพะเยา (หากต้องการไปต่างจังหวัด กรุณาเลือก 'ต่างจังหวัด' ด้านบน)"
                       onChange={newProvince => {
                         updateDestination(dest.id, 'province', newProvince);
                         if (newProvince !== 'พะเยา' && form.tripScope === 'ในจังหวัดพะเยา') {
@@ -1225,16 +1380,43 @@ export default function CalendarBookingModal({
                 </label>
                 <input 
                   type="number"
-                  min={1}
+                  min={0}
                   max={60}
                   required
-                  value={form.passengerCount}
-                  onChange={e => setForm({ ...form, passengerCount: Math.max(1, Number(e.target.value)) })}
+                  value={form.passengerCount === 0 || form.passengerCount ? form.passengerCount : ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setForm(prev => ({ ...prev, passengerCount: '' as unknown as number }));
+                      return;
+                    }
+                    const num = parseInt(val, 10);
+                    if (!isNaN(num)) {
+                      const cleanNum = Math.max(0, num);
+                      const autoVans = cleanNum > 11 ? Math.max(2, Math.ceil(cleanNum / 11)) : form.requestedVehicleCount;
+                      setForm(prev => ({
+                        ...prev,
+                        passengerCount: cleanNum,
+                        requestedVehicleCount: cleanNum > 11 ? Math.max(prev.requestedVehicleCount, autoVans) : prev.requestedVehicleCount
+                      }));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!form.passengerCount || Number(form.passengerCount) < 1) {
+                      setForm(prev => ({ ...prev, passengerCount: 1 }));
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-bold text-slate-800 outline-none focus:border-[#311171] transition-all"
                 />
-                <span className="text-[10px] text-slate-400 block">
-                  จำนวนผู้โดยสารรวมทั้งหมดของภารกิจ ไม่รวมคนขับ
-                </span>
+                {Number(form.passengerCount) > 11 ? (
+                  <span className="text-[10px] text-purple-700 font-bold block bg-purple-50 px-2 py-0.5 rounded border border-purple-200 mt-1">
+                    ผู้โดยสาร {form.passengerCount} คน (ระบบแนะนำ {Math.ceil(Number(form.passengerCount) / 11)} คันตามระเบียบ 11 ที่นั่ง/คัน)
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 block">
+                    จำนวนผู้โดยสารรวมทั้งหมดของภารกิจ ไม่รวมคนขับ
+                  </span>
+                )}
               </div>
 
               <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5">
@@ -1244,11 +1426,26 @@ export default function CalendarBookingModal({
                 </label>
                 <input 
                   type="number"
-                  min={1}
+                  min={0}
                   max={5}
                   required
-                  value={form.requestedVehicleCount}
-                  onChange={e => setForm({ ...form, requestedVehicleCount: Math.max(1, Number(e.target.value)) })}
+                  value={form.requestedVehicleCount === 0 || form.requestedVehicleCount ? form.requestedVehicleCount : ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setForm(prev => ({ ...prev, requestedVehicleCount: '' as unknown as number }));
+                      return;
+                    }
+                    const num = parseInt(val, 10);
+                    if (!isNaN(num)) {
+                      setForm(prev => ({ ...prev, requestedVehicleCount: Math.max(0, num) }));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!form.requestedVehicleCount || Number(form.requestedVehicleCount) < 1) {
+                      setForm(prev => ({ ...prev, requestedVehicleCount: 1 }));
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-black text-[#311171] outline-none focus:border-[#311171] transition-all"
                 />
                 <span className="text-[10px] text-slate-400 block">
@@ -1331,6 +1528,58 @@ export default function CalendarBookingModal({
               </div>
             )}
 
+            {/* Model v5: Large Group Suggestion (> 11 passengers or multi-vehicle needed) */}
+            {rankingData?.largeGroupSuggestion?.isNeeded && (
+              <div className="p-4 bg-gradient-to-r from-purple-50 via-indigo-50/60 to-purple-50 border border-purple-200/90 rounded-2xl shadow-2xs space-y-2.5 animate-in fade-in">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#311171] text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                      <Car size={16} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black text-[#311171]">
+                          ข้อเสนอแนะจัดชุดรถตู้สำหรับคณะใหญ่ (&gt; 11 ท่าน)
+                        </span>
+                        <span className="text-[10px] bg-purple-200 text-purple-950 font-bold px-2 py-0.5 rounded-full">
+                          Model v5 Auto-Dispatch
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                        {rankingData.largeGroupSuggestion.message}
+                      </p>
+                    </div>
+                  </div>
+
+                  {rankingData.largeGroupSuggestion.suggestedVanIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sug = rankingData.largeGroupSuggestion!;
+                        setForm(prev => ({
+                          ...prev,
+                          requestedVehicleCount: Math.max(prev.requestedVehicleCount, sug.suggestedVehicles),
+                          selectedVanIds: sug.suggestedVanIds
+                        }));
+                      }}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                        rankingData.largeGroupSuggestion.suggestedVanIds.every(id => form.selectedVanIds.includes(id))
+                          ? 'bg-emerald-600 text-white shadow-emerald-200'
+                          : 'bg-[#311171] hover:bg-[#250b57] text-white'
+                      }`}
+                    >
+                      <Check size={14} strokeWidth={2.5} />
+                      <span>
+                        {rankingData.largeGroupSuggestion.suggestedVanIds.every(id => form.selectedVanIds.includes(id))
+                          ? 'เลือกชุด 2 คันนี้แล้ว'
+                          : `เลือกชุด ${rankingData.largeGroupSuggestion.suggestedVehicles} คันนี้พร้อมกัน`}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Partial Fulfillment Summary */}
             {rankingData && (
               <div className="p-3 bg-purple-50/80 rounded-xl border border-purple-200/80 flex items-center justify-between flex-wrap gap-2">
@@ -1361,96 +1610,121 @@ export default function CalendarBookingModal({
                 <span className="text-xs font-medium">กำลังตรวจสอบคิวว่างและจัดอันดับภาระงาน...</span>
               </div>
             ) : rankingData && rankingData.rankedAvailableVans.length > 0 ? (
-              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
                 {rankingData.rankedAvailableVans.map(van => {
                   const isSelected = form.selectedVanIds.includes(van.id);
                   return (
                     <div 
                       key={van.id}
                       onClick={() => toggleVanSelection(van.id)}
-                      className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 shadow-2xs ${
+                      className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${
                         isSelected
                           ? 'border-[#311171] bg-purple-50/90 ring-2 ring-[#311171]/20'
                           : 'border-slate-200 bg-white hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                          isSelected ? 'bg-[#311171] text-white shadow-2xs' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          #{van.rank}
-                        </div>
-                        
-                        {/* Driver / Van avatar or icon */}
-                        {(() => {
-                          const displayImg = (van.driverImage && van.driverImage.trim() !== '' && !van.driverImage.includes('unsplash.com'))
-                            ? van.driverImage.trim()
-                            : (van.vanImage && van.vanImage.trim() !== '' && !van.vanImage.includes('unsplash.com'))
-                              ? van.vanImage.trim()
-                              : null;
-
-                          if (displayImg) {
-                            return (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img 
-                                src={displayImg} 
-                                alt={van.driverName || "driver"} 
-                                className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs bg-slate-50 ring-1 ring-purple-100" 
-                                onError={(e) => {
-                                  const target = e.currentTarget;
-                                  if (van.vanImage && target.src !== van.vanImage) {
-                                    target.src = van.vanImage;
-                                  } else {
-                                    target.style.display = 'none';
-                                  }
-                                }}
-                              />
-                            );
-                          }
-
-                          return (
-                            <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0">
-                              <User size={16} />
-                            </div>
-                          );
-                        })()}
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-black text-xs text-slate-900 truncate">{van.facultyName}</span>
-                            <span className="text-[11px] text-[#311171] font-bold px-1.5 py-0.5 rounded bg-purple-100/60 shrink-0">
-                              {van.plate}
-                            </span>
-                            {van.facultyName !== userFac ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 shrink-0">
-                                ขอยืมรถจากคณะอื่น
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100/70 text-[#311171] shrink-0">
-                                รถประจำคณะ
-                              </span>
-                            )}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                            isSelected ? 'bg-[#311171] text-white shadow-2xs' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            #{van.rank}
                           </div>
-                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                            คนขับ: {van.driverName} • โทร: {van.driverPhone}
-                          </p>
+                          
+                          {/* Driver / Van avatar or icon */}
+                          {(() => {
+                            const displayImg = (van.driverImage && van.driverImage.trim() !== '' && !van.driverImage.includes('unsplash.com'))
+                              ? van.driverImage.trim()
+                              : (van.vanImage && van.vanImage.trim() !== '' && !van.vanImage.includes('unsplash.com'))
+                                ? van.vanImage.trim()
+                                : null;
+
+                            if (displayImg) {
+                              return (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img 
+                                  src={displayImg} 
+                                  alt={van.driverName || "driver"} 
+                                  className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs bg-slate-50 ring-1 ring-purple-100" 
+                                  onError={(e) => {
+                                    const target = e.currentTarget;
+                                    if (van.vanImage && target.src !== van.vanImage) {
+                                      target.src = van.vanImage;
+                                    } else {
+                                      target.style.display = 'none';
+                                    }
+                                  }}
+                                />
+                              );
+                            }
+
+                            return (
+                              <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0">
+                                <User size={16} />
+                              </div>
+                            );
+                          })()}
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-xs text-slate-900 truncate">{van.facultyName}</span>
+                              <span className="text-[11px] text-[#311171] font-bold px-1.5 py-0.5 rounded bg-purple-100/60 shrink-0">
+                                {van.plate}
+                              </span>
+                              {van.facultyName !== userFac ? (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 shrink-0">
+                                  ขอยืมรถจากคณะอื่น
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100/70 text-[#311171] shrink-0">
+                                  รถประจำคณะ
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                              คนขับ: {van.driverName} • โทร: {van.driverPhone}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block font-medium">ภาระงาน</span>
+                            <span className="text-[11px] font-black text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md">
+                              {van.workloadScore} งาน
+                            </span>
+                          </div>
+                          
+                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
+                            isSelected ? 'bg-[#311171] text-white shadow-2xs' : 'border border-slate-300 bg-white'
+                          }`}>
+                            {isSelected && <Check size={14} strokeWidth={3} />}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block font-medium">ภาระงาน</span>
-                          <span className="text-[11px] font-black text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md">
-                            {van.workloadScore} งาน
-                          </span>
+                      {/* Driver Safety Badge & Duty Info (Model v5) */}
+                      {van.safety && (
+                        <div className="mt-2.5 pt-2 border-t border-slate-100/80 flex items-center justify-between flex-wrap gap-1.5 text-[10px]">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded font-bold inline-flex items-center gap-1 ${
+                              van.safety.safetyStatus === 'SAFE'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : van.safety.safetyStatus === 'WARNING'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              <span>{van.safety.safetyBadgeText}</span>
+                            </span>
+                            <span className="text-slate-500 font-medium">
+                              พักผ่อนก่อนหน้า {van.safety.restHours >= 99 ? 'เพียงพอ (>24 ชม.)' : `${van.safety.restHours} ชม.`}
+                            </span>
+                          </div>
+                          <div className="text-slate-400 font-medium">
+                            ขับวันนี้ {van.safety.dailyHours.toFixed(1)}/14 ชม. • 7 วันสะสม {van.safety.weeklyHours.toFixed(1)}/72 ชม.
+                          </div>
                         </div>
-                        
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
-                          isSelected ? 'bg-[#311171] text-white shadow-2xs' : 'border border-slate-300 bg-white'
-                        }`}>
-                          {isSelected && <Check size={14} strokeWidth={3} />}
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
